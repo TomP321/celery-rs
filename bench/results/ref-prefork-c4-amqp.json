@@ -1,0 +1,28 @@
+{
+ "label": "ref-prefork-c4-amqp",
+ "venv": ".venv-ref",
+ "pool": "prefork",
+ "concurrency": 4,
+ "n": 20000,
+ "pss_idle_kb": 144577,
+ "pss_idle_per_process_kb": [
+  27733,
+  22979,
+  31277,
+  31276,
+  31312
+ ],
+ "pss_peak_kb": 149127,
+ "pss_after_kb": 150883,
+ "client_publish_per_s": 2915.494884568376,
+ "client_maxrss_kb": 44792,
+ "end_to_end_s": 6.948991775512695,
+ "end_to_end_tasks_per_s": 2878.1153649479465,
+ "drain_after_publish_s": 0.0054356470000129775,
+ "latency_ms": {
+  "p50": 2.948466000134431,
+  "p99": 3.8322259999858943,
+  "max": 5.7567789999666275
+ },
+ "python": "3.13.9"
+}

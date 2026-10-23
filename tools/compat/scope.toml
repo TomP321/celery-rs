@@ -1,0 +1,21 @@
+# Moduli pubblici di Celery che celery-rs v1 deve replicare (API identica).
+# `include` sono prefissi: un modulo è in scope se il suo nome inizia con uno di essi.
+# `exclude` vince su `include`. Ogni esclusione ha un motivo.
+
+include = ["celery"]
+
+exclude = [
+    # backend fuori scope v1 (restano ImportError chiari)
+    "celery.backends.arangodb", "celery.backends.azureblockblob", "celery.backends.cassandra",
+    "celery.backends.consul", "celery.backends.cosmosdbsql", "celery.backends.couchbase",
+    "celery.backends.couchdb", "celery.backends.database", "celery.backends.dynamodb",
+    "celery.backends.elasticsearch", "celery.backends.filesystem", "celery.backends.gcs",
+    "celery.backends.mongodb", "celery.backends.s3",
+    # pool green-thread: v2
+    "celery.concurrency.eventlet", "celery.concurrency.gevent",
+    # integrazioni opzionali / tooling di documentazione
+    "celery.contrib.django", "celery.contrib.sphinx", "celery.fixups.django",
+    "celery.events.cursesmon",
+    # entrypoint, non un modulo di API
+    "celery.__main__",
+]

@@ -1,0 +1,13 @@
+[package]
+name = "celery-py"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "_rs"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3.workspace = true

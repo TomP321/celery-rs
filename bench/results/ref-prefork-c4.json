@@ -1,0 +1,28 @@
+{
+ "label": "ref-prefork-c4",
+ "venv": ".venv-ref",
+ "pool": "prefork",
+ "concurrency": 4,
+ "n": 20000,
+ "pss_idle_kb": 146374,
+ "pss_idle_per_process_kb": [
+  29120,
+  23685,
+  31184,
+  31181,
+  31204
+ ],
+ "pss_peak_kb": 150708,
+ "pss_after_kb": 151159,
+ "client_publish_per_s": 1719.8405747309193,
+ "client_maxrss_kb": 44224,
+ "end_to_end_s": 22.179792881011963,
+ "end_to_end_tasks_per_s": 901.7216755491853,
+ "drain_after_publish_s": 10.491838102999964,
+ "latency_ms": {
+  "p50": 3.046142999892254,
+  "p99": 3.957159000037791,
+  "max": 4.391552000015508
+ },
+ "python": "3.13.9"
+}

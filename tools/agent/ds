@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Affida una spec a DeepSeek v4.1 flash via opencode.
+#   tools/agent/ds specs/01-proto.md               nuova sessione
+#   tools/agent/ds specs/01-proto.md "messaggio"   continua la sessione della spec con un messaggio
+# Log in tools/agent/logs/<spec>.log; l'id di sessione in tools/agent/logs/<spec>.session
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$(readlink -f "$0")")/../.." && pwd)"
+MODEL="${DS_MODEL:-opencode-go/deepseek-v4.1-flash}"
+SPEC="$1"; shift || true
+NAME="$(basename "$SPEC" .md)"
+LOGS="$ROOT/tools/agent/logs"; mkdir -p "$LOGS"
+SESSION_FILE="$LOGS/$NAME.session"
+
+cd "$ROOT"
+if [[ $# -gt 0 ]]; then
+  [[ -f "$SESSION_FILE" ]] || { echo "nessuna sessione per $NAME" >&2; exit 2; }
+  MSG="$*"
+  ARGS=(--session "$(cat "$SESSION_FILE")")
+else
+  MSG="Implementa la spec in $SPEC. Segui AGENTS.md. Lavora finché i criteri di accettazione della spec sono soddisfatti e verificati eseguendo i comandi indicati."
+  ARGS=(--title "celery-rs $NAME")
+fi
+
+{ echo "=== $(date -Is) model=$MODEL"; echo ">>> $MSG"; } >> "$LOGS/$NAME.log"
+# < /dev/null: senza TTY opencode legge stdin come parte del messaggio e resta in attesa
+opencode run -m "$MODEL" --auto --format json "${ARGS[@]}" "$MSG" < /dev/null \
+  | tee -a "$LOGS/$NAME.jsonl" \
+  | python3 -I "$ROOT/tools/agent/filter.py" "$SESSION_FILE" "$LOGS/$NAME.log"
+echo "=== fine $(date -Is)" >> "$LOGS/$NAME.log"
+tail -40 "$LOGS/$NAME.log"

@@ -1,0 +1,44 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "BSD-3-Clause"
+rust-version = "1.99"
+
+[workspace.dependencies]
+celery-proto = { path = "crates/celery-proto" }
+celery-transport = { path = "crates/celery-transport" }
+celery-backend = { path = "crates/celery-backend" }
+celery-worker = { path = "crates/celery-worker" }
+celery-beat = { path = "crates/celery-beat" }
+
+bytes = "1.12"
+compact_str = { version = "0.10", features = ["serde"] }
+hashbrown = "0.17"
+lapin = "4.12"
+mimalloc = { version = "0.1", default-features = false }
+pyo3 = { version = "0.30", features = ["extension-module", "abi3-py310"] }
+redis = { version = "1.8", default-features = false, features = ["tokio-comp", "aio"] }
+serde = { version = "1", features = ["derive"] }
+sonic-rs = "0.5"
+thiserror = "2"
+tokio = { version = "1.54", default-features = false }
+tracing = "0.1"
+uuid = { version = "1", features = ["v4", "fast-rng"] }
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = "symbols"
+
+# Profilo per profiling/bench: come release ma con simboli e panic=unwind (serve a PyO3 nei test).
+[profile.profiling]
+inherits = "release"
+strip = "none"
+debug = "line-tables-only"
+panic = "unwind"

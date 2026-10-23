@@ -1,0 +1,9 @@
+/celery/
+/target/
+/.venv-*/
+__pycache__/
+*.so
+*.pyc
+/bench/results/*.tmp
+/tools/compat/out/
+/tools/agent/logs/
