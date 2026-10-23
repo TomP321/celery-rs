@@ -255,13 +255,19 @@ def cmd_upstream(args):
                    cwd=REF_SRC, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     failed1 = junit_failures(x1)
 
-    # passo 2: ripete in seriale solo i falliti; restano rotti solo quelli che falliscono di nuovo
+    # passo 2: ripete in seriale solo i falliti, un processo per file: alcuni test passano da soli
+    # ma falliscono per interferenze con altri test (thread rimasti, stato globale).
+    # Restano rotti solo quelli che falliscono di nuovo.
     failed = set()
-    if failed1:
-        x2 = OUT / f'upstream-{args.suite}-{label}-pass2.xml'
-        subprocess.run([*base[:3], *sorted(failed1), *base[4:], f'--junitxml={x2}'],
+    by_file = {}
+    for node in failed1:
+        by_file.setdefault(node.split('::', 1)[0], []).append(node)
+    for i, (path, nodes) in enumerate(sorted(by_file.items())):
+        x2 = OUT / f'upstream-{args.suite}-{label}-pass2-{i}.xml'
+        subprocess.run([*base[:3], *sorted(nodes), *base[4:], f'--junitxml={x2}'],
                        cwd=REF_SRC, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        failed = junit_failures(x2)
+        failed |= junit_failures(x2)
+        x2.unlink(missing_ok=True)
 
     # fallimenti che si verificano anche col riferimento non sono regressioni di celery-rs
     known = set()

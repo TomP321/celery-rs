@@ -5,9 +5,11 @@ attrs==26.1.0
 azure-core==1.41.0
 azure-identity==1.26.0
 azure-storage-blob==12.31.0
+backports-zstd==1.8.0
 billiard==4.3.1
 boto3==1.43.118
 botocore==1.43.118
+brotli==1.2.1
 certifi==2026.10.23
 cffi==2.1.1
 cfgv==3.5.0
