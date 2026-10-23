@@ -1,6 +1,7 @@
 """celery-compat: conformità di celery-rs rispetto a Celery di riferimento.
 
     python -m celery_compat api        [--ref VENV] [--rs VENV]
+    python -m celery_compat wire       [--ref VENV] [--rs VENV] [--broker redis amqp] [-s SCENARIO...]
     python -m celery_compat upstream   [--venv VENV] [--suite unit|integration] [-k EXPR] [paths...]
 
 Ogni comando scrive i risultati in tools/compat/out/ ed esce con codice != 0 se il gate fallisce.
@@ -137,6 +138,78 @@ def cmd_api(args):
     return 1 if total else 0
 
 
+# -------------------------------------------------------------------------- wire
+
+BROKERS = {
+    'redis': ('redis://127.0.0.1:6390/0', 'redis://127.0.0.1:6390/1'),
+    'amqp': ('amqp://guest:guest@127.0.0.1:5673//', 'rpc://'),
+}
+
+
+def venv_env():
+    env = {k: v for k, v in os.environ.items() if not k.startswith('PYTHON')}
+    env['PYTHONHASHSEED'] = '0'
+    return env
+
+
+def run_scenario(venv, broker, name):
+    from . import wire
+    url, backend = BROKERS[broker]
+    norm = wire.Normalizer()
+    with wire.capture(broker) as cap:
+        proc = subprocess.run([py(venv), '-P', '-s', str(HERE / 'wire_scenarios.py'), '--broker', url,
+                               '--backend', backend, '--scenario', name],
+                              cwd=OUT, env=venv_env(), capture_output=True, text=True, timeout=120)
+    if proc.returncode != 0:
+        return None, proc.stderr.strip().splitlines()[-1] if proc.stderr.strip() else 'exit != 0'
+    return cap.messages(norm), None
+
+
+def cmd_wire(args):
+    import difflib
+    from . import wire
+    OUT.mkdir(parents=True, exist_ok=True)
+    if 'amqp' in args.broker:
+        wire.enable_rabbit_trace()
+    names = subprocess.run([py(args.ref), '-P', '-s', str(HERE / 'wire_scenarios.py'), '--list'],
+                           cwd=OUT, env=venv_env(), capture_output=True, text=True,
+                           check=True).stdout.split()
+    if args.scenario:
+        names = [n for n in names if any(s in n for s in args.scenario)]
+
+    lines, failures, results = [], 0, {}
+    for broker in args.broker:
+        for name in names:
+            ref, ref_err = run_scenario(args.ref, broker, name)
+            rs, rs_err = run_scenario(args.rs, broker, name)
+            key = f'{broker}:{name}'
+            if ref_err and ref_err == rs_err:
+                status = f'ok (stesso errore del riferimento: {ref_err[:60]})'
+            elif ref_err:
+                status = f'ERRORE NEL RIFERIMENTO: {ref_err}'
+            elif rs_err:
+                status = f'errore rs: {rs_err}'
+            elif sorted(ref) != sorted(rs):
+                status = 'diverso'
+            elif ref != rs:
+                status = 'ok (ordine diverso)'
+            else:
+                status = 'ok'
+            ok = status.startswith('ok')
+            failures += not ok
+            results[key] = {'status': status, 'ref': ref, 'rs': rs}
+            print(f'{"✓" if ok else "✗"} {key:45} {status}')
+            if not ok and ref is not None and rs is not None:
+                lines.append(f'## {key}\n```diff')
+                lines += difflib.unified_diff(sorted(ref), sorted(rs), 'ref', 'rs', lineterm='', n=0)
+                lines.append('```')
+    (OUT / 'wire-report.md').write_text(f'# celery-compat wire — {failures} scenari diversi\n\n'
+                                        + '\n'.join(lines) + '\n')
+    (OUT / 'wire.json').write_text(json.dumps(results, indent=1, ensure_ascii=False))
+    print(f'wire: {failures} scenari diversi su {len(results)} → {OUT / "wire-report.md"}')
+    return 1 if failures else 0
+
+
 # ---------------------------------------------------------------------- upstream
 
 def junit_failures(xml_path):
@@ -223,6 +296,13 @@ def main(argv=None):
     a.add_argument('--rs', default=VENV_RS)
     a.add_argument('--max-per-area', type=int, default=40)
     a.set_defaults(fn=cmd_api)
+
+    w = sub.add_parser('wire', help='diff del traffico sul broker generato dal client ref vs rs')
+    w.add_argument('--ref', default=VENV_REF)
+    w.add_argument('--rs', default=VENV_RS)
+    w.add_argument('--broker', nargs='+', choices=tuple(BROKERS), default=list(BROKERS))
+    w.add_argument('-s', '--scenario', nargs='+', help='filtra gli scenari per sottostringa')
+    w.set_defaults(fn=cmd_wire)
 
     u = sub.add_parser('upstream', help='esegue la test suite di Celery contro un venv')
     u.add_argument('--venv', default=VENV_RS)
