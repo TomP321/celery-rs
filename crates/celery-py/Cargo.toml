@@ -10,5 +10,10 @@ name = "_celery_rs"
 crate-type = ["cdylib"]
 
 [dependencies]
+bytes.workspace = true
 celery-proto.workspace = true
+celery-transport.workspace = true
+compact_str.workspace = true
+futures-core.workspace = true
 pyo3.workspace = true
+tokio = { workspace = true, features = ["rt", "time"] }

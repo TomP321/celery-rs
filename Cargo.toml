@@ -19,6 +19,7 @@ bytes = "1.12"
 brotli = "9"
 bzip2 = "0.5"
 flate2 = "1"
+futures-core = "0.3"
 itoa = "1"
 ryu = "1"
 xz2 = "0.1"
@@ -29,6 +30,7 @@ lapin = "4.12"
 mimalloc = { version = "0.1", default-features = false }
 pyo3 = { version = "0.30", features = ["extension-module", "abi3-py310"] }
 redis = { version = "1.8", default-features = false, features = ["tokio-comp", "aio"] }
+regex = "1"
 serde = { version = "1", features = ["derive"] }
 sonic-rs = "0.5"
 thiserror = "2"

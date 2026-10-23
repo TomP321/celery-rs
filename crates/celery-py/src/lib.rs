@@ -5,6 +5,7 @@ mod compress;
 mod json;
 mod saferepr;
 mod task;
+mod transport;
 mod util;
 
 #[pymodule]
@@ -16,5 +17,6 @@ fn _celery_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(compress::compress, m)?)?;
     m.add_function(wrap_pyfunction!(compress::decompress, m)?)?;
     m.add_function(wrap_pyfunction!(task::encode_task_v2, m)?)?;
+    m.add_class::<transport::Connection>()?;
     Ok(())
 }

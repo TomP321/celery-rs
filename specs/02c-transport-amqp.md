@@ -6,7 +6,12 @@ viceversa; lo stato sul broker è quello che kombu si aspetta).
 
 Prerequisito: 02a completata (API in `crates/celery-transport`). **Non modificare l'API comune**
 (`message.rs`, `transport.rs`, `url.rs`, `routing.rs`): se ti serve un cambiamento, fermati e
-spiegalo nel messaggio finale. Il tuo codice va in `crates/celery-transport/src/amqp/` più il ramo
+spiegalo nel messaggio finale.
+**Il contratto da rispettare è nel doc di modulo di `crates/celery-transport/src/transport.rs`**
+(semantica di ack/reject/requeue, prefetch e `ConsumerControl` — `set_prefetch`, `add_queue`,
+`cancel_queue`, `cancel` —, `get`, passive declare, `ConnectionLost`). Il trasporto memory
+(`src/memory.rs`) è l'implementazione di riferimento del contratto: i tuoi test Rust devono
+coprire gli stessi casi dei suoi. Il tuo codice va in `crates/celery-transport/src/amqp/` più il ramo
 `amqp://`/`amqps://`/`pyamqp://` di `connect`. Un altro agente sta facendo Redis in parallelo: non
 toccare `src/redis/`.
 
