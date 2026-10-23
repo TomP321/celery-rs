@@ -16,6 +16,13 @@ celery-worker = { path = "crates/celery-worker" }
 celery-beat = { path = "crates/celery-beat" }
 
 bytes = "1.12"
+brotli = "9"
+bzip2 = "0.5"
+flate2 = "1"
+itoa = "1"
+ryu = "1"
+xz2 = "0.1"
+zstd = "0.13"
 compact_str = { version = "0.10", features = ["serde"] }
 hashbrown = "0.17"
 lapin = "4.12"

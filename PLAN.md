@@ -53,7 +53,8 @@ celery-rs/
     celery-backend/           result backend: redis, rpc, memory; chord counter, group results
     celery-worker/            consumer, strategy, request, timer, rate limit, revoke, control, eventi, pool supervisor
     celery-beat/              scheduler (crontab/solar/interval), store persistente
-    celery-py/                PyO3 → modulo `celery._rs`, binario `celery-rs-worker`
+    celery-py/                PyO3 → modulo top-level `_celery_rs` (installabile anche accanto a
+                              Celery originale per i test differenziali; il guscio lo ri-esporta)
   python/celery/              guscio Python (struttura identica a celery/celery)
   tools/compat/               tool di conformità (§Test)
   bench/                      benchmark memoria/throughput vs riferimento
@@ -102,8 +103,8 @@ Infrastruttura via docker su porte dedicate: Redis `:6390`, RabbitMQ `:5673`.
 | # | Fase | Contenuto | Gate di uscita |
 |---|---|---|---|
 | 0 | Setup | workspace, venv ref/rs, docker redis+rabbit, scheletro `tools/compat`, `compat api` funzionante, baseline bench del riferimento | baseline salvata |
-| 1 | Protocollo | `celery-proto`: v2 encode/decode, serializer, compressione; esposto in `celery._rs` | `compat wire` = 0 diff su apply_async |
-| 2 | Trasporti | memory, redis, amqp (publish/consume/ack/qos/fanout/broadcast) | test di trasporto + interop con kombu |
+| 1 ✅ | Protocollo | `celery-proto`: JSON compatibile CPython, compressione; `_celery_rs`: `json_dumps/loads`, `saferepr`, `encode_task_v2` | test differenziali byte-identici vs riferimento (`crates/celery-py/tests`) |
+| 2 | Trasporti | 02a API+memory, poi 02b Redis e 02c AMQP in parallelo (worktree separati) | interop con kombu + `compat wire` sui comandi |
 | 3 | Client Python | guscio `celery`: app, conf/defaults, Task, registry, routing, amqp producer, signature/canvas, AsyncResult/GroupResult | `compat api` verde; unit `t/unit/app`, `tasks`, `test_canvas` |
 | 4 | Result backend | redis/rpc/memory, chord join/counter, get/wait/propagate | matrix: client rs + worker ref verde |
 | 5 | Worker | master Rust, zygote+pool, trace, ack late, retry, time limit, revoke, eventi, control, autoscale, shutdown/warm/cold, segnali | matrix completa verde |

@@ -6,8 +6,9 @@ license.workspace = true
 rust-version.workspace = true
 
 [lib]
-name = "_rs"
+name = "_celery_rs"
 crate-type = ["cdylib"]
 
 [dependencies]
+celery-proto.workspace = true
 pyo3.workspace = true

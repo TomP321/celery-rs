@@ -6,3 +6,11 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+brotli.workspace = true
+bzip2.workspace = true
+flate2.workspace = true
+itoa.workspace = true
+ryu.workspace = true
+thiserror.workspace = true
+xz2.workspace = true
+zstd.workspace = true
