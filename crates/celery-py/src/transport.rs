@@ -13,8 +13,8 @@ use std::time::Duration;
 use bytes::Bytes;
 use compact_str::CompactString;
 use pyo3::exceptions::{
-    PyConnectionError, PyLookupError, PyNotImplementedError, PyRuntimeError, PyTypeError,
-    PyValueError,
+    PyConnectionError, PyKeyError, PyLookupError, PyNotImplementedError, PyRuntimeError,
+    PyTypeError, PyValueError,
 };
 use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
@@ -59,6 +59,8 @@ fn transport_error(error: TransportError) -> PyErr {
         | TransportError::UnsupportedTransport(message)
         | TransportError::UnsupportedExchangeType(message) => PyValueError::new_err(message),
         TransportError::NotFound(message) => PyLookupError::new_err(message),
+        // Come il QoS di kombu, che solleva `KeyError(delivery_tag)`.
+        TransportError::UnknownDeliveryTag(tag) => PyKeyError::new_err(tag),
         TransportError::ConnectionLost(message) | TransportError::Connection(message) => {
             PyConnectionError::new_err(message)
         }
@@ -460,6 +462,14 @@ fn delivery_to_py<'py>(
     let delivery_info = PyDict::new(py);
     delivery_info.set_item("exchange", delivery.exchange.as_str())?;
     delivery_info.set_item("routing_key", delivery.routing_key.as_str())?;
+    // `redelivered` fa parte di delivery_info quando l'envelope lo riporta
+    // (ripristino dopo visibility timeout/requeue del trasporto Redis).
+    if virtual_transport
+        && let Some(HeaderValue::Map(info)) = properties.get("delivery_info")
+        && let Some(redelivered) = info.get_bool("redelivered")
+    {
+        delivery_info.set_item("redelivered", redelivered)?;
+    }
     if virtual_transport {
         if !properties.contains_key("body_encoding") {
             properties.insert(
