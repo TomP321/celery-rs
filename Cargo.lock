@@ -413,6 +413,15 @@ dependencies = [
 [[package]]
 name = "celery-backend"
 version = "0.1.0"
+dependencies = [
+ "bytes",
+ "futures-core",
+ "redis",
+ "rustls",
+ "thiserror",
+ "tokio",
+ "uuid",
+]
 
 [[package]]
 name = "celery-beat"
@@ -437,11 +446,13 @@ name = "celery-py"
 version = "0.1.0"
 dependencies = [
  "bytes",
+ "celery-backend",
  "celery-proto",
  "celery-transport",
  "compact_str",
  "futures-core",
  "pyo3",
+ "pyo3-build-config",
  "tokio",
 ]
 

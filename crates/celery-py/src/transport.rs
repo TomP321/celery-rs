@@ -54,7 +54,7 @@ fn build_runtime() -> Result<tokio::runtime::Runtime, String> {
 }
 
 /// Runtime del processo corrente, creato al primo uso.
-fn runtime() -> Result<&'static tokio::runtime::Runtime, String> {
+pub(crate) fn runtime() -> Result<&'static tokio::runtime::Runtime, String> {
     let pid = std::process::id();
     loop {
         let current = RUNTIME.load(Ordering::Acquire);

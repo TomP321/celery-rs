@@ -1,0 +1,29 @@
+{
+ "backend": "redis://127.0.0.1:6390/7",
+ "broker": "redis://127.0.0.1:6390/6",
+ "celery": "5.7.0rc1",
+ "flavor": "rs",
+ "get_many": {
+  "count": 1000,
+  "per_second": 91850.0360420575,
+  "seconds": 0.010887312004342675
+ },
+ "join_native": {
+  "count": 1000,
+  "per_second": 8476.168210303156,
+  "seconds": 0.11797783800284378
+ },
+ "latency_ms": {
+  "count": 200,
+  "max": 3.3567810023669153,
+  "mean": 1.9212575798883336,
+  "min": 1.5401560012833215,
+  "p50": 1.7802660004235804,
+  "p90": 2.484335003828164,
+  "p99": 2.9214750029495917
+ },
+ "peak_rss_kb": 54128,
+ "python": "/home/ubuntu/HDD/celery-rs-wt/04a-backend-redis/.venv-rs/bin/python",
+ "rss_kb": 54128,
+ "worker_python": "/home/ubuntu/HDD/celery-rs-wt/04a-backend-redis/.venv-ref/bin/python"
+}
