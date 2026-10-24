@@ -9,6 +9,7 @@ Ogni comando scrive i risultati in tools/compat/out/ ed esce con codice != 0 se 
 import argparse
 import json
 import os
+import signal
 import subprocess
 import sys
 import tomllib
@@ -22,6 +23,31 @@ OUT = COMPAT / 'out'
 REF_SRC = ROOT / 'celery'
 VENV_REF = ROOT / '.venv-ref'
 VENV_RS = ROOT / '.venv-rs'
+
+
+def run_group(cmd, **kwargs):
+    """Come subprocess.run, ma in un gruppo di processi proprio, terminato del tutto all'uscita.
+
+    Se il pytest principale muore (timeout, OOM, kill) i worker xdist restano orfani e inattivi
+    per sempre: alla fine si uccide l'intero gruppo, qualunque sia l'esito.
+    """
+    proc = subprocess.Popen(cmd, start_new_session=True, **kwargs)
+    try:
+        return proc.wait()
+    finally:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+
+
+def _exit_on_term(signum, frame):
+    # SIGTERM → SystemExit, così i `finally` di run_group ripuliscono i gruppi.
+    raise SystemExit(128 + signum)
+
+
+signal.signal(signal.SIGTERM, _exit_on_term)
+signal.signal(signal.SIGHUP, _exit_on_term)
 
 
 def load_scope():
@@ -270,9 +296,9 @@ def cmd_upstream(args):
 
     # passo 1: parallelo per file
     x1 = OUT / f'upstream-{args.suite}-{label}-pass1.xml'
-    subprocess.run([*pytest, *paths, *opts, '-n', str(args.jobs), '--dist', 'loadfile',
-                    f'--junitxml={x1}'],
-                   cwd=TEST_SRC, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    run_group([*pytest, *paths, *opts, '-n', str(args.jobs), '--dist', 'loadfile',
+               f'--junitxml={x1}'],
+              cwd=TEST_SRC, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     failed1 = junit_failures(x1)
 
     # passo 2: ripete in seriale solo i falliti, un processo per file: alcuni test passano da soli
@@ -284,8 +310,8 @@ def cmd_upstream(args):
         by_file.setdefault(node.split('::', 1)[0], []).append(node)
     for i, (path, nodes) in enumerate(sorted(by_file.items())):
         x2 = OUT / f'upstream-{args.suite}-{label}-pass2-{i}.xml'
-        subprocess.run([*pytest, *sorted(nodes), *opts, f'--junitxml={x2}'],
-                       cwd=TEST_SRC, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        run_group([*pytest, *sorted(nodes), *opts, f'--junitxml={x2}'],
+                  cwd=TEST_SRC, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         failed |= junit_failures(x2)
         x2.unlink(missing_ok=True)
 
