@@ -283,6 +283,12 @@ class ResultConsumer(BaseResultConsumer):
         # parser or buffer; it only waits on the raw socket.
         # Capped: poll() is not woken when a reconnect closes this socket.
         wait = 1.0 if timeout is None else min(timeout, 1.0)
+        # Lo shim Rust non espone un socket Python: attende sul proprio
+        # stream tokio con la stessa semantica (un messaggio letto viene
+        # bufferizzato per il successivo _drain_one). Il ramo redis-py resta
+        # identico.
+        if getattr(pubsub, '_celery_rs_shim', False) is True:
+            return pubsub.wait_readable(wait)
         if not pubsub.subscribed:
             return pubsub.subscribed_event.wait(wait)
         # _sock is private redis-py API.  None means disconnected, so report
@@ -886,9 +892,30 @@ class RedisBackend(BaseKeyValueStoreBackend, AsyncBackendMixin):
                 )
 
     def _create_client(self, **params):
+        client = self._create_rs_client(**params)
+        if client is not None:
+            return client
         return self._get_client()(
             connection_pool=self._get_pool(**params),
         )
+
+    def _create_rs_client(self, **params):
+        """Client Rust quando il backend è esattamente ``RedisBackend``.
+
+        ``SentinelBackend`` (e le sottoclassi) e i test che sostituiscono
+        ``Backend.redis`` restano su redis-py: lì il pool non è quello
+        standard e il comportamento deve restare identico.
+        """
+        if type(self) is not RedisBackend:
+            return None
+        from . import _rs_redis
+        if not _rs_redis.use_rs_backend(self):
+            return None
+        try:
+            return _rs_redis.RsRedis(**params)
+        except (TypeError, ValueError):
+            # Configurazione che il core non sa costruire: decide redis-py.
+            return None
 
     def _get_client(self):
         return self.redis.StrictRedis

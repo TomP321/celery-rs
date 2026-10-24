@@ -37,6 +37,25 @@ from celery.utils.serialization import (create_exception_cls, ensure_serializabl
                                         get_pickled_exception, raise_with_context)
 from celery.utils.time import get_exponential_backoff_interval
 
+try:  # il pacchetto completo lo installa sempre; il riferimento no.
+    import _celery_rs
+except ImportError:  # pragma: no cover - solo senza estensione nativa
+    _celery_rs = None
+
+#: ``default`` di kombu per il JSON: legge ``kombu.utils.json._encoders`` a
+#: ogni uso (come nel producer), quindi il caching della sola bound method è
+#: equivalente alla chiamata di ``dumps``.
+_JSON_DEFAULT = None
+
+
+def _json_default():
+    global _JSON_DEFAULT
+    if _JSON_DEFAULT is None:
+        from kombu.utils.json import JSONEncoder
+        _JSON_DEFAULT = JSONEncoder().default
+    return _JSON_DEFAULT
+
+
 __all__ = ('BaseBackend', 'KeyValueStoreBackend', 'DisabledBackend')
 
 EXCEPTION_ABLE_CODECS = frozenset({'pickle'})
@@ -666,6 +685,12 @@ class Backend:
         return payload
 
     def _encode(self, data):
+        # JSON è il caso comune: stesso output di kombu, senza passare per il
+        # registro dei serializer. Gli altri serializer restano a kombu.
+        if (_celery_rs is not None and self.serializer == 'json'
+                and self.content_type == 'application/json'):
+            payload = _celery_rs.json_dumps(data, _json_default())
+            return self.content_type, self.content_encoding, payload.decode('utf-8')
         return dumps(data, serializer=self.serializer)
 
     def meta_from_decoded(self, meta):
@@ -685,6 +710,13 @@ class Backend:
         # and so that a reader that never had it turned on can still read a
         # result written by a worker that did.
         payload = decompress_payload(payload)
+        # ``accept`` è già stato preparato dal costruttore; il JSON ha lo stesso
+        # decoder di kombu e nessun object_hook (quello dei backend è solo per
+        # i serializer esterni).
+        if (_celery_rs is not None and self.serializer == 'json'
+                and self.content_type == 'application/json'
+                and (self.accept is None or 'application/json' in self.accept)):
+            return _celery_rs.json_loads(payload)
         return loads(payload,
                      content_type=self.content_type,
                      content_encoding=self.content_encoding,

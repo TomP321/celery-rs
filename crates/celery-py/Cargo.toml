@@ -11,9 +11,13 @@ crate-type = ["cdylib"]
 
 [dependencies]
 bytes.workspace = true
+celery-backend.workspace = true
 celery-proto.workspace = true
 celery-transport.workspace = true
 compact_str.workspace = true
 futures-core.workspace = true
 pyo3.workspace = true
 tokio = { workspace = true, features = ["rt", "time"] }
+
+[build-dependencies]
+pyo3-build-config.workspace = true
