@@ -1,4 +1,4 @@
-/celery/
+/celery
 /target/
 /.venv-*/
 __pycache__/
