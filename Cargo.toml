@@ -29,7 +29,10 @@ hashbrown = "0.17"
 lapin = "4.12"
 mimalloc = { version = "0.1", default-features = false }
 pyo3 = { version = "0.30", features = ["extension-module", "abi3-py310"] }
-redis = { version = "1.8", default-features = false, features = ["tokio-comp", "aio"] }
+redis = { version = "1.8", default-features = false, features = ["tokio-comp", "aio", "script", "streams", "tokio-rustls-comp"] }
+# Provider crittografico esplicito per `rediss://`: senza una feature di rustls
+# il client va in panico alla creazione della configurazione TLS.
+rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
 regex = "1"
 serde = { version = "1", features = ["derive"] }
 sonic-rs = "0.5"

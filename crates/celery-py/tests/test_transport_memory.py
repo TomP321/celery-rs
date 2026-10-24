@@ -537,10 +537,7 @@ def test_drain_zero_timeout_is_non_blocking():
 
 
 def test_url_and_transport_options_errors():
-    with pytest.raises(NotImplementedError):
-        rs.Connection("redis://127.0.0.1:6390/0")
-    with pytest.raises(NotImplementedError):
-        rs.Connection("rediss://127.0.0.1:6390/0")
+    # `redis://` è implementato dalla spec 02b (vedi test_transport_redis.py).
     with pytest.raises(NotImplementedError):
         rs.Connection("amqp://guest:guest@127.0.0.1:5673//")
     with pytest.raises(NotImplementedError):

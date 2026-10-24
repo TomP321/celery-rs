@@ -7,12 +7,15 @@ rust-version.workspace = true
 
 [dependencies]
 bytes.workspace = true
+celery-proto.workspace = true
 compact_str.workspace = true
 futures-core.workspace = true
 regex.workspace = true
 thiserror.workspace = true
-tokio = { workspace = true, features = ["rt", "sync", "time"] }
+redis.workspace = true
+rustls.workspace = true
+tokio = { workspace = true, features = ["rt", "sync", "time", "macros"] }
 uuid.workspace = true
 
 [dev-dependencies]
-tokio = { workspace = true, features = ["macros", "rt", "time"] }
+tokio = { workspace = true, features = ["macros", "rt", "time", "rt-multi-thread"] }
