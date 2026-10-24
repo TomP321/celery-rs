@@ -1,0 +1,24 @@
+{
+ "label": "ref-solo-amqp",
+ "venv": ".venv-ref",
+ "pool": "solo",
+ "concurrency": 1,
+ "n": 5000,
+ "pss_idle_kb": 49708,
+ "pss_idle_per_process_kb": [
+  49708
+ ],
+ "pss_peak_kb": 50185,
+ "pss_after_kb": 50225,
+ "client_publish_per_s": 2604.125608288606,
+ "client_maxrss_kb": 44628,
+ "end_to_end_s": 3.021616220474243,
+ "end_to_end_tasks_per_s": 1654.7435660824092,
+ "drain_after_publish_s": 1.0099003169962089,
+ "latency_ms": {
+  "p50": 2.9223339988675434,
+  "p99": 3.6248289979994297,
+  "max": 3.8224900054046884
+ },
+ "python": "3.13.9"
+}

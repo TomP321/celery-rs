@@ -1,0 +1,24 @@
+{
+ "label": "ref-solo-redis",
+ "venv": ".venv-ref",
+ "pool": "solo",
+ "concurrency": 1,
+ "n": 10000,
+ "pss_idle_kb": 49678,
+ "pss_idle_per_process_kb": [
+  49678
+ ],
+ "pss_peak_kb": 49969,
+ "pss_after_kb": 50020,
+ "client_publish_per_s": 1427.2782478053114,
+ "client_maxrss_kb": 44816,
+ "end_to_end_s": 13.06062626838684,
+ "end_to_end_tasks_per_s": 765.6600682468752,
+ "drain_after_publish_s": 5.9975580409955,
+ "latency_ms": {
+  "p50": 1.9830145029118285,
+  "p99": 2.6572569986456074,
+  "max": 3.1720019978820346
+ },
+ "python": "3.13.9"
+}

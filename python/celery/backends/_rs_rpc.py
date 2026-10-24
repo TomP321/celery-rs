@@ -19,16 +19,9 @@ import time
 import weakref
 
 import kombu
-from kombu.exceptions import DecodeError
-from kombu.message import Message as KombuMessage
-from kombu.serialization import (
-    TRUSTED_CONTENT,
-    _reraise_errors,
-    registry as serializer_registry,
-)
 from kombu.transport.base import to_rabbitmq_queue_arguments
-from kombu.utils.json import object_hook as json_object_hook
 
+from celery._rs_message import RsMessage
 from celery.app import _rs_producer
 
 from .rpc import ResultConsumer
@@ -102,63 +95,6 @@ def promote_to_rust(consumer):
         return consumer
     consumer.__class__ = RsResultConsumer
     return consumer
-
-
-class _RsChannel:
-    """Canale minimo per ``kombu.Message.ack``/``reject``.
-
-    ``delivery_tag`` è il tag del trasporto Rust (per AMQP codifica anche il
-    canale), quindi ack e reject non richiedono una connessione kombu.
-    """
-
-    __slots__ = ('connection', 'no_ack_consumers')
-
-    def __init__(self, connection, no_ack=False):
-        self.connection = connection
-        self.no_ack_consumers = set() if no_ack else None
-
-    def basic_ack(self, delivery_tag, multiple=False):
-        self.connection.ack(delivery_tag)
-
-    def basic_reject(self, delivery_tag, requeue=False):
-        self.connection.reject(delivery_tag, requeue=requeue)
-
-
-class RsMessage(KombuMessage):
-    """``kombu.Message`` costruito da una consegna del trasporto Rust."""
-
-    def __init__(self, consumer, raw, accept=None, no_ack=False):
-        body, headers, properties, delivery_info, delivery_tag = raw
-        super().__init__(
-            body=body,
-            channel=_RsChannel(consumer._rs_connection, no_ack),
-            delivery_tag=delivery_tag,
-            content_type=properties.get('content_type'),
-            content_encoding=properties.get('content_encoding'),
-            delivery_info=delivery_info,
-            properties=properties,
-            headers=headers,
-            accept=accept,
-        )
-
-    def _decode(self):
-        content_type = self.content_type or 'application/data'
-        # Stesse regole di ``kombu.serialization.loads``: ContentDisallowed
-        # prima di qualunque decodifica.
-        if self.accept is not None:
-            if (content_type not in TRUSTED_CONTENT
-                    and content_type not in self.accept):
-                raise serializer_registry._for_untrusted_content(
-                    content_type, 'untrusted')
-        elif content_type in serializer_registry._disabled_content_types:
-            raise serializer_registry._for_untrusted_content(
-                content_type, 'disabled')
-
-        if (content_type == 'application/json' and self.body
-                and _celery_rs is not None):
-            with _reraise_errors(DecodeError):
-                return _celery_rs.json_loads(self.body, json_object_hook)
-        return super()._decode()
 
 
 class _RsConsumerSet:
