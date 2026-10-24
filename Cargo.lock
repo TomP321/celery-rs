@@ -449,6 +449,7 @@ dependencies = [
  "celery-backend",
  "celery-proto",
  "celery-transport",
+ "celery-worker",
  "compact_str",
  "futures-core",
  "pyo3",

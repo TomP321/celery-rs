@@ -14,6 +14,7 @@ bytes.workspace = true
 celery-backend.workspace = true
 celery-proto.workspace = true
 celery-transport.workspace = true
+celery-worker.workspace = true
 compact_str.workspace = true
 futures-core.workspace = true
 pyo3.workspace = true
