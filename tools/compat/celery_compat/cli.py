@@ -222,7 +222,7 @@ def junit_failures(xml_path):
             # classname = "t.unit.app.test_app.test_App" → file + classe
             parts = cls.split('.')
             for i in range(len(parts), 0, -1):
-                f = Path(REF_SRC, *parts[:i]).with_suffix('.py')
+                f = Path(TEST_SRC, *parts[:i]).with_suffix('.py')
                 if f.exists():
                     node = '/'.join(parts[:i]) + '.py'
                     rest = parts[i:] + [case.get('name')]
@@ -239,20 +239,40 @@ def summary(xml_path):
     return {k: int(suite.get(k, 0)) for k in ('tests', 'failures', 'errors', 'skipped')}
 
 
+TEST_SRC = OUT / 'upstream-src'
+
+
+def prepare_test_tree():
+    """Copia dei test di Celery in una cartella senza il pacchetto `celery`.
+
+    Eseguiti da `celery/`, pytest metterebbe in sys.path la cartella che contiene `t/`
+    e quindi il sorgente di riferimento: il venv-rs importerebbe il Celery originale.
+    """
+    import shutil
+    shutil.rmtree(TEST_SRC, ignore_errors=True)
+    shutil.copytree(REF_SRC / 't', TEST_SRC / 't', ignore=shutil.ignore_patterns('__pycache__'))
+    for name in ('pyproject.toml', 'setup.cfg'):
+        if (REF_SRC / name).exists():
+            shutil.copy(REF_SRC / name, TEST_SRC / name)
+
+
 def cmd_upstream(args):
     OUT.mkdir(parents=True, exist_ok=True)
+    prepare_test_tree()
     label = Path(args.venv).name.lstrip('.')
     paths = args.paths or [f't/{args.suite}']
-    base = [py(args.venv), '-m', 'pytest', *paths, '-q', '-p', 'no:cacheprovider',
-            '--timeout=300', '-o', 'addopts=']
+    # -P: niente cwd in sys.path; il pacchetto celery deve venire dal venv
+    pytest = [py(args.venv), '-P', '-m', 'pytest']
+    opts = ['-q', '-p', 'no:cacheprovider', '--timeout=300', '-o', 'addopts=']
     if args.k:
-        base += ['-k', args.k]
+        opts += ['-k', args.k]
     env = {**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'}
 
     # passo 1: parallelo per file
     x1 = OUT / f'upstream-{args.suite}-{label}-pass1.xml'
-    subprocess.run([*base, '-n', str(args.jobs), '--dist', 'loadfile', f'--junitxml={x1}'],
-                   cwd=REF_SRC, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run([*pytest, *paths, *opts, '-n', str(args.jobs), '--dist', 'loadfile',
+                    f'--junitxml={x1}'],
+                   cwd=TEST_SRC, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     failed1 = junit_failures(x1)
 
     # passo 2: ripete in seriale solo i falliti, un processo per file: alcuni test passano da soli
@@ -264,8 +284,8 @@ def cmd_upstream(args):
         by_file.setdefault(node.split('::', 1)[0], []).append(node)
     for i, (path, nodes) in enumerate(sorted(by_file.items())):
         x2 = OUT / f'upstream-{args.suite}-{label}-pass2-{i}.xml'
-        subprocess.run([*base[:3], *sorted(nodes), *base[4:], f'--junitxml={x2}'],
-                       cwd=REF_SRC, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run([*pytest, *sorted(nodes), *opts, f'--junitxml={x2}'],
+                       cwd=TEST_SRC, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         failed |= junit_failures(x2)
         x2.unlink(missing_ok=True)
 
