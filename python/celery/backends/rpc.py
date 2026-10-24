@@ -50,6 +50,14 @@ class ResultConsumer(BaseResultConsumer):
         self._create_binding = self.backend._create_binding
 
     def start(self, initial_task_id, no_ack=True, **kwargs):
+        # Se la connessione dell'app è idonea, il consumer passa al trasporto
+        # Rust. La decisione avviene qui (e non alla creazione del backend) per
+        # lasciare sui mock dei test upstream il ramo originale.
+        from ._rs_rpc import RsResultConsumer, promote_to_rust
+        promote_to_rust(self)
+        if self.__class__ is RsResultConsumer:
+            return RsResultConsumer.start(self, initial_task_id,
+                                          no_ack=no_ack, **kwargs)
         self._no_ack = no_ack
         self._connection = self.app.connection()
         self._connection_errors = (
@@ -234,7 +242,13 @@ class RPCBackend(base.Backend, AsyncBackendMixin):
         # the message, but we skip this if running in the prefork pool
         # (task_join_will_block), as we know the queue is already declared.
         if not task_join_will_block():
-            maybe_declare(self.binding(producer.channel), retry=True)
+            from celery.app._rs_producer import RsProducer
+            if isinstance(producer, RsProducer):
+                # Nessun canale kombu: la coda si dichiara sul trasporto Rust
+                # del producer (stessa connessione del publish).
+                producer.maybe_declare(self.binding, retry=True)
+            else:
+                maybe_declare(self.binding(producer.channel), retry=True)
 
     def destination_for(self, task_id, request):
         """Get the destination for result by task id.
@@ -376,6 +390,13 @@ class RPCBackend(base.Backend, AsyncBackendMixin):
 
     def _slurp_from_queue(self, task_id, accept,
                           limit=1000, no_ack=False):
+        from ._rs_rpc import promote_to_rust
+        promote_to_rust(self.result_consumer)
+        slurp = getattr(self.result_consumer, '_slurp_from_queue', None)
+        if slurp is not None:
+            # basic.get sul trasporto Rust, stesso algoritmo del riferimento.
+            yield from slurp(task_id, accept, limit, no_ack)
+            return
         with self.app.pool.acquire_channel(block=True) as (_, channel):
             binding = self._create_binding(task_id)(channel)
             binding.declare()

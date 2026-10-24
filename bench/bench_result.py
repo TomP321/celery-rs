@@ -1,205 +1,237 @@
-"""Benchmark del result backend Redis: riferimento vs client Rust.
+"""Benchmark del result backend ``rpc://`` (o Redis) lato client.
 
-    .venv-ref/bin/python bench/bench_result.py --flavor ref
-    .venv-rs/bin/python  bench/bench_result.py --flavor rs
+Confronta il client del riferimento e quello di celery-rs usando lo stesso
+worker del riferimento:
 
-Misura, con un worker del **riferimento** (``.venv-ref``) sullo stesso Redis:
+    python3 bench/bench_result.py --backend rpc
+    python3 bench/bench_result.py --backend rpc --venvs .venv-ref .venv-rs
 
-- latenza ``apply_async().get()``: p50/p99 su ``--n`` task;
-- throughput ``get_many`` e ``join_native`` su ``--bulk`` risultati;
-- RSS del processo client (corrente e picco).
+Misure per client:
+  * latenza ``apply_async().get()`` p50/p99 (ms);
+  * throughput di ``join_native`` su N risultati (risultati/s);
+  * RSS massimo del client (``ru_maxrss``, KB).
 
-I risultati sono scritti in ``bench/results/backend-redis-<flavor>.json``.
-Redis e database sono dedicati (``BENCH_BROKER_PORT``/db 6 e 7) e vengono
-azzerati prima della misura: eseguire sotto ``tools/dev/with-brokers``.
+Il worker gira sempre con ``.venv-ref``: in questa fase il worker celery-rs
+non esiste ancora, quindi la variabile misurata è il client.
 """
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import os
+import signal
 import statistics
 import subprocess
 import sys
-import threading
 import time
+import urllib.parse
+import urllib.request
 import uuid
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
-sys.path.insert(0, str(HERE))
+REF_VENV = ROOT / '.venv-ref'
+REF_PYTHON = REF_VENV / 'bin' / 'python'
 
-REDIS_PORT = os.environ.get('BENCH_REDIS_PORT', '6390')
-BROKER = os.environ.get('BENCH_BROKER', f'redis://127.0.0.1:{REDIS_PORT}/6')
-BACKEND = os.environ.get('BENCH_BACKEND', f'redis://127.0.0.1:{REDIS_PORT}/7')
-QUEUE = os.environ.get('BENCH_QUEUE', f'bench-result-{uuid.uuid4().hex[:8]}')
-
-# `benchapp` legge queste variabili all'import: il client deve usare gli stessi
-# URL del worker, altrimenti pubblica su un altro database.
-os.environ['BENCH_BROKER'] = BROKER
-os.environ['BENCH_BACKEND'] = BACKEND
+AMQP = 'amqp://guest:guest@127.0.0.1:5673//'
+REDIS = 'redis://127.0.0.1:6390/0'
+REDIS_BACKEND = 'redis://127.0.0.1:6390/1'
 
 
-def percentile(values, fraction):
-    if not values:
-        return None
-    ordered = sorted(values)
-    index = min(len(ordered) - 1, max(0, int(round(fraction * len(ordered))) - 1))
-    return ordered[index]
+def unique(prefix):
+    return f'{prefix}.{uuid.uuid4().hex}'
 
 
-def rss_kb():
-    data = {}
-    with open('/proc/self/status') as handle:
-        for line in handle:
-            if line.startswith(('VmRSS:', 'VmHWM:')):
-                name, value, _ = line.split()
-                data[name.rstrip(':')] = int(value)
-    return {'rss_kb': data.get('VmRSS'), 'peak_rss_kb': data.get('VmHWM')}
+def venv_python(venv):
+    return str((Path(venv).resolve() / 'bin' / 'python'))
 
 
-class Worker:
-    def __init__(self, python):
-        self.python = str(python)
-        self.process = None
-        self.lines = []
+def backend_settings(backend):
+    if backend == 'rpc':
+        return AMQP, 'rpc://'
+    if backend == 'redis':
+        return REDIS, REDIS_BACKEND
+    raise SystemExit(f'backend sconosciuto: {backend}')
 
-    def start(self):
-        env = dict(os.environ)
-        env.update(BENCH_BROKER=BROKER, BENCH_BACKEND=BACKEND)
-        self.process = subprocess.Popen(
-            [self.python, '-m', 'celery', '-A', 'benchapp', 'worker',
-             '-P', 'solo', '-Q', QUEUE, '--loglevel=INFO',
-             '--without-heartbeat', '--without-gossip', '--without-mingle'],
-            cwd=HERE, env=env, stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT, text=True,
-        )
-        thread = threading.Thread(target=self._read, daemon=True)
-        thread.start()
-        deadline = time.monotonic() + 45
-        while time.monotonic() < deadline:
-            if any('ready.' in line for line in self.lines):
-                return
-            if self.process.poll() is not None:
-                break
-            time.sleep(0.1)
-        self.stop()
-        raise RuntimeError(
-            f'worker non pronto:\n{"".join(self.lines[-30:])}')
 
-    def _read(self):
-        assert self.process is not None and self.process.stdout is not None
-        for line in self.process.stdout:
-            self.lines.append(line)
+def worker_env(broker, result_backend, queue):
+    env = {k: v for k, v in os.environ.items() if not k.startswith('PYTHON')}
+    env.update({
+        'BENCH_BROKER': broker,
+        'BENCH_RESULT_BACKEND': result_backend,
+        'BENCH_QUEUE': queue,
+        'PYTHONPATH': str(HERE),
+        'PYTHONHASHSEED': '0',
+    })
+    return env
 
-    def stop(self):
-        if self.process is None:
+
+def wait_ready(env, nodename, timeout=90):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        result = subprocess.run(
+            [str(REF_PYTHON), '-m', 'celery', '-A', 'bench_result_app',
+             'inspect', 'ping', '-d', nodename, '-t', '1'],
+            cwd=HERE, env=env, capture_output=True, text=True)
+        if 'pong' in result.stdout:
             return
-        self.process.terminate()
+        time.sleep(0.5)
+    raise SystemExit('worker non pronto')
+
+
+CLIENT = r'''
+import json
+import resource
+import sys
+import time
+
+from celery import group
+from bench_result_app import add, noop
+
+latency_n = int(sys.argv[1])
+join_n = int(sys.argv[2])
+
+add.delay(1, 1).get(timeout=60)  # warm-up connessioni e consumer
+
+latencies = []
+for index in range(latency_n):
+    started = time.perf_counter()
+    value = add.delay(index, 1).get(timeout=60)
+    latencies.append(time.perf_counter() - started)
+    assert value == index + 1, (value, index)
+
+rss_before_join = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+started = time.perf_counter()
+canvas = group(noop.s() for _ in range(join_n))
+result = canvas.apply_async()
+values = result.join_native(timeout=300)
+elapsed = time.perf_counter() - started
+assert len(values) == join_n, (len(values), join_n)
+rss_after_join = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+
+print(json.dumps({
+    'latency_s': latencies,
+    'join_s': elapsed,
+    'join_n': join_n,
+    'rss_before_join_kb': rss_before_join,
+    'rss_max_kb': rss_after_join,
+}))
+'''
+
+
+def run_client(venv, env, latency_n, join_n):
+    out = subprocess.run(
+        [venv_python(venv), '-c', CLIENT, str(latency_n), str(join_n)],
+        cwd=HERE, env=env, capture_output=True, text=True)
+    if out.returncode != 0:
+        raise SystemExit(
+            f'client {venv} fallito:\n{out.stdout[-4000:]}\n{out.stderr[-8000:]}')
+    return json.loads(out.stdout.strip().splitlines()[-1])
+
+
+def delete_rabbit_queue(queue):
+    """Rimuove la coda del worker dal broker condiviso (best effort)."""
+    authenticator = 'Basic ' + base64.b64encode(b'guest:guest').decode()
+    path = '/api/queues/%2F/' + urllib.parse.quote(queue, safe='')
+    request = urllib.request.Request(
+        'http://127.0.0.1:15673' + path, method='DELETE',
+        headers={'Authorization': authenticator})
+    try:
+        with urllib.request.urlopen(request, timeout=5):
+            pass
+    except Exception:
+        pass
+
+
+def redis_clean():
+    try:
+        import redis
+    except ImportError:  # pragma: no cover - solo con backend redis
+        return
+    client = redis.Redis.from_url('redis://127.0.0.1:6390/1')
+    client.flushdb()
+    redis.Redis.from_url('redis://127.0.0.1:6390/0').flushdb()
+
+
+def benchmark(venv, args):
+    broker, result_backend = backend_settings(args.backend)
+    queue = unique('bench.result')
+    env = worker_env(broker, result_backend, queue)
+    nodename = unique('bench-result-worker') + '@localhost'
+    worker = subprocess.Popen(
+        [str(REF_PYTHON), '-m', 'celery', '-A', 'bench_result_app',
+         'worker', '-P', 'prefork', '-c', str(args.concurrency),
+         '-Q', queue, '-n', nodename, '-l', 'warning',
+         '--without-gossip', '--without-mingle'],
+        cwd=HERE, env=env, stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE, start_new_session=True)
+    try:
+        wait_ready(env, nodename)
+        client = run_client(venv, env, args.latency_n, args.join_n)
+    finally:
         try:
-            self.process.wait(timeout=20)
-        except subprocess.TimeoutExpired:  # pragma: no cover
-            self.process.kill()
+            os.killpg(worker.pid, signal.SIGTERM)
+            worker.wait(30)
+        except (ProcessLookupError, subprocess.TimeoutExpired):
+            try:
+                os.killpg(worker.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        if args.backend == 'rpc':
+            delete_rabbit_queue(queue)
+
+    latencies = sorted(value * 1000 for value in client['latency_s'])
+    label = Path(venv).resolve().name.lstrip('.').removeprefix('venv-')
+    return {
+        'label': label,
+        'venv': str(Path(venv).resolve()),
+        'backend': args.backend,
+        'latency_n': args.latency_n,
+        'latency_ms': {
+            'p50': statistics.median(latencies),
+            'p99': latencies[int(len(latencies) * 0.99) - 1],
+            'max': latencies[-1],
+        },
+        'join_n': client['join_n'],
+        'join_s': client['join_s'],
+        'join_results_per_s': client['join_n'] / client['join_s'],
+        'rss_before_join_kb': client['rss_before_join_kb'],
+        'rss_max_kb': client['rss_max_kb'],
+        'python': sys.version.split()[0],
+    }
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--flavor', choices=('ref', 'rs'), required=True)
-    parser.add_argument('--worker-python',
-                        default=str(ROOT / '.venv-ref' / 'bin' / 'python'))
-    parser.add_argument('--n', type=int, default=200,
-                        help='numero di task per la latenza end-to-end')
-    parser.add_argument('--bulk', type=int, default=1000,
-                        help='risultati per get_many/join')
-    parser.add_argument('--no-worker', action='store_true')
-    parser.add_argument('--out', default=None)
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--backend', choices=('rpc', 'redis'), default='rpc')
+    parser.add_argument('--venvs', nargs='+',
+                        default=[str(ROOT / '.venv-ref'), str(ROOT / '.venv-rs')])
+    parser.add_argument('--latency-n', type=int, default=200)
+    parser.add_argument('--join-n', type=int, default=1000)
+    parser.add_argument('--concurrency', type=int, default=4)
     args = parser.parse_args()
 
-    import redis
-    from celery import Celery
+    if args.backend == 'redis':
+        redis_clean()
+    results = [benchmark(venv, args) for venv in args.venvs]
+    payload = {'backend': args.backend, 'results': results}
+    out = HERE / 'results' / f'result-{args.backend}.json'
+    out.parent.mkdir(exist_ok=True)
+    out.write_text(json.dumps(payload, indent=1))
+    print(json.dumps(payload, indent=1))
 
-    assert BROKER.startswith('redis://') and BACKEND.startswith('redis://')
-    for url in (BROKER, BACKEND):
-        redis.Redis.from_url(url).flushdb()
-
-    app = Celery('bench-result', broker=BROKER, backend=BACKEND)
-    app.conf.update(
-        task_default_queue=QUEUE,
-        result_expires=600,
-        broker_connection_retry_on_startup=True,
-        worker_hijack_root_logger=False,
-    )
-    from benchapp import add  # noqa: E402 - usa l'app del modulo (stesso task)
-
-    worker = Worker(args.worker_python)
-    if not args.no_worker:
-        worker.start()
-    try:
-        # Riscaldamento: la prima connessione paga l'handshake.
-        add.apply_async((0, 0), queue=QUEUE).get(timeout=60)
-
-        latencies = []
-        for index in range(args.n):
-            started = time.perf_counter()
-            value = add.apply_async((index, index), queue=QUEUE).get(timeout=60)
-            latencies.append((time.perf_counter() - started) * 1000.0)
-            assert value == index * 2
-        latencies_ms = {
-            'p50': percentile(latencies, 0.50),
-            'p90': percentile(latencies, 0.90),
-            'p99': percentile(latencies, 0.99),
-            'mean': statistics.fmean(latencies),
-            'min': min(latencies),
-            'max': max(latencies),
-            'count': len(latencies),
-        }
-
-        backend = app.backend
-        ids = [str(uuid.uuid4()) for _ in range(args.bulk)]
-        for index, task_id in enumerate(ids):
-            backend.store_result(task_id, index, 'SUCCESS')
-
-        started = time.perf_counter()
-        fetched = list(backend.get_many(ids))
-        get_many_seconds = time.perf_counter() - started
-        assert len(fetched) == args.bulk
-
-        results = [app.AsyncResult(task_id) for task_id in ids]
-        started = time.perf_counter()
-        values = app.GroupResult(str(uuid.uuid4()), results).join_native(
-            timeout=120)
-        join_seconds = time.perf_counter() - started
-        assert len(values) == args.bulk
-
-        report = {
-            'flavor': args.flavor,
-            'python': sys.executable,
-            'celery': getattr(__import__('celery'), '__version__', None),
-            'broker': BROKER,
-            'backend': BACKEND,
-            'worker_python': None if args.no_worker else str(args.worker_python),
-            'latency_ms': latencies_ms,
-            'get_many': {
-                'count': args.bulk,
-                'seconds': get_many_seconds,
-                'per_second': args.bulk / get_many_seconds,
-            },
-            'join_native': {
-                'count': args.bulk,
-                'seconds': join_seconds,
-                'per_second': args.bulk / join_seconds,
-            },
-            **rss_kb(),
-        }
-    finally:
-        if not args.no_worker:
-            worker.stop()
-
-    output = Path(args.out) if args.out else (
-        HERE / 'results' / f'backend-redis-{args.flavor}.json')
-    output.write_text(json.dumps(report, indent=1, sort_keys=True) + '\n')
-    print(json.dumps(report, indent=1, sort_keys=True))
+    if len(results) == 2:
+        reference, ours = results
+        print(f"latenza p50: {reference['latency_ms']['p50']:.3f} ms -> "
+              f"{ours['latency_ms']['p50']:.3f} ms")
+        print(f"latenza p99: {reference['latency_ms']['p99']:.3f} ms -> "
+              f"{ours['latency_ms']['p99']:.3f} ms")
+        print(f"join_native: {reference['join_results_per_s']:.0f} -> "
+              f"{ours['join_results_per_s']:.0f} risultati/s")
+        print(f"RSS client: {reference['rss_max_kb']} -> "
+              f"{ours['rss_max_kb']} KB")
 
 
 if __name__ == '__main__':

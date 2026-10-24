@@ -447,6 +447,7 @@ fn seconds(value: &Bound<'_, PyAny>, key: &str) -> PyResult<Duration> {
 struct StreamState {
     queues: Vec<CompactString>,
     prefetch: u16,
+    no_ack: bool,
     consumer: Consumer,
 }
 
@@ -483,6 +484,7 @@ impl Connection {
         queues: Vec<CompactString>,
         timeout: Option<f64>,
         prefetch: u16,
+        no_ack: bool,
     ) -> PyResult<Vec<Delivery>> {
         self.ensure_open()?;
         if queues.is_empty() {
@@ -492,11 +494,25 @@ impl Connection {
             .stream
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
+        // `no_ack` vale per l'intero consumatore: cambiarlo richiede di
+        // ricrearlo (le consegne in volo del vecchio restano al broker).
+        if guard.as_ref().is_some_and(|state| state.no_ack != no_ack) {
+            if let Some(state) = guard.as_ref() {
+                let control = Arc::clone(&state.consumer.control);
+                block(control.cancel())?;
+            }
+            *guard = None;
+        }
         if guard.is_none() {
-            let consumer = block(self.transport.consume(&queues, prefetch))?;
+            let consumer = if no_ack {
+                block(self.transport.consume_no_ack(&queues, prefetch))?
+            } else {
+                block(self.transport.consume(&queues, prefetch))?
+            };
             *guard = Some(StreamState {
                 queues: queues.clone(),
                 prefetch,
+                no_ack,
                 consumer,
             });
         }
@@ -529,7 +545,7 @@ impl Connection {
 
         let runtime = runtime().map_err(PyRuntimeError::new_err)?;
         let stream = &mut state.consumer.deliveries;
-        runtime.block_on(async {
+        let deliveries = runtime.block_on(async {
             let mut deliveries = Vec::new();
             let first = match timeout {
                 None => next(stream).await,
@@ -559,7 +575,16 @@ impl Connection {
                 }
             }
             Ok(deliveries)
-        })
+        })?;
+        if no_ack {
+            // I trasporti senza `no_ack` nativo delegano a `consume`: le
+            // consegne vanno confermate subito. Per AMQP `ack` è un no-op.
+            drop(guard);
+            for delivery in &deliveries {
+                block(self.transport.ack(&delivery.delivery_tag))?;
+            }
+        }
+        Ok(deliveries)
     }
 }
 
@@ -830,19 +855,20 @@ impl Connection {
         py.detach(|| block(self.transport.publish(request)))
     }
 
-    #[pyo3(signature = (queues, timeout=1.0, prefetch=0))]
+    #[pyo3(signature = (queues, timeout=1.0, prefetch=0, no_ack=false))]
     fn drain<'py>(
         &self,
         py: Python<'py>,
         queues: Vec<String>,
         timeout: Option<f64>,
         prefetch: u16,
+        no_ack: bool,
     ) -> PyResult<Bound<'py, PyList>> {
         let queues = queues
             .into_iter()
             .map(CompactString::from)
             .collect::<Vec<_>>();
-        let deliveries = py.detach(|| self.collect(queues, timeout, prefetch))?;
+        let deliveries = py.detach(|| self.collect(queues, timeout, prefetch, no_ack))?;
         let out = PyList::empty(py);
         for delivery in &deliveries {
             out.append(delivery_to_py(

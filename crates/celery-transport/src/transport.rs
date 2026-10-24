@@ -517,6 +517,20 @@ pub trait Transport: Send + Sync {
         prefetch: u16,
     ) -> BoxFuture<'a, Result<Consumer>>;
 
+    /// Consumatore con `basic.consume(no_ack=true)`: il broker considera
+    /// consegnato ogni messaggio e non serve `ack`/`reject`.
+    ///
+    /// Il default delega a [`Transport::consume`]: il chiamante deve confermare
+    /// subito le consegne (il binding Python lo fa) per non lasciarle in volo.
+    /// I trasporti che possono omettere l'ack (AMQP) lo sovrascrivono.
+    fn consume_no_ack<'a>(
+        &'a self,
+        queues: &'a [CompactString],
+        prefetch: u16,
+    ) -> BoxFuture<'a, Result<Consumer>> {
+        self.consume(queues, prefetch)
+    }
+
     /// `basic_get`: un messaggio dalla coda, senza passare dal consumatore.
     /// Con `no_ack=false` entra nell'insieme in volo del trasporto e va
     /// confermato con [`Transport::ack`]/[`Transport::reject`].
