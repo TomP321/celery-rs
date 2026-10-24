@@ -27,17 +27,30 @@ che l'utente estende (`Task`, `Celery`, bootsteps, signal handler). Quindi:
                       │                          result backend, pool connessioni             │
                       └───────────────────────────────────────────────────────────────────────┘
  broker (Redis/AMQP/memory)
-                      ┌──────────── celery worker (master = binario Rust, NIENTE Python) ─────┐
+                      ┌──────── celery worker (master Python + core Rust incorporato) ────────┐
                       │ consumer async (tokio), QoS/prefetch, ack, heartbeat, eventi,         │
                       │ control/broadcast, timer ETA, rate limit, revoke, autoscale           │
-                      │   └─ pool: N figli Python forkati da uno "zygote" pre-caricato         │
+                      │   └─ pool: zygote (fork prima dei thread Rust) → N figli Python       │
                       │        IPC: pipe/shm con frame binari, esecuzione via celery.app.trace │
                       └───────────────────────────────────────────────────────────────────────┘
 ```
 
-- Il **master del worker** è Rust puro: conosce solo nomi task/route/opzioni, ricevuti dallo zygote
-  all'avvio (lo zygote importa l'app una volta, esporta il registry e poi forka i figli).
-- **Figli**: CPython che eseguono solo `trace_task`; niente kombu, niente event loop Python.
+- **Master del worker ibrido** (decisione presa dopo le misure del 2026-10-24, vedi sotto):
+  processo Python che importa l'app e contiene il core Rust (thread tokio per broker I/O,
+  consumer, QoS, timer ETA, rate limit, revoke, eventi, heartbeat, control built-in, supervisione
+  del pool). Segnali, bootstep e comandi di controllo personalizzati restano Python, nello stesso
+  processo dove li esegue Celery: semantica identica. Kombu, billiard e asynpool non vengono
+  più caricati nel worker.
+- **Zygote**: forkato dal master *prima* di avviare i thread Rust (fork sicuro, un solo thread),
+  con l'app già importata e `gc.freeze()`; crea i figli su richiesta del master via pipe.
+- **Figli**: CPython che eseguono solo `trace_task`, condividendo in copy-on-write le pagine
+  dell'app con zygote e master.
+
+Perché non un master in Rust puro: interprete vuoto 5 MB PSS, `import celery` 6 MB, app +
+macchina del worker Celery 38 MB. I figli hanno comunque bisogno di un processo Python con l'app
+caricata da cui essere forkati; se quel processo è il master, le sue pagine sono condivise con
+i figli e la PSS aggiuntiva è piccola, mentre un master Rust puro richiederebbe lo stesso processo
+Python come zygote e dovrebbe emulare segnali/bootstep/control utente fuori dal loro processo.
 - Il **guscio Python** mantiene i moduli e le firme pubbliche di Celery; le parti interne pesanti
   delegano a `celery._rs`. `kombu`/`billiard`/`vine` restano dipendenze importabili solo per i
   tipi pubblici che l'utente usa (`kombu.Queue`, `Exchange`), non per il trasporto.
@@ -65,7 +78,7 @@ celery-rs/
 
 | Area | Tecnica | Target vs Celery 5.7 |
 |---|---|---|
-| Master worker | Rust puro, tokio current-thread, mimalloc | RSS idle < 8 MB (vs ~60–80 MB) |
+| Master worker | Python + core Rust (niente kombu/billiard/asynpool), tokio, mimalloc | PSS master < 12 MB (vs 29 MB) |
 | Figli | fork da zygote + `gc.freeze()` → copy-on-write massimo; `max_memory_per_child` gestito dal master | RSS privato/figlio −40% |
 | Messaggi | `bytes::Bytes` zero-copy dal socket al pipe del figlio; il master non decodifica il body | 0 alloc per body nel master |
 | Header | parse lazy/borrowed (`serde` con `&str`), nomi task internati (`Arc<str>`), `compact_str` | |
