@@ -17,6 +17,10 @@ Stai lavorando a celery-rs: Celery riscritto con core in Rust, API Python identi
 - Broker di test: Redis `127.0.0.1:6390`, RabbitMQ `127.0.0.1:5673` (guest/guest).
   Avvio: `docker compose -f infra/docker-compose.yml up -d`.
 - Rust: `cargo build --release`, `cargo test`, `cargo clippy --all-targets -- -D warnings`.
+- Python: `tools/dev/build-native` installa solo `_celery_rs` in `.venv-ref` (test differenziali);
+  `tools/dev/build-package` installa il pacchetto completo celery-rs in `.venv-rs`.
+  **Non usare `maturin develop -m crates/celery-py/Cargo.toml` dalla radice**: installerebbe il
+  pacchetto `celery` di celery-rs dentro `.venv-ref`, sovrascrivendo il riferimento.
 
 ## Regole di codice
 - Memoria e prestazioni sono un requisito, non un extra: niente clone/alloc inutili, preferisci

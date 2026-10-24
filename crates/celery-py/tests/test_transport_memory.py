@@ -537,11 +537,7 @@ def test_drain_zero_timeout_is_non_blocking():
 
 
 def test_url_and_transport_options_errors():
-    # `redis://` è implementato dalla spec 02b (vedi test_transport_redis.py).
-    with pytest.raises(NotImplementedError):
-        rs.Connection("amqp://guest:guest@127.0.0.1:5673//")
-    with pytest.raises(NotImplementedError):
-        rs.Connection("pyamqp://guest:guest@127.0.0.1:5673//")
+    # redis:// e amqp:// sono implementati (spec 02b/02c): qui restano gli URL non validi.
     with pytest.raises(ValueError):
         rs.Connection("not-a-url")
     with pytest.raises(ValueError):

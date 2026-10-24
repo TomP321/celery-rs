@@ -18,6 +18,8 @@ if [[ ! -d "$WT" ]]; then
   uv venv -q -p "$ROOT/.venv-ref/bin/python" "$WT/.venv-ref"
   VIRTUAL_ENV="$WT/.venv-ref" uv pip install -q --no-deps -r "$ROOT/tools/compat/env-requirements.txt" maturin
   VIRTUAL_ENV="$WT/.venv-ref" uv pip install -q --no-deps -e "$ROOT/celery"
+  uv venv -q -p "$ROOT/.venv-ref/bin/python" "$WT/.venv-rs"
+  VIRTUAL_ENV="$WT/.venv-rs" uv pip install -q --no-deps -r "$ROOT/tools/compat/env-requirements.txt" maturin
   # maturin rifiuta di partire con CONDA_PREFIX e VIRTUAL_ENV entrambi impostati
   mv "$WT/.venv-ref/bin/maturin" "$WT/.venv-ref/bin/maturin.real"
   printf '#!/bin/sh\nunset CONDA_PREFIX\nexec "$(dirname "$0")/maturin.real" "$@"\n' > "$WT/.venv-ref/bin/maturin"

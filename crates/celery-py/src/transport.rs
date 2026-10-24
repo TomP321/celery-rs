@@ -481,11 +481,30 @@ fn delivery_to_py<'py>(
             "delivery_tag",
             HeaderValue::Str(CompactString::from(delivery.delivery_tag.to_string())),
         );
+    } else {
+        // Come `amqp.Message.delivery_info` di kombu.
+        delivery_info.set_item("delivery_tag", tag_to_py(py, &delivery.delivery_tag)?)?;
+        delivery_info.set_item("redelivered", delivery.redelivered)?;
     }
     let properties = headers_to_py(py, &properties)?;
     if virtual_transport {
         // Stesso oggetto di `properties['delivery_info']`, come in kombu.
         properties.set_item("delivery_info", &delivery_info)?;
+    } else {
+        // `kombu.transport.pyamqp.Message` espone content-type, encoding e
+        // header dentro `properties`, oltre che nei campi dedicati.
+        if let Some(content_type) = delivery.message.content_type.as_deref() {
+            properties.set_item("content_type", content_type)?;
+        }
+        if let Some(content_encoding) = delivery.message.content_encoding.as_deref() {
+            properties.set_item("content_encoding", content_encoding)?;
+        }
+        if !delivery.message.headers.is_empty() {
+            properties.set_item(
+                "application_headers",
+                headers_to_py(py, &delivery.message.headers)?,
+            )?;
+        }
     }
     PyTuple::new(
         py,

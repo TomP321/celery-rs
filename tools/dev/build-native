@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Installa SOLO il modulo nativo `_celery_rs` nel venv indicato (default .venv-ref),
+# accanto al Celery di riferimento, per i test differenziali.
+# Non usare `maturin develop -m crates/celery-py/Cargo.toml` dalla radice: maturin prenderebbe
+# il pyproject.toml della radice e installerebbe il pacchetto `celery` di celery-rs al posto
+# del riferimento.
+set -euo pipefail
+ROOT="$(cd "$(dirname "$(readlink -f "$0")")/../.." && pwd)"
+VENV="$(cd "${1:-$ROOT/.venv-ref}" && pwd)"
+cd "$ROOT/crates/celery-py"
+env -u CONDA_PREFIX VIRTUAL_ENV="$VENV" "$VENV/bin/maturin" develop --release

@@ -1,10 +1,9 @@
 //! Trasporti broker: memory, redis, amqp (vedi PLAN.md, fase 2).
 //!
-//! `connect` restituisce un `Box<dyn Transport>`; `memory://` e `redis://`/
-//! `rediss://` sono implementati, mentre `amqp://` risponde
-//! [`Error::NotImplemented`] (la spec 02c aggiunge il modulo senza toccare
-//! questa API).
+//! `connect` restituisce un `Box<dyn Transport>`: `memory://`, `redis://`/`rediss://` e
+//! `amqp://`/`amqps://`/`pyamqp://` sono tutti implementati.
 
+pub mod amqp;
 pub mod memory;
 pub mod message;
 pub mod redis;
@@ -12,6 +11,7 @@ pub mod routing;
 pub mod transport;
 pub mod url;
 
+pub use amqp::AmqpTransport;
 pub use memory::MemoryTransport;
 pub use message::{Decimal, Delivery, DeliveryTag, HeaderValue, Headers, Message, Properties};
 pub use redis::RedisTransport;
@@ -77,12 +77,9 @@ pub async fn connect_parsed_with_config(
         TransportKind::Redis | TransportKind::Rediss => {
             Ok(Box::new(redis::connect(url, config).await?))
         }
-        TransportKind::Amqp | TransportKind::Amqps | TransportKind::PyAmqp => {
-            Err(Error::NotImplemented(
-                "trasporto AMQP: implementato in 02c (crates/celery-transport/src/amqp/)"
-                    .to_string(),
-            ))
-        }
+        TransportKind::Amqp | TransportKind::Amqps | TransportKind::PyAmqp => Ok(Box::new(
+            amqp::AmqpTransport::connect(url, options, &config.retry_policy).await?,
+        )),
     }
 }
 
@@ -112,23 +109,6 @@ mod tests {
         assert!(parse_db("nope").is_err());
         // Come kombu: si toglie un solo slash, quindi "//" non è un numero.
         assert!(parse_db("//").is_err());
-    }
-
-    #[tokio::test]
-    async fn amqp_reports_not_implemented() {
-        for url in [
-            "amqp://guest:guest@127.0.0.1:5673//",
-            "amqps://127.0.0.1:5673//",
-            "pyamqp://guest:guest@127.0.0.1:5673//",
-        ] {
-            match connect(url).await {
-                Err(Error::NotImplemented(message)) => {
-                    assert!(!message.is_empty(), "messaggio chiaro per {url}");
-                }
-                Err(other) => panic!("{url}: atteso NotImplemented, ottenuto {other}"),
-                Ok(_) => panic!("{url}: atteso NotImplemented, connessione riuscita"),
-            }
-        }
     }
 
     #[tokio::test]

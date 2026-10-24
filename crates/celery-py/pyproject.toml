@@ -1,0 +1,15 @@
+# Solo il modulo nativo `_celery_rs`, senza il pacchetto `celery`: si installa accanto al
+# Celery di riferimento in .venv-ref per i test differenziali. Il pacchetto completo
+# (celery + _celery_rs) è definito da pyproject.toml alla radice del repository.
+[build-system]
+requires = ["maturin>=1.14,<2"]
+build-backend = "maturin"
+
+[project]
+name = "celery-rs-native"
+version = "0.1.0"
+requires-python = ">=3.10"
+
+[tool.maturin]
+module-name = "_celery_rs"
+features = ["pyo3/extension-module"]

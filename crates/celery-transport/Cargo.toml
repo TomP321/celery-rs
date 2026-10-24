@@ -10,6 +10,7 @@ bytes.workspace = true
 celery-proto.workspace = true
 compact_str.workspace = true
 futures-core.workspace = true
+lapin.workspace = true
 regex.workspace = true
 thiserror.workspace = true
 redis.workspace = true

@@ -60,8 +60,8 @@ né il traffico sul broker.
 ## Gate (tutti obbligatori, esito reale nel messaggio finale)
 ```
 cargo build --release && cargo clippy --all-targets -- -D warnings && cargo test
-env -u CONDA_PREFIX VIRTUAL_ENV=$PWD/.venv-rs .venv-rs/bin/maturin develop --release
-VIRTUAL_ENV=.venv-ref .venv-ref/bin/maturin develop --release -m crates/celery-py/Cargo.toml
+tools/dev/build-package        # celery-rs completo in .venv-rs
+tools/dev/build-native         # solo _celery_rs in .venv-ref (accanto al riferimento)
 .venv-ref/bin/python -m pytest crates/celery-py/tests -q
 ./compat api                      # 0 differenze
 ./compat wire                     # 0 scenari diversi (ora il venv-rs pubblica con Rust!)

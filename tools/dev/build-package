@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Installa il pacchetto completo celery-rs (`celery` + `_celery_rs`) nel venv indicato
+# (default .venv-rs), in modalità editable.
+set -euo pipefail
+ROOT="$(cd "$(dirname "$(readlink -f "$0")")/../.." && pwd)"
+VENV="$(cd "${1:-$ROOT/.venv-rs}" && pwd)"
+cd "$ROOT"
+env -u CONDA_PREFIX VIRTUAL_ENV="$VENV" "$VENV/bin/maturin" develop --release
