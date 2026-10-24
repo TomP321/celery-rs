@@ -477,6 +477,11 @@ dependencies = [
 [[package]]
 name = "celery-worker"
 version = "0.1.0"
+dependencies = [
+ "bytes",
+ "libc",
+ "thiserror",
+]
 
 [[package]]
 name = "cfg-if"

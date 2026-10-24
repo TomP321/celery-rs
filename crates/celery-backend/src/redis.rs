@@ -372,10 +372,21 @@ impl Client {
 
     /// Nel figlio di `fork()` le connessioni del padre non sono usabili:
     /// il pid diverso le scarta alla prima operazione.
+    ///
+    /// Non si possono *droppare*: ogni `MultiplexedConnection` porta con sé
+    /// waker del runtime tokio del padre, che nel figlio non esiste più.
+    /// Il `Drop` risveglierebbe il driver morto (eventfd chiuso) e, con
+    /// `panic=abort`, farebbe abortire il processo. Si abbandonano: i loro fd
+    /// sono già stati chiusi dal figlio e la memoria è quella di un solo
+    /// processo figlio, quindi il costo è limitato e una tantum.
     fn ensure_process(&self) {
         let pid = std::process::id();
         if self.pid.load(Ordering::Relaxed) != pid {
-            lock(&self.idle).clear();
+            let stale: Vec<MultiplexedConnection> =
+                std::mem::take(&mut *lock(&self.idle));
+            for connection in stale {
+                std::mem::forget(connection);
+            }
             self.pid.store(pid, Ordering::Relaxed);
         }
     }

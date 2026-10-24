@@ -22,6 +22,8 @@ fn _celery_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(transport::after_fork, m)?)?;
     m.add_class::<transport::Connection>()?;
     m.add_class::<worker::PyWaker>()?;
+    m.add_class::<worker::PyPool>()?;
+    m.add_class::<worker::PyPoolEvent>()?;
     m.add_class::<backend_redis::RedisClient>()?;
     m.add_class::<backend_redis::RedisPipeline>()?;
     m.add_class::<backend_redis::RedisPubSub>()?;
