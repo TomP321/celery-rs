@@ -27,6 +27,7 @@ zstd = "0.13"
 compact_str = { version = "0.10", features = ["serde"] }
 hashbrown = "0.17"
 lapin = "4.12"
+libc = "0.2"
 mimalloc = { version = "0.1", default-features = false }
 # `extension-module` è attivato solo dai pyproject di maturin (`pyo3/extension-module`):
 # tenerlo qui impedisce a `cargo test` di linkare libpython nei binari di test.

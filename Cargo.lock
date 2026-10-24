@@ -482,6 +482,7 @@ dependencies = [
  "celery-transport",
  "compact_str",
  "futures-core",
+ "libc",
  "thiserror",
  "tokio",
  "uuid",

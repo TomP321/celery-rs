@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import os
 import threading
+import weakref
 
 import redis
 import redis.exceptions
@@ -47,6 +48,13 @@ _STATS = {
 def stats():
     """Copia dei contatori del client Rust."""
     return dict(_STATS)
+
+
+#: Istanze vive: dopo `fork()` si tengono referenziate per sempre nel figlio
+#: (vedi `after_fork`), così i loro `Drop` Rust non toccano il runtime tokio
+#: del padre, che nel figlio non esiste più.
+_LIVE = weakref.WeakSet()
+_ORPHANED = []
 
 
 def _enabled():
@@ -134,6 +142,7 @@ class RsRedis:
         )
         self._rs = native
         self.connection_pool = RsConnectionPool(self)
+        _LIVE.add(self)
         _STATS['clients'] += 1
         _STATS['instances'] += 1
 
@@ -297,6 +306,7 @@ class RsPipeline:
         self._client = client
         self._native = client._rs.pipeline(bool(transaction))
         self.transaction = bool(transaction)
+        _LIVE.add(self)
 
     def __enter__(self):
         return self
@@ -481,6 +491,7 @@ class RsPubSub:
         self.connection = RsConnection(self)
         self.connection_pool = RsPubSubConnectionPool(self)
         self.closed = False
+        _LIVE.add(self)
 
     def __enter__(self):
         return self
@@ -587,6 +598,17 @@ def after_fork():
         return
     _pid = pid
     _STATS['forks'] += 1
+    # Nel figlio i client/pubsub ereditati non sono utilizzabili; tenerli vivi
+    # evita che il GC ne esegua il Drop (che risveglierebbe il driver tokio
+    # del padre, ormai assente).
+    if _LIVE:
+        _ORPHANED.extend(_LIVE)
+        _LIVE.clear()
+    if _celery_rs is not None:
+        # Il runtime tokio del padre non è utilizzabile nel figlio: il modulo
+        # nativo lo ricrea al primo uso. Lo fa già `_rs_producer`, ma il
+        # backend deve essere fork-safe anche se il producer non è importato.
+        _celery_rs.after_fork()
 
 
 if hasattr(os, 'register_at_fork'):

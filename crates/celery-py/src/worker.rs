@@ -1,16 +1,19 @@
-//! Binding del worker master: [`Waker`] condiviso dal loop e
-//! [`WorkerConsumer`] del broker.
+//! Binding del worker master: [`Waker`] condiviso dal loop,
+//! [`WorkerConsumer`] del broker e pool di processi.
 
+use std::sync::Arc;
 use std::time::Duration;
 
+use bytes::Bytes;
 use compact_str::CompactString;
-use pyo3::exceptions::PyValueError;
+use pyo3::exceptions::{PyOSError, PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList};
+use pyo3::types::{PyBytes, PyDict, PyList};
 
 use celery_transport::{
     ExchangeDecl, ExchangeType, QueueBinding, QueueDecl, TransportOptions, Url,
 };
+use celery_worker::pool::{self as pool_impl, Config, JobSpec, PoolError, Spawner};
 use celery_worker::{ConsumerStats, Waker as RustWaker, WorkerConsumer};
 
 use crate::transport::{
@@ -272,3 +275,291 @@ impl PyWorkerConsumer {
         py.detach(|| block(self.inner.bind(&binding)))
     }
 }
+
+/// Un evento del pool, consumato dal loop del master.
+#[pyclass(name = "PoolEvent", module = "_celery_rs", frozen)]
+pub struct PyPoolEvent {
+    #[pyo3(get)]
+    kind: &'static str,
+    #[pyo3(get)]
+    job: u64,
+    #[pyo3(get)]
+    pid: i32,
+    #[pyo3(get)]
+    exitcode: i32,
+    #[pyo3(get)]
+    time_accepted: f64,
+    #[pyo3(get)]
+    success: bool,
+    #[pyo3(get)]
+    timeout: f64,
+    #[pyo3(get)]
+    payload: Option<Py<PyBytes>>,
+    #[pyo3(get)]
+    message: Option<String>,
+}
+
+fn event(py: Python<'_>, event: pool_impl::PoolEvent) -> PyPoolEvent {
+    use pool_impl::PoolEvent as E;
+    match event {
+        E::Accepted {
+            job,
+            pid,
+            time_accepted,
+        } => PyPoolEvent {
+            kind: "accepted",
+            job,
+            pid,
+            exitcode: 0,
+            time_accepted,
+            success: true,
+            timeout: 0.0,
+            payload: None,
+            message: None,
+        },
+        E::Ready {
+            job,
+            success,
+            payload,
+        } => PyPoolEvent {
+            kind: "ready",
+            job,
+            pid: 0,
+            exitcode: 0,
+            time_accepted: 0.0,
+            success,
+            timeout: 0.0,
+            payload: Some(PyBytes::new(py, &payload).unbind()),
+            message: None,
+        },
+        E::WorkerLost {
+            job,
+            pid,
+            exitcode,
+        } => PyPoolEvent {
+            kind: "worker-lost",
+            job,
+            pid,
+            exitcode,
+            time_accepted: 0.0,
+            success: false,
+            timeout: 0.0,
+            payload: None,
+            message: None,
+        },
+        E::Terminated {
+            job,
+            pid,
+            exitcode,
+        } => PyPoolEvent {
+            kind: "terminated",
+            job,
+            pid,
+            exitcode,
+            time_accepted: 0.0,
+            success: false,
+            timeout: 0.0,
+            payload: None,
+            message: None,
+        },
+        E::SoftTimeout { job, timeout } => PyPoolEvent {
+            kind: "soft-timeout",
+            job,
+            pid: 0,
+            exitcode: 0,
+            time_accepted: 0.0,
+            success: false,
+            timeout,
+            payload: None,
+            message: None,
+        },
+        E::HardTimeout { job, timeout } => PyPoolEvent {
+            kind: "hard-timeout",
+            job,
+            pid: 0,
+            exitcode: 0,
+            time_accepted: 0.0,
+            success: false,
+            timeout,
+            payload: None,
+            message: None,
+        },
+        E::ZygoteLost => PyPoolEvent {
+            kind: "zygote-lost",
+            job: 0,
+            pid: 0,
+            exitcode: 0,
+            time_accepted: 0.0,
+            success: false,
+            timeout: 0.0,
+            payload: None,
+            message: None,
+        },
+        E::PoolFailure { job, message } => PyPoolEvent {
+            kind: "pool-failure",
+            job,
+            pid: 0,
+            exitcode: 0,
+            time_accepted: 0.0,
+            success: false,
+            timeout: 0.0,
+            payload: None,
+            message: Some(message),
+        },
+    }
+}
+
+/// `_celery_rs.Pool`: supervisore dei figli Python.
+#[pyclass(name = "Pool", module = "_celery_rs")]
+pub struct PyPool {
+    inner: Arc<pool_impl::Pool>,
+}
+
+#[pymethods]
+impl PyPool {
+    #[new]
+    #[pyo3(signature = (control_fd, zygote_pid, processes, maxtasksperchild=None,
+                        max_memory_per_child=None, waker=None))]
+    fn new(
+        control_fd: i32,
+        zygote_pid: i32,
+        processes: usize,
+        maxtasksperchild: Option<u32>,
+        max_memory_per_child: Option<u32>,
+        waker: Option<&PyWaker>,
+    ) -> PyResult<Self> {
+        let spawner = pool_impl::ZygoteSpawner::new(
+            control_fd,
+            zygote_pid,
+            maxtasksperchild,
+            max_memory_per_child,
+        )
+        .map_err(|error| PyOSError::new_err(error.to_string()))?;
+        let waker = waker
+            .map(|waker| waker.inner.clone())
+            .unwrap_or_default();
+        let pool = pool_impl::Pool::new(Config::new(processes), Arc::new(spawner), waker);
+        Ok(Self {
+            inner: Arc::new(pool),
+        })
+    }
+
+    /// `submit(job, payload, soft=None, hard=None)`: accoda un job; il payload
+    /// è il pickle di `(target, args, kwargs)`.
+    #[pyo3(signature = (job, payload, soft=None, hard=None))]
+    fn submit(
+        &self,
+        py: Python<'_>,
+        job: u64,
+        payload: &[u8],
+        soft: Option<f64>,
+        hard: Option<f64>,
+    ) -> PyResult<()> {
+        let payload = Bytes::copy_from_slice(payload);
+        let soft = timeout(soft)?;
+        let hard = timeout(hard)?;
+        let pool = Arc::clone(&self.inner);
+        py.detach(move || {
+            pool.submit(JobSpec {
+                id: job,
+                payload,
+                soft_timeout: soft,
+                hard_timeout: hard,
+            })
+        })
+        .map_err(pool_error)
+    }
+
+    /// Eventi pronti (non bloccante).
+    fn drain_events(&self, py: Python<'_>) -> Vec<PyPoolEvent> {
+        self.inner
+            .drain_events()
+            .into_iter()
+            .map(|item| event(py, item))
+            .collect()
+    }
+
+    fn grow(&self, n: usize) {
+        self.inner.grow(n);
+    }
+
+    fn shrink(&self, py: Python<'_>, n: usize) -> PyResult<()> {
+        let pool = Arc::clone(&self.inner);
+        py.detach(move || pool.shrink(n)).map_err(pool_error)
+    }
+
+    fn terminate_job(&self, pid: i32, signal: i32) {
+        self.inner.terminate_job(pid, signal);
+    }
+
+    fn restart(&self) {
+        self.inner.restart();
+    }
+
+    fn flush(&self, py: Python<'_>) -> Vec<u64> {
+        let pool = Arc::clone(&self.inner);
+        py.detach(move || pool.flush())
+    }
+
+    fn close(&self) {
+        self.inner.close();
+    }
+
+    fn terminate(&self) {
+        self.inner.terminate();
+    }
+
+    fn num_processes(&self) -> usize {
+        self.inner.num_processes()
+    }
+
+    fn pids(&self) -> Vec<i32> {
+        self.inner.pids()
+    }
+
+    fn alive(&self) -> usize {
+        self.inner.alive()
+    }
+
+    fn stopped(&self) -> bool {
+        self.inner.stopped()
+    }
+
+    fn did_start_ok(&self) -> bool {
+        self.inner.did_start_ok()
+    }
+
+    fn zygote_pid(&self) -> i32 {
+        self.inner.zygote_pid()
+    }
+
+    fn zygote_lost(&self) -> bool {
+        self.inner.zygote_lost()
+    }
+
+    /// `(totale, conteggi per figlio)`: alimenta la chiave `writes` di
+    /// `TaskPool.info`, come `human_write_stats` in prefork.
+    fn write_stats(&self) -> (u64, Vec<u64>) {
+        self.inner.write_stats()
+    }
+}
+
+fn timeout(value: Option<f64>) -> PyResult<Option<Duration>> {
+    match value {
+        None => Ok(None),
+        Some(value) if value <= 0.0 || !value.is_finite() => Ok(None),
+        Some(value) => Ok(Some(Duration::from_secs_f64(value))),
+    }
+}
+
+fn pool_error(error: PoolError) -> PyErr {
+    match error {
+        PoolError::ShrinkBusy => PyValueError::new_err(error.to_string()),
+        PoolError::NotRunning => PyRuntimeError::new_err(error.to_string()),
+        PoolError::Spawn(message) => PyRuntimeError::new_err(message),
+    }
+}
+
+/// Evita il warning "trait inutilizzato" se `Spawner` serve solo ai test.
+#[allow(dead_code)]
+fn _assert_spawner(_: &dyn Spawner) {}

@@ -10,6 +10,7 @@ bytes.workspace = true
 celery-transport.workspace = true
 compact_str.workspace = true
 futures-core.workspace = true
+libc.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["rt", "sync", "time", "macros"] }
 
