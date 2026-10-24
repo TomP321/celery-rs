@@ -16,6 +16,9 @@ Stai lavorando a celery-rs: Celery riscritto con core in Rust, API Python identi
 - Venv: `.venv-ref` (Celery originale), `.venv-rs` (celery-rs). Python 3.13.
 - Broker di test: Redis `127.0.0.1:6390`, RabbitMQ `127.0.0.1:5673` (guest/guest).
   Avvio: `docker compose -f infra/docker-compose.yml up -d`.
+  I broker sono condivisi con altri agenti in parallelo: esegui i test che usano Redis/RabbitMQ
+  sotto lock: `tools/dev/with-brokers cargo test`, `tools/dev/with-brokers .venv-…/bin/python -m pytest …`
+  (`./compat wire` lo prende da solo; il lock è rientrante), anche bench e prove manuali; usa nomi di code/chiavi unici, FLUSHALL/FLUSHDB solo sotto lock.
 - Rust: `cargo build --release`, `cargo test`, `cargo clippy --all-targets -- -D warnings`.
 - Python: `tools/dev/build-native` installa solo `_celery_rs` in `.venv-ref` (test differenziali);
   `tools/dev/build-package` installa il pacchetto completo celery-rs in `.venv-rs`.

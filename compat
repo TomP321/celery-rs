@@ -1,3 +1,11 @@
 #!/usr/bin/env bash
 # Wrapper: ./compat <comando> [...]  (vedi tools/compat/celery_compat/cli.py)
-exec python3 -I -c 'import sys; sys.path.insert(0, sys.argv.pop(1)); from celery_compat.cli import main; main()' "$(dirname "$(readlink -f "$0")")/tools/compat" "$@"
+# `wire` svuota e osserva i broker condivisi: un lock evita che due worktree si disturbino.
+run() {
+  exec python3 -I -c 'import sys; sys.path.insert(0, sys.argv.pop(1)); from celery_compat.cli import main; main()' "$(dirname "$(readlink -f "$0")")/tools/compat" "$@"
+}
+if [[ "${1:-}" == wire ]]; then
+  exec "$(dirname "$(readlink -f "$0")")/tools/dev/with-brokers" "$0" --locked "$@"
+fi
+[[ "${1:-}" == --locked ]] && shift
+run "$@"

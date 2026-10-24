@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Esegue un comando con l'uso esclusivo dei broker di test condivisi (Redis/RabbitMQ).
+#   tools/dev/with-brokers cargo test
+# Rientrante: dentro un comando già sotto lock non lo riprende (niente deadlock).
+set -euo pipefail
+if [[ "${CELERY_RS_BROKER_LOCKED:-}" == 1 ]]; then exec "$@"; fi
+exec 9>/tmp/celery-rs-broker.lock
+flock 9
+export CELERY_RS_BROKER_LOCKED=1
+"$@"
