@@ -115,11 +115,11 @@ Infrastruttura via docker su porte dedicate: Redis `:6390`, RabbitMQ `:5673`.
 
 | # | Fase | Contenuto | Gate di uscita |
 |---|---|---|---|
-| 0 | Setup | workspace, venv ref/rs, docker redis+rabbit, scheletro `tools/compat`, `compat api` funzionante, baseline bench del riferimento | baseline salvata |
+| 0 ✅ | Setup | workspace, venv ref/rs, docker redis+rabbit, scheletro `tools/compat`, `compat api` funzionante, baseline bench del riferimento | baseline salvata |
 | 1 ✅ | Protocollo | `celery-proto`: JSON compatibile CPython, compressione; `_celery_rs`: `json_dumps/loads`, `saferepr`, `encode_task_v2` | test differenziali byte-identici vs riferimento (`crates/celery-py/tests`) |
-| 2 | Trasporti | 02a API+memory, poi 02b Redis e 02c AMQP in parallelo (worktree separati) | interop con kombu + `compat wire` sui comandi |
-| 3 | Client Python | guscio `celery`: app, conf/defaults, Task, registry, routing, amqp producer, signature/canvas, AsyncResult/GroupResult | `compat api` verde; unit `t/unit/app`, `tasks`, `test_canvas` |
-| 4 | Result backend | redis/rpc/memory, chord join/counter, get/wait/propagate | matrix: client rs + worker ref verde |
+| 2 ✅ | Trasporti | 02a API+memory, poi 02b Redis e 02c AMQP in parallelo (worktree separati) | interop con kombu + `compat wire` sui comandi |
+| 3 ✅ | Client Python | guscio `celery`: app, conf/defaults, Task, registry, routing, amqp producer, signature/canvas, AsyncResult/GroupResult | `compat api` verde; unit `t/unit/app`, `tasks`, `test_canvas` |
+| 4 🔄 | Result backend | redis/rpc/memory, chord join/counter, get/wait/propagate | matrix: client rs + worker ref verde |
 | 5 | Worker | master Rust, zygote+pool, trace, ack late, retry, time limit, revoke, eventi, control, autoscale, shutdown/warm/cold, segnali | matrix completa verde |
 | 6 | Beat | scheduler, crontab/solar, persistenza | `test_beat` + `t/unit/app/test_schedules` |
 | 7 | CLI | `celery worker/beat/call/inspect/control/purge/result/events/status/multi` | output e exit code identici |
