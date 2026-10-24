@@ -2,6 +2,7 @@
 
     python -m celery_compat api        [--ref VENV] [--rs VENV]
     python -m celery_compat wire       [--ref VENV] [--rs VENV] [--broker redis amqp] [-s SCENARIO...]
+    python -m celery_compat wire-worker [--ref VENV] [--rs VENV] [--broker redis amqp] [--pool solo]
     python -m celery_compat upstream   [--venv VENV] [--suite unit|integration] [-k EXPR] [paths...]
 
 Ogni comando scrive i risultati in tools/compat/out/ ed esce con codice != 0 se il gate fallisce.
@@ -12,6 +13,7 @@ import os
 import signal
 import subprocess
 import sys
+import time
 import tomllib
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -236,6 +238,170 @@ def cmd_wire(args):
     return 1 if failures else 0
 
 
+# ------------------------------------------------------------------ wire-worker
+
+#: comandi Redis di lettura/polling: il loro numero dipende dai tempi, non dalla semantica
+WORKER_REDIS_READS = {'BRPOP', 'BLPOP', 'LLEN', 'GET', 'MGET', 'SMEMBERS', 'SSCAN', 'SCAN', 'KEYS',
+                      'EXISTS', 'TTL', 'PTTL', 'HGET', 'HGETALL', 'ZRANGE', 'ZREVRANGEBYSCORE',
+                      'ZRANGEBYSCORE', 'ZCARD', 'LRANGE', 'SUBSCRIBE', 'PSUBSCRIBE', 'UNSUBSCRIBE',
+                      'PUNSUBSCRIBE', 'MULTI', 'EXEC', 'WATCH', 'UNWATCH', 'TYPE'}
+#: campi degli eventi che dipendono da tempi e carico
+EVENT_FIELDS_RE = __import__('re').compile(
+    r'(\\?"(?:clock|runtime|freq|active|processed|utcoffset|loadavg|local_received)\\?":\s*)'
+    r'(\[[^\]]*\]|-?[\d.e+-]+)')
+#: percorsi dei sorgenti nei traceback (anche dentro JSON annidato, con virgolette escaped)
+TRACEBACK_RE = __import__('re').compile(r'File (\\*)"[^"]*?/([^/"\\]+)\\*", line \d+')
+
+
+ANY_ID_RE = __import__('re').compile(r'<id\d+>')
+
+
+def _split_multi(broker, rec):
+    """Eventi `task.multi` → un record per evento: il raggruppamento dipende dai tempi."""
+    if 'task.multi' not in rec:
+        return [rec]
+    try:
+        if broker == 'redis':
+            head, _, env = rec.partition(' {')
+            env = json.loads('{' + env)
+            events = json.loads(env['body'])
+            mk = lambda ev: f'{head.replace("task.multi", ev.get("type", "?"))} ' + json.dumps(
+                {**env, 'body': json.dumps(ev, ensure_ascii=False)}, ensure_ascii=False)
+        else:
+            env = json.loads(rec)
+            events = json.loads(env['body'])
+            mk = lambda ev: json.dumps({**env, 'routing_keys': [ev.get('type', '?')],
+                                        'body': json.dumps(ev, ensure_ascii=False)},
+                                       ensure_ascii=False)
+    except (ValueError, KeyError, TypeError):
+        return [rec]
+    if not isinstance(events, list):
+        return [rec]
+    return [mk(ev) for ev in events if isinstance(ev, dict)]
+
+
+def _decode_unacked(rec):
+    """`HSET unacked <tag> [envelope, exchange, rk]`: il body dell'envelope è base64."""
+    from . import wire
+    head, sep, payload = rec.partition(' [')
+    if not sep or ' HSET unacked' not in head:
+        return rec
+    try:
+        item = json.loads('[' + payload)
+        env = wire.decode_kombu_envelope(json.dumps(item[0]))
+    except (ValueError, IndexError, TypeError):
+        return rec
+    if env is None:
+        return rec
+    return f'{head} ' + json.dumps([json.loads(env), *item[1:]], ensure_ascii=False)
+
+
+def _worker_semantic(broker, records, norm):
+    out = []
+    for raw in records:
+        for rec in _split_multi(broker, _decode_unacked(raw)):
+            rec = norm(rec)
+            if 'heartbeat' in rec and ('worker.heartbeat' in rec or 'worker-heartbeat' in rec):
+                continue
+            if broker == 'redis':
+                cmd = rec.split(' ', 2)[1] if rec.count(' ') >= 1 else ''
+                if cmd in WORKER_REDIS_READS:
+                    continue
+            rec = EVENT_FIELDS_RE.sub(r'\1<v>', rec)
+            rec = TRACEBACK_RE.sub(r'File \1"<path>/\2\1", line <n>', rec)
+            # gli id dei task sono fissati dagli scenari; gli uuid restanti (delivery tag, code di
+            # risposta) prendono numeri diversi secondo l'interleaving client/worker
+            rec = ANY_ID_RE.sub('<id>', rec)
+            out.append(rec)
+    return sorted(out)
+
+
+def run_worker_scenario(venv, ref_venv, broker, name, pool):
+    import threading
+    from . import wire
+    url, _ = BROKERS[broker]
+    backend = 'redis://127.0.0.1:6390/1'
+    env = venv_env()
+    env.update(COMPAT_BROKER=url, COMPAT_BACKEND=backend, PYTHONPATH=str(HERE))
+    norm = wire.Normalizer()
+    with wire.capture(broker) as cap:
+        worker = subprocess.Popen(
+            [py(venv), '-P', '-m', 'celery', '-A', 'worker_app', 'worker', '-P', pool, '-c', '2',
+             '-E', '-n', 'compat@%h', '-l', 'info'],
+            cwd=OUT, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+            start_new_session=True)
+        log, ready = [], threading.Event()
+
+        def pump():
+            for line in worker.stdout:
+                log.append(line)
+                if ' ready.' in line:
+                    ready.set()
+        threading.Thread(target=pump, daemon=True).start()
+        try:
+            if not ready.wait(30):
+                return None, 'worker non pronto: ' + ''.join(log[-5:])[-300:]
+            client = subprocess.run([py(ref_venv), '-P', '-s', str(HERE / 'worker_client.py'),
+                                     '--scenario', name],
+                                    cwd=OUT, env=env, capture_output=True, text=True, timeout=90)
+            # gli eventi dei task sono bufferizzati: lascia che il dispatcher li scarichi
+            time.sleep(1.5)
+            worker.send_signal(15)
+            worker.wait(30)
+        finally:
+            if worker.poll() is None:
+                os.killpg(worker.pid, 9)
+                worker.wait()
+    if client.returncode != 0:
+        err = client.stderr.strip().splitlines()
+        return None, 'client: ' + (err[-1] if err else 'exit != 0')
+    # scomposizione e decodifica prima della normalizzazione (i segnaposto non sono JSON)
+    return _worker_semantic(broker, cap.messages(lambda text: text), norm), None
+
+
+def cmd_wire_worker(args):
+    import difflib
+    from . import wire
+    OUT.mkdir(parents=True, exist_ok=True)
+    if 'amqp' in args.broker:
+        wire.enable_rabbit_trace()
+    env = venv_env()
+    env.update(COMPAT_BROKER='memory://', COMPAT_BACKEND='cache+memory://', PYTHONPATH=str(HERE))
+    names = subprocess.run([py(args.ref), '-P', '-s', str(HERE / 'worker_client.py'), '--list'],
+                           cwd=OUT, env=env, capture_output=True, text=True,
+                           check=True).stdout.split()
+    if args.scenario:
+        names = [n for n in names if any(s in n for s in args.scenario)]
+    lines, failures, results = [], 0, {}
+    for broker in args.broker:
+        for name in names:
+            ref, ref_err = run_worker_scenario(args.ref, args.ref, broker, name, args.pool)
+            rs, rs_err = run_worker_scenario(args.rs, args.ref, broker, name, args.pool)
+            key = f'{broker}:{args.pool}:{name}'
+            if ref_err:
+                status = f'ERRORE NEL RIFERIMENTO: {ref_err}'
+            elif rs_err:
+                status = f'errore rs: {rs_err}'
+            elif ref != rs:
+                status = 'diverso'
+            else:
+                status = 'ok'
+            ok = status == 'ok'
+            failures += not ok
+            results[key] = {'status': status, 'ref': ref, 'rs': rs}
+            print(f'{"✓" if ok else "✗"} {key:45} {status[:120]}')
+            if not ok and ref is not None and rs is not None:
+                lines.append(f'## {key}\n```diff')
+                lines += difflib.unified_diff(ref, rs, 'ref', 'rs', lineterm='', n=0)
+                lines.append('```')
+    (OUT / 'wire-worker-report.md').write_text(
+        f'# celery-compat wire-worker — {failures} scenari diversi\n\n' + '\n'.join(lines) + '\n')
+    (OUT / 'wire-worker.json').write_text(json.dumps(results, indent=1, ensure_ascii=False))
+    print(f'wire-worker: {failures} scenari diversi su {len(results)} → '
+          f'{OUT / "wire-worker-report.md"}')
+    return 1 if failures else 0
+
+
 # ---------------------------------------------------------------------- upstream
 
 def junit_failures(xml_path):
@@ -355,6 +521,15 @@ def main(argv=None):
     w.add_argument('--broker', nargs='+', choices=tuple(BROKERS), default=list(BROKERS))
     w.add_argument('-s', '--scenario', nargs='+', help='filtra gli scenari per sottostringa')
     w.set_defaults(fn=cmd_wire)
+
+    ww = sub.add_parser('wire-worker',
+                        help='diff del traffico sul broker generato dal worker ref vs rs (client ref)')
+    ww.add_argument('--ref', default=VENV_REF)
+    ww.add_argument('--rs', default=VENV_RS)
+    ww.add_argument('--broker', nargs='+', choices=tuple(BROKERS), default=list(BROKERS))
+    ww.add_argument('--pool', default='solo')
+    ww.add_argument('-s', '--scenario', nargs='+', help='filtra gli scenari per sottostringa')
+    ww.set_defaults(fn=cmd_wire_worker)
 
     u = sub.add_parser('upstream', help='esegue la test suite di Celery contro un venv')
     u.add_argument('--venv', default=VENV_RS)
