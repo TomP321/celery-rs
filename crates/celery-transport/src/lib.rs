@@ -1,15 +1,17 @@
 //! Trasporti broker: memory, redis, amqp (vedi PLAN.md, fase 2).
 //!
-//! `connect` restituisce un `Box<dyn Transport>`; per ora solo `memory://` è
-//! implementato, mentre `redis://`/`amqp://` rispondono [`Error::NotImplemented`]
-//! (le spec 02b e 02c aggiungono i rispettivi moduli senza toccare questa API).
+//! `connect` restituisce un `Box<dyn Transport>`; `memory://` e
+//! `amqp://`/`amqps://`/`pyamqp://` sono implementati, mentre `redis://` risponde
+//! [`Error::NotImplemented`] finché la spec 02b non aggiunge il modulo.
 
+pub mod amqp;
 pub mod memory;
 pub mod message;
 pub mod routing;
 pub mod transport;
 pub mod url;
 
+pub use amqp::AmqpTransport;
 pub use memory::MemoryTransport;
 pub use message::{Decimal, Delivery, DeliveryTag, HeaderValue, Headers, Message, Properties};
 pub use transport::{
@@ -74,12 +76,9 @@ pub async fn connect_parsed_with_config(
         TransportKind::Redis | TransportKind::Rediss => Err(Error::NotImplemented(
             "trasporto Redis: implementato in 02b (crates/celery-transport/src/redis/)".to_string(),
         )),
-        TransportKind::Amqp | TransportKind::Amqps | TransportKind::PyAmqp => {
-            Err(Error::NotImplemented(
-                "trasporto AMQP: implementato in 02c (crates/celery-transport/src/amqp/)"
-                    .to_string(),
-            ))
-        }
+        TransportKind::Amqp | TransportKind::Amqps | TransportKind::PyAmqp => Ok(Box::new(
+            amqp::AmqpTransport::connect(url, options, &config.retry_policy).await?,
+        )),
     }
 }
 
@@ -100,14 +99,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn redis_and_amqp_report_not_implemented() {
-        for url in [
-            "redis://127.0.0.1:6390/0",
-            "rediss://127.0.0.1:6390/0",
-            "amqp://guest:guest@127.0.0.1:5673//",
-            "amqps://127.0.0.1:5673//",
-            "pyamqp://guest:guest@127.0.0.1:5673//",
-        ] {
+    async fn unsupported_transports_report_not_implemented() {
+        for url in ["redis://127.0.0.1:6390/0", "rediss://127.0.0.1:6390/0"] {
             match connect(url).await {
                 Err(Error::NotImplemented(message)) => {
                     assert!(!message.is_empty(), "messaggio chiaro per {url}");

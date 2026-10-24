@@ -9,6 +9,7 @@ rust-version.workspace = true
 bytes.workspace = true
 compact_str.workspace = true
 futures-core.workspace = true
+lapin.workspace = true
 regex.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["rt", "sync", "time"] }

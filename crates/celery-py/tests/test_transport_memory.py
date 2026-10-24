@@ -537,14 +537,12 @@ def test_drain_zero_timeout_is_non_blocking():
 
 
 def test_url_and_transport_options_errors():
+    # AMQP è implementato (spec 02c): qui restano i trasporti non ancora
+    # disponibili e gli URL non validi.
     with pytest.raises(NotImplementedError):
         rs.Connection("redis://127.0.0.1:6390/0")
     with pytest.raises(NotImplementedError):
         rs.Connection("rediss://127.0.0.1:6390/0")
-    with pytest.raises(NotImplementedError):
-        rs.Connection("amqp://guest:guest@127.0.0.1:5673//")
-    with pytest.raises(NotImplementedError):
-        rs.Connection("pyamqp://guest:guest@127.0.0.1:5673//")
     with pytest.raises(ValueError):
         rs.Connection("not-a-url")
     with pytest.raises(ValueError):
