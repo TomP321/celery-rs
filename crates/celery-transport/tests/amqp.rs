@@ -1301,3 +1301,59 @@ async fn connection_failure_is_reported_without_retry() {
         Some("[Errno 111] Connection refused")
     );
 }
+
+#[tokio::test]
+async fn no_ack_consumer_acks_on_delivery_and_supports_queue_changes() {
+    let transport = transport().await;
+    let id = suffix();
+    let queue_one = format!("rs.noack.1.{id}");
+    let queue_two = format!("rs.noack.2.{id}");
+    for queue in [&queue_one, &queue_two] {
+        transport
+            .declare_queue(&QueueDecl::new(queue.as_str()))
+            .await
+            .expect("coda");
+    }
+    for queue in [&queue_one, &queue_two] {
+        transport
+            .publish(PublishRequest::new(
+                None::<&str>,
+                queue.as_str(),
+                message("noack"),
+            ))
+            .await
+            .expect("publish");
+    }
+    wait_size(transport.as_ref(), &queue_one, 1).await;
+    wait_size(transport.as_ref(), &queue_two, 1).await;
+
+    let consumer = transport
+        .consume_no_ack(&[CompactString::from(queue_one.as_str())], 0)
+        .await
+        .expect("consume_no_ack");
+    let mut stream = consumer.deliveries;
+    let control = consumer.control;
+    let first = recv(&mut stream).await;
+    assert_eq!(first.routing_key, queue_one);
+    // Con no_ack il broker considera la coda vuota senza alcun ack.
+    wait_size(transport.as_ref(), &queue_one, 0).await;
+    // ack su una consegna no_ack resta un no-op.
+    transport.ack(&first.delivery_tag).await.expect("ack no-op");
+
+    control.add_queue(&queue_two).await.expect("add_queue");
+    let second = recv(&mut stream).await;
+    assert_eq!(second.routing_key, queue_two);
+    wait_size(transport.as_ref(), &queue_two, 0).await;
+
+    control
+        .cancel_queue(&queue_two)
+        .await
+        .expect("cancel_queue");
+    control.cancel().await.expect("cancel");
+    assert!(
+        tokio::time::timeout(WAIT, next(&mut stream))
+            .await
+            .expect("nessun timeout")
+            .is_none()
+    );
+}

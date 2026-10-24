@@ -331,6 +331,11 @@ class _NativeEntry:
 #: si usano nel figlio.
 _entries = {}
 
+#: Connessioni ereditate dal padre. Nel figlio non si chiudono (il runtime
+#: tokio che le possiede non esiste più): si tengono vive per non far partire
+#: i distruttori su uno stato incoerente.
+_orphaned = []
+
 
 def _native_entry(connection, key=None):
     """Connessione Rust condivisa per (URL, opzioni), creata al primo uso.
@@ -383,7 +388,9 @@ def after_fork():
     _fork_pid = pid
     # Nel figlio resta un solo thread: niente lock (potrebbe essere rimasto
     # acquisito da un thread scomparso con il fork).
-    _entries.clear()
+    if _entries:
+        _orphaned.extend(_entries.values())
+        _entries.clear()
     _STATS['forks'] += 1
     if _celery_rs is not None:
         # Il runtime tokio del padre non è utilizzabile nel figlio: il modulo

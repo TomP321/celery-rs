@@ -428,6 +428,99 @@ impl AmqpTransport {
             .map_err(map_lapin)?;
         Ok(())
     }
+
+    /// Consumatore su più code; `no_ack` disattiva le conferme sul canale.
+    async fn consume_inner(
+        &self,
+        queues: &[CompactString],
+        prefetch: u16,
+        no_ack: bool,
+    ) -> Result<Consumer> {
+        self.shared.ensure_open()?;
+        if queues.is_empty() {
+            return Err(Error::InvalidArgument(
+                "consume richiede almeno una coda".to_string(),
+            ));
+        }
+        let channel = self
+            .shared
+            .connection
+            .create_channel()
+            .await
+            .map_err(map_lapin)?;
+        if prefetch > 0 {
+            channel
+                .basic_qos(
+                    prefetch,
+                    BasicQosOptions {
+                        global: self.shared.qos_global,
+                    },
+                )
+                .await
+                .map_err(map_lapin)?;
+        }
+        let state = Arc::new(ChannelState::new(channel));
+        self.shared.register(&state);
+        let options = BasicConsumeOptions {
+            no_ack,
+            ..BasicConsumeOptions::default()
+        };
+        let mut entries = Vec::with_capacity(queues.len());
+        let mut unique = Vec::with_capacity(queues.len());
+        for queue in queues {
+            if unique.contains(queue) {
+                continue;
+            }
+            let consumer = state
+                .channel
+                .basic_consume(
+                    short_string(queue)?,
+                    ShortString::from(""),
+                    options,
+                    FieldTable::default(),
+                )
+                .await
+                .map_err(map_lapin)?;
+            entries.push(ConsumerEntry {
+                queue: queue.clone(),
+                tag: consumer.tag(),
+                deliveries: Box::pin(consumer),
+            });
+            unique.push(queue.clone());
+        }
+        let stream_id = self.shared.next_stream.fetch_add(1, Ordering::Relaxed);
+        let stream_state = Arc::new(StreamState {
+            cancelled: AtomicBool::new(false),
+            waker: Mutex::new(None),
+        });
+        lock(&self.shared.streams).insert(stream_id, Arc::clone(&stream_state));
+        let set = Arc::new(Mutex::new(ConsumerSet {
+            entries,
+            queues: unique,
+            no_ack,
+            closed: false,
+        }));
+        let deliveries = AmqpDeliveryStream {
+            shared: Arc::clone(&self.shared),
+            stream_id,
+            state: Arc::clone(&stream_state),
+            channel: Arc::clone(&state),
+            set: Arc::clone(&set),
+            cursor: 0,
+            health: Box::pin(tokio::time::sleep(HEALTH_CHECK)),
+            lost_reported: false,
+            finished: false,
+        };
+        Ok(Consumer {
+            deliveries: Box::pin(deliveries) as DeliveryStream,
+            control: Arc::new(AmqpConsumerControl {
+                state: stream_state,
+                channel: state,
+                set,
+                qos_global: self.shared.qos_global,
+            }),
+        })
+    }
 }
 
 impl Transport for AmqpTransport {
@@ -575,87 +668,15 @@ impl Transport for AmqpTransport {
         queues: &'a [CompactString],
         prefetch: u16,
     ) -> BoxFuture<'a, Result<Consumer>> {
-        Box::pin(async move {
-            self.shared.ensure_open()?;
-            if queues.is_empty() {
-                return Err(Error::InvalidArgument(
-                    "consume richiede almeno una coda".to_string(),
-                ));
-            }
-            let channel = self
-                .shared
-                .connection
-                .create_channel()
-                .await
-                .map_err(map_lapin)?;
-            if prefetch > 0 {
-                channel
-                    .basic_qos(
-                        prefetch,
-                        BasicQosOptions {
-                            global: self.shared.qos_global,
-                        },
-                    )
-                    .await
-                    .map_err(map_lapin)?;
-            }
-            let state = Arc::new(ChannelState::new(channel));
-            self.shared.register(&state);
-            let mut entries = Vec::with_capacity(queues.len());
-            let mut unique = Vec::with_capacity(queues.len());
-            for queue in queues {
-                if unique.contains(queue) {
-                    continue;
-                }
-                let consumer = state
-                    .channel
-                    .basic_consume(
-                        short_string(queue)?,
-                        ShortString::from(""),
-                        BasicConsumeOptions::default(),
-                        FieldTable::default(),
-                    )
-                    .await
-                    .map_err(map_lapin)?;
-                entries.push(ConsumerEntry {
-                    queue: queue.clone(),
-                    tag: consumer.tag(),
-                    deliveries: Box::pin(consumer),
-                });
-                unique.push(queue.clone());
-            }
-            let stream_id = self.shared.next_stream.fetch_add(1, Ordering::Relaxed);
-            let stream_state = Arc::new(StreamState {
-                cancelled: AtomicBool::new(false),
-                waker: Mutex::new(None),
-            });
-            lock(&self.shared.streams).insert(stream_id, Arc::clone(&stream_state));
-            let set = Arc::new(Mutex::new(ConsumerSet {
-                entries,
-                queues: unique,
-                closed: false,
-            }));
-            let deliveries = AmqpDeliveryStream {
-                shared: Arc::clone(&self.shared),
-                stream_id,
-                state: Arc::clone(&stream_state),
-                channel: Arc::clone(&state),
-                set: Arc::clone(&set),
-                cursor: 0,
-                health: Box::pin(tokio::time::sleep(HEALTH_CHECK)),
-                lost_reported: false,
-                finished: false,
-            };
-            Ok(Consumer {
-                deliveries: Box::pin(deliveries) as DeliveryStream,
-                control: Arc::new(AmqpConsumerControl {
-                    state: stream_state,
-                    channel: state,
-                    set,
-                    qos_global: self.shared.qos_global,
-                }),
-            })
-        })
+        Box::pin(async move { self.consume_inner(queues, prefetch, false).await })
+    }
+
+    fn consume_no_ack<'a>(
+        &'a self,
+        queues: &'a [CompactString],
+        prefetch: u16,
+    ) -> BoxFuture<'a, Result<Consumer>> {
+        Box::pin(async move { self.consume_inner(queues, prefetch, true).await })
     }
 
     fn get<'a>(&'a self, queue: &'a str, no_ack: bool) -> BoxFuture<'a, Result<Option<Delivery>>> {
@@ -840,6 +861,8 @@ struct ConsumerEntry {
 struct ConsumerSet {
     entries: Vec<ConsumerEntry>,
     queues: Vec<CompactString>,
+    /// `basic.consume(no_ack=true)`: le consegne non vanno confermate.
+    no_ack: bool,
     closed: bool,
 }
 
@@ -909,7 +932,7 @@ impl ConsumerControl for AmqpConsumerControl {
 
     fn add_queue<'a>(&'a self, queue: &'a str) -> BoxFuture<'a, Result<()>> {
         Box::pin(async move {
-            {
+            let no_ack = {
                 let set = lock(&self.set);
                 if set.closed {
                     return Err(Error::Closed);
@@ -917,14 +940,18 @@ impl ConsumerControl for AmqpConsumerControl {
                 if set.queues.iter().any(|known| known == queue) {
                     return Ok(());
                 }
-            }
+                set.no_ack
+            };
             let consumer = self
                 .channel
                 .channel
                 .basic_consume(
                     short_string(queue)?,
                     ShortString::from(""),
-                    BasicConsumeOptions::default(),
+                    BasicConsumeOptions {
+                        no_ack,
+                        ..BasicConsumeOptions::default()
+                    },
                     FieldTable::default(),
                 )
                 .await
@@ -965,15 +992,19 @@ impl ConsumerControl for AmqpConsumerControl {
                 .basic_cancel(entry.tag.clone(), BasicCancelOptions::default())
                 .await
                 .map_err(map_lapin)?;
-            // Le consegne mai restituite all'applicazione tornano in coda.
+            // Le consegne mai restituite all'applicazione tornano in coda;
+            // con `no_ack` il broker le ha già considerate consegnate.
+            let no_ack = lock(&self.set).no_ack;
             let mut buffered = Vec::new();
             drain_buffered(&mut entry.deliveries, &mut buffered);
-            for delivery in buffered {
-                let _ = self
-                    .channel
-                    .channel
-                    .basic_reject(delivery.delivery_tag, BasicRejectOptions { requeue: true })
-                    .await;
+            if !no_ack {
+                for delivery in buffered {
+                    let _ = self
+                        .channel
+                        .channel
+                        .basic_reject(delivery.delivery_tag, BasicRejectOptions { requeue: true })
+                        .await;
+                }
             }
             let mut set = lock(&self.set);
             set.queues.retain(|known| known != queue);
@@ -998,6 +1029,7 @@ impl ConsumerControl for AmqpConsumerControl {
             // Come `basic_cancel`: i messaggi già consegnati restano
             // confermabili sul canale, che resta aperto. Quelli rimasti nel
             // buffer locale non sono mai stati visti dall'app: tornano in coda.
+            let no_ack = lock(&self.set).no_ack;
             for mut entry in entries {
                 let _ = self
                     .channel
@@ -1006,12 +1038,17 @@ impl ConsumerControl for AmqpConsumerControl {
                     .await;
                 let mut buffered = Vec::new();
                 drain_buffered(&mut entry.deliveries, &mut buffered);
-                for delivery in buffered {
-                    let _ = self
-                        .channel
-                        .channel
-                        .basic_reject(delivery.delivery_tag, BasicRejectOptions { requeue: true })
-                        .await;
+                if !no_ack {
+                    for delivery in buffered {
+                        let _ = self
+                            .channel
+                            .channel
+                            .basic_reject(
+                                delivery.delivery_tag,
+                                BasicRejectOptions { requeue: true },
+                            )
+                            .await;
+                    }
                 }
             }
             Ok(())
@@ -1086,7 +1123,11 @@ impl Stream for AmqpDeliveryStream {
                 Poll::Ready(Some(Ok(delivery))) => {
                     this.cursor = (index + 1) % total;
                     let raw_tag = delivery.delivery_tag;
-                    lock(&this.channel.in_flight).insert(raw_tag);
+                    // Con `no_ack` il broker ha già confermato: il tag non
+                    // entra in volo e `ack` resta un no-op.
+                    if !set.no_ack {
+                        lock(&this.channel.in_flight).insert(raw_tag);
+                    }
                     return Poll::Ready(Some(Ok(delivery_from_amqp(&this.channel, delivery))));
                 }
                 Poll::Ready(Some(Err(error))) => {

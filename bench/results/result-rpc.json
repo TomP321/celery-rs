@@ -1,0 +1,39 @@
+{
+ "backend": "rpc",
+ "results": [
+  {
+   "label": "ref",
+   "venv": "/home/ubuntu/HDD/celery-rs-wt/04b-backend-rpc/.venv-ref",
+   "backend": "rpc",
+   "latency_n": 100,
+   "latency_ms": {
+    "p50": 3.251647503930144,
+    "p99": 4.187226004432887,
+    "max": 4.555434999929275
+   },
+   "join_n": 1000,
+   "join_s": 1.1465698299944052,
+   "join_results_per_s": 872.1666782431207,
+   "rss_before_join_kb": 36248,
+   "rss_max_kb": 38936,
+   "python": "3.13.9"
+  },
+  {
+   "label": "rs",
+   "venv": "/home/ubuntu/HDD/celery-rs-wt/04b-backend-rpc/.venv-rs",
+   "backend": "rpc",
+   "latency_n": 100,
+   "latency_ms": {
+    "p50": 3.398272499907762,
+    "p99": 4.002871006377973,
+    "max": 4.115711999475025
+   },
+   "join_n": 1000,
+   "join_s": 0.7920888059961726,
+   "join_results_per_s": 1262.4847017530406,
+   "rss_before_join_kb": 38560,
+   "rss_max_kb": 44704,
+   "python": "3.13.9"
+  }
+ ]
+}
