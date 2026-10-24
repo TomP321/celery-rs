@@ -108,7 +108,7 @@ pub fn encode_task_v2(
     replaced_task_nesting: i64,
     argsrepr_maxsize: i64,
     kwargsrepr_maxsize: i64,
-    repr_maxlevels: i64,
+    repr_maxlevels: Option<i64>,
     compression: Option<String>,
     default: Option<Bound<'_, PyAny>>,
 ) -> PyResult<Py<PyTuple>> {

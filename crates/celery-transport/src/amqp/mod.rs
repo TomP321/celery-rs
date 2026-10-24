@@ -44,8 +44,9 @@ use lapin::{
 
 use crate::message::{Delivery, DeliveryTag};
 use crate::transport::{
-    BoxFuture, Consumer, ConsumerControl, DeliveryStream, Error, ExchangeDecl, ExchangeType,
-    PublishRequest, QueueBinding, QueueDecl, QueueInfo, Result, RetryPolicy, Transport,
+    BoxFuture, ClientKind, ConnectFailure, Consumer, ConsumerControl, DeliveryStream, Error,
+    ExchangeDecl, ExchangeType, PublishRequest, QueueBinding, QueueDecl, QueueInfo, Result,
+    RetryPolicy, Transport,
 };
 use crate::url::{TransportKind, TransportOptions, Url};
 
@@ -54,6 +55,11 @@ use convert::{message_from_amqp, message_to_properties, short_string, to_field_t
 /// Bit riservati all'id del canale nel [`DeliveryTag`] esposto.
 const TAG_SHIFT: u32 = 40;
 const TAG_MASK: u64 = (1_u64 << TAG_SHIFT) - 1;
+
+/// Frame massimo negoziato quando l'URL non lo specifica: lapin alloca
+/// `2 * 32 * frame_max` byte di buffer per connessione, quindi restare a 32 KB
+/// evita ~6 MB di RSS rispetto al default di 128 KB.
+const FRAME_MAX: u32 = 32 * 1024;
 
 fn encode_tag(channel_id: u16, delivery_tag: u64) -> DeliveryTag {
     DeliveryTag::Number((u64::from(channel_id) << TAG_SHIFT) | (delivery_tag & TAG_MASK))
@@ -91,6 +97,24 @@ fn map_lapin(error: lapin::Error) -> Error {
         )
     {
         return Error::Connection(error.to_string());
+    }
+    Error::Channel(error.to_string())
+}
+
+/// 406 PRECONDITION_FAILED con i dati che servono a ricostruire l'eccezione
+/// `amqp.exceptions.PreconditionFailed` di py-amqp (stesso `str()`).
+fn precondition_failed(
+    error: &lapin::Error,
+    method_name: &'static str,
+    method_sig: (u16, u16),
+) -> Error {
+    if let ErrorKind::ProtocolError(protocol) = error.kind() {
+        return Error::PreconditionFailed {
+            reply_code: protocol.get_id(),
+            reply_text: protocol.get_message().to_string(),
+            method_sig,
+            method_name,
+        };
     }
     Error::Channel(error.to_string())
 }
@@ -257,12 +281,28 @@ impl AmqpTransport {
         let info = url.info();
         let secure = url.kind == TransportKind::Amqps;
         let mut query = AMQPQueryString::default();
+        let mut connect_timeout: Option<Duration> = None;
         if let Some(heartbeat) = url.query_param("heartbeat") {
             query.heartbeat = heartbeat.parse::<u16>().ok();
         }
         if let Some(timeout) = url.query_param("connection_timeout") {
-            query.connection_timeout = timeout.parse::<u64>().ok();
+            // Secondi, come `broker_connection_timeout` di Celery: lapin non
+            // applica il timeout da sé, quindi lo imponiamo al connect.
+            connect_timeout = timeout
+                .parse::<u64>()
+                .ok()
+                .filter(|seconds| *seconds > 0)
+                .map(Duration::from_secs);
         }
+        // lapin prealloca 2×32 frame per connessione (8 MB con il frame_max
+        // tipico di 128 KB). 32 KB bastano per i task Celery e riducono la
+        // RSS del client: i body più grandi vengono divisi in più frame, senza
+        // cambiare i messaggi.
+        query.frame_max = Some(
+            url.query_param("frame_max")
+                .and_then(|value| value.parse::<u32>().ok())
+                .unwrap_or(FRAME_MAX),
+        );
         let uri = AMQPUri {
             scheme: if secure {
                 AMQPScheme::AMQPS
@@ -289,11 +329,40 @@ impl AmqpTransport {
             .with_connection_name(LongString::from(connection_name.into_bytes()));
         let mut attempt = 0_u32;
         let connection = loop {
-            match Connection::connect_uri(uri.clone(), properties.clone()).await {
+            let result = match connect_timeout {
+                Some(limit) => {
+                    match tokio::time::timeout(
+                        limit,
+                        Connection::connect_uri(uri.clone(), properties.clone()),
+                    )
+                    .await
+                    {
+                        Ok(result) => result,
+                        Err(_) => {
+                            if !retry.should_retry(attempt) {
+                                return Err(Error::connect(
+                                    url,
+                                    ClientKind::Amqp,
+                                    ConnectFailure::Timeout,
+                                ));
+                            }
+                            tokio::time::sleep(retry.delay(attempt)).await;
+                            attempt = attempt.saturating_add(1);
+                            continue;
+                        }
+                    }
+                }
+                None => Connection::connect_uri(uri.clone(), properties.clone()).await,
+            };
+            match result {
                 Ok(connection) => break connection,
                 Err(error) => {
                     if !retry.should_retry(attempt) {
-                        return Err(Error::Connection(error.to_string()));
+                        return Err(Error::connect(
+                            url,
+                            ClientKind::Amqp,
+                            ConnectFailure::from_error(&error),
+                        ));
                     }
                     tokio::time::sleep(retry.delay(attempt)).await;
                     attempt = attempt.saturating_add(1);
@@ -344,6 +413,9 @@ impl AmqpTransport {
             Err(error) if declaration.passive && is_protocol_id(&error, 404) => {
                 Err(Error::NotFound(error.to_string()))
             }
+            Err(error) if is_protocol_id(&error, 406) => {
+                Err(precondition_failed(&error, "Queue.declare", (50, 10)))
+            }
             Err(error) => Err(map_lapin(error)),
         }
     }
@@ -390,7 +462,7 @@ impl Transport for AmqpTransport {
                     Err(Error::NotFound(error.to_string()))
                 }
                 Err(error) if is_protocol_id(&error, 406) => {
-                    Err(Error::ExchangeNotEquivalent(declaration.name.to_string()))
+                    Err(precondition_failed(&error, "Exchange.declare", (40, 10)))
                 }
                 Err(error) => Err(map_lapin(error)),
             }

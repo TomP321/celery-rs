@@ -8,9 +8,10 @@ use std::time::Duration;
 
 use bytes::Bytes;
 use celery_transport::{
-    ConnectConfig, Consumer, Delivery, DeliveryStream, DeliveryTag, Error, ExchangeDecl,
-    ExchangeType, HeaderValue, Headers, Message, Properties, PublishRequest, QueueBinding,
-    QueueDecl, QueueInfo, RetryPolicy, Transport, TransportOptions, connect_with_config,
+    ClientKind, ConnectConfig, Consumer, Delivery, DeliveryStream, DeliveryTag, Error,
+    ExchangeDecl, ExchangeType, HeaderValue, Headers, Message, Properties, PublishRequest,
+    QueueBinding, QueueDecl, QueueInfo, RetryPolicy, Transport, TransportOptions,
+    connect_with_config,
 };
 use compact_str::CompactString;
 
@@ -865,12 +866,23 @@ async fn declarations_and_passive_checks() {
     assert_eq!(info.message_count, 0);
 
     // Tipo diverso: il broker risponde PRECONDITION_FAILED.
-    assert!(matches!(
-        transport
-            .declare_exchange(&ExchangeDecl::new(exchange.as_str(), ExchangeType::Topic))
-            .await,
-        Err(Error::ExchangeNotEquivalent(_))
-    ));
+    match transport
+        .declare_exchange(&ExchangeDecl::new(exchange.as_str(), ExchangeType::Topic))
+        .await
+    {
+        Err(Error::PreconditionFailed {
+            reply_code,
+            reply_text,
+            method_sig,
+            method_name,
+        }) => {
+            assert_eq!(reply_code, 406);
+            assert_eq!(method_sig, (40, 10));
+            assert_eq!(method_name, "Exchange.declare");
+            assert!(reply_text.contains("PRECONDITION_FAILED"), "{reply_text}");
+        }
+        other => panic!("atteso PreconditionFailed, trovato {other:?}"),
+    }
     // Bind su exchange inesistente.
     assert!(matches!(
         transport
@@ -1276,5 +1288,16 @@ async fn connection_failure_is_reported_without_retry() {
     .await
     .err()
     .expect("connessione rifiutata");
-    assert!(matches!(error, Error::Connection(_)));
+    assert!(matches!(
+        error,
+        Error::Connect {
+            client: ClientKind::Amqp,
+            errno: Some(111),
+            ..
+        }
+    ));
+    assert_eq!(
+        error.client_message().as_deref(),
+        Some("[Errno 111] Connection refused")
+    );
 }

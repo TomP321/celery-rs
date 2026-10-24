@@ -49,7 +49,7 @@ pub fn saferepr(
     py: Python<'_>,
     obj: &Bound<'_, PyAny>,
     maxlen: Option<i64>,
-    maxlevels: i64,
+    maxlevels: Option<i64>,
 ) -> PyResult<Py<PyString>> {
     let text = render(py, obj, maxlen, maxlevels, 0)?;
     Ok(py_str_from_code_points(py, &text)?.unbind())
@@ -182,7 +182,7 @@ struct Frame<'py> {
 struct Engine<'py> {
     py: Python<'py>,
     out: Out,
-    maxlevels: i64,
+    maxlevels: Option<i64>,
     seen: HashSet<usize>,
     stack: Vec<Frame<'py>>,
     pending: Option<Bound<'py, PyAny>>,
@@ -194,7 +194,7 @@ fn render(
     py: Python<'_>,
     obj: &Bound<'_, PyAny>,
     maxlen: Option<i64>,
-    maxlevels: i64,
+    maxlevels: Option<i64>,
     key_depth: usize,
 ) -> PyResult<Vec<u32>> {
     if key_depth > key_recursion_limit() {
@@ -468,7 +468,10 @@ impl<'py> Engine<'py> {
         end: Cow<'static, str>,
     ) -> PyResult<Prepared<'py>> {
         let level = self.stack.len() as i64;
-        if self.maxlevels != 0 && level >= self.maxlevels {
+        if let Some(maxlevels) = self.maxlevels
+            && maxlevels != 0
+            && level >= maxlevels
+        {
             return Ok(Prepared::Text(str_cps(&format!("{start}...{end}"))));
         }
         let id = obj.as_ptr() as usize;

@@ -511,6 +511,20 @@ def test_saferepr_profondita():
     assert text.startswith("[[")
 
 
+def test_saferepr_maxlevels_none():
+    """`maxlevels=None` (task_repr_maxlevels illimitato) come il riferimento."""
+    values = [
+        [1, [2, [3, [4, [5]]]]],
+        {"a": ["b", {"c": "d"}]},
+        {"x": {"a": ["b", {"c": "d"}]}},
+    ]
+    for value in values:
+        for maxlen in (None, 64):
+            assert rs.saferepr(value, maxlen, None) == ref_saferepr(
+                value, maxlen, None
+            )
+
+
 def test_saferepr_chiavi_annidate():
     for depth in (10, 100, 300):
         cur = HashableDict({1: 0})

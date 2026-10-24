@@ -52,8 +52,9 @@ use tokio::sync::Notify;
 use crate::message::{Delivery, DeliveryTag, HeaderValue, Headers, Message};
 use crate::routing::{PreparedBinding, TopicMatcher, key_to_pattern};
 use crate::transport::{
-    BoxFuture, ConnectConfig, Consumer, ConsumerControl, DeliveryStream, Error, ExchangeDecl,
-    ExchangeType, PublishRequest, QueueBinding, QueueDecl, QueueInfo, Result, Transport,
+    BoxFuture, ClientKind, ConnectConfig, ConnectFailure, Consumer, ConsumerControl,
+    DeliveryStream, Error, ExchangeDecl, ExchangeType, PublishRequest, QueueBinding, QueueDecl,
+    QueueInfo, Result, Transport,
 };
 use crate::url::{FanoutPrefix, QueueOrderStrategy, TransportOptions, Url};
 
@@ -920,11 +921,23 @@ pub(crate) async fn connect(url: &Url, config: &ConnectConfig) -> Result<RedisTr
     let command = client
         .get_multiplexed_async_connection_with_config(&conn_config)
         .await
-        .map_err(|error| Error::Connection(format!("connessione Redis: {error}")))?;
+        .map_err(|error| {
+            Error::connect(
+                url,
+                ClientKind::Redis,
+                ConnectFailure::from_message(&error.to_string()),
+            )
+        })?;
     let transactions = client
         .get_multiplexed_async_connection_with_config(&conn_config)
         .await
-        .map_err(|error| Error::Connection(format!("connessione Redis: {error}")))?;
+        .map_err(|error| {
+            Error::connect(
+                url,
+                ClientKind::Redis,
+                ConnectFailure::from_message(&error.to_string()),
+            )
+        })?;
 
     let options = config.transport_options.clone();
     let body_encoding = options.body_encoding.clone();

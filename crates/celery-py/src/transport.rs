@@ -5,8 +5,9 @@
 //! sono riconvertiti solo alla fine.
 
 use std::future::Future;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::ptr;
+use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
+use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 use std::time::Duration;
 
@@ -25,23 +26,73 @@ use pyo3::types::{
 use celery_transport::{
     Consumer, Delivery, DeliveryStream, DeliveryTag, Error as TransportError, ExchangeDecl,
     ExchangeType, HeaderValue, Headers, Message, Properties, PublishRequest, QueueBinding,
-    QueueDecl, Transport, TransportOptions, Url, connect_parsed,
+    QueueDecl, Transport, TransportOptions, Url,
 };
 
-/// Runtime tokio condiviso, single-thread (come richiesto dalla spec).
-fn runtime() -> Result<&'static tokio::runtime::Runtime, String> {
-    static RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
-    if let Some(runtime) = RUNTIME.get() {
-        return Ok(runtime);
-    }
-    let runtime = tokio::runtime::Builder::new_current_thread()
+/// Runtime tokio condiviso, single-thread, più il pid che l'ha creato.
+///
+/// Dopo `fork()` il runtime del padre non è più utilizzabile: il pid nella
+/// entry dice se va ricreato (lazy, al primo uso nel nuovo processo).
+struct RuntimeEntry {
+    pid: u32,
+    runtime: tokio::runtime::Runtime,
+}
+
+/// Le entry non vengono mai liberate: dopo fork si azzera solo il puntatore.
+static RUNTIME: AtomicPtr<RuntimeEntry> = AtomicPtr::new(ptr::null_mut());
+
+fn build_runtime() -> Result<tokio::runtime::Runtime, String> {
+    // Un worker thread (non il chiamante) guida driver I/O e timer anche
+    // quando il producer è a riposo: serve per gli heartbeat AMQP di lapin,
+    // che scadrebbero se il runtime fosse pollato solo durante `block_on`.
+    tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(1)
+        .thread_name("celery-rs-io")
         .enable_all()
         .build()
-        .map_err(|error| error.to_string())?;
-    let _ = RUNTIME.set(runtime);
-    RUNTIME
-        .get()
-        .ok_or_else(|| "runtime tokio non disponibile".to_string())
+        .map_err(|error| error.to_string())
+}
+
+/// Runtime del processo corrente, creato al primo uso.
+fn runtime() -> Result<&'static tokio::runtime::Runtime, String> {
+    let pid = std::process::id();
+    loop {
+        let current = RUNTIME.load(Ordering::Acquire);
+        if !current.is_null() {
+            // SAFETY: le entry non vengono liberate (vedi `after_fork`).
+            let entry = unsafe { &*current };
+            if entry.pid == pid {
+                return Ok(&entry.runtime);
+            }
+        }
+        let fresh = Box::into_raw(Box::new(RuntimeEntry {
+            pid,
+            runtime: build_runtime()?,
+        }));
+        match RUNTIME.compare_exchange(current, fresh, Ordering::AcqRel, Ordering::Acquire) {
+            Ok(_) => {
+                // SAFETY: `fresh` è stato appena pubblicato e resta vivo.
+                let entry: &'static RuntimeEntry = unsafe { &*fresh };
+                return Ok(&entry.runtime);
+            }
+            Err(_) => {
+                // Un altro thread ha vinto la corsa: questo runtime non è mai
+                // stato usato, quindi si può distruggere.
+                // SAFETY: `fresh` è nostro e non è stato condiviso.
+                drop(unsafe { Box::from_raw(fresh) });
+            }
+        }
+    }
+}
+
+/// Scarta il runtime ereditato dal padre dopo `fork()`.
+///
+/// Va chiamata nel figlio (da `os.register_at_fork`): il prossimo uso crea un
+/// runtime nuovo. Il vecchio non viene distrutto — un runtime tokio forkato non
+/// si può chiudere in sicurezza — e resta confinato alla copia del padre.
+#[pyfunction]
+pub fn after_fork() {
+    let _ = RUNTIME.swap(ptr::null_mut(), Ordering::AcqRel);
 }
 
 fn block<T: Send>(future: impl Future<Output = Result<T, TransportError>>) -> PyResult<T> {
@@ -50,6 +101,10 @@ fn block<T: Send>(future: impl Future<Output = Result<T, TransportError>>) -> Py
 }
 
 fn transport_error(error: TransportError) -> PyErr {
+    // Gli errori di connessione portano già il testo della libreria client.
+    if let Some(message) = error.client_message() {
+        return PyConnectionError::new_err(message);
+    }
     match error {
         TransportError::NotImplemented(message) => PyNotImplementedError::new_err(message),
         TransportError::InvalidUrl(message)
@@ -59,6 +114,13 @@ fn transport_error(error: TransportError) -> PyErr {
         | TransportError::UnsupportedTransport(message)
         | TransportError::UnsupportedExchangeType(message) => PyValueError::new_err(message),
         TransportError::NotFound(message) => PyLookupError::new_err(message),
+        TransportError::PreconditionFailed {
+            reply_code,
+            reply_text,
+            method_sig,
+            method_name,
+        } => amqp_precondition_failed(reply_code, reply_text, method_sig, method_name),
+        TransportError::Connect { .. } => PyConnectionError::new_err(error.to_string()),
         // Come il QoS di kombu, che solleva `KeyError(delivery_tag)`.
         TransportError::UnknownDeliveryTag(tag) => PyKeyError::new_err(tag),
         TransportError::ConnectionLost(message) | TransportError::Connection(message) => {
@@ -66,6 +128,29 @@ fn transport_error(error: TransportError) -> PyErr {
         }
         other => PyRuntimeError::new_err(other.to_string()),
     }
+}
+
+/// `amqp.exceptions.PreconditionFailed` con gli stessi attributi di py-amqp
+/// (`str()` identico: `Exchange.declare: (406) PRECONDITION_FAILED ...`).
+///
+/// `amqp` è importato solo qui: sul percorso di pubblicazione normale non
+/// serve e non va caricato.
+fn amqp_precondition_failed(
+    reply_code: u16,
+    reply_text: String,
+    method_sig: (u16, u16),
+    method_name: &'static str,
+) -> PyErr {
+    Python::attach(|py| {
+        match py
+            .import("amqp.exceptions")
+            .and_then(|module| module.getattr("PreconditionFailed"))
+            .and_then(|class| class.call1((reply_text, method_sig, method_name, reply_code)))
+        {
+            Ok(exc) => PyErr::from_value(exc),
+            Err(err) => err,
+        }
+    })
 }
 
 /// `dict` Python -> [`Headers`] ordinati.
@@ -315,6 +400,50 @@ fn body_from_py(body: &Bound<'_, PyAny>) -> PyResult<Bytes> {
     Err(PyTypeError::new_err("body deve essere bytes o bytearray"))
 }
 
+/// `retry_policy` Python -> [`RetryPolicy`]; le chiavi sconosciute (es.
+/// `errback`) sono ignorate perché gestite nel guscio Python.
+fn retry_policy_from_py(
+    dict: Option<&Bound<'_, PyDict>>,
+) -> PyResult<celery_transport::RetryPolicy> {
+    let mut policy = celery_transport::RetryPolicy::default();
+    let Some(dict) = dict else {
+        return Ok(policy);
+    };
+    for (key, value) in dict.iter() {
+        let key = key
+            .cast::<PyString>()
+            .map_err(|_| PyTypeError::new_err("retry_policy: le chiavi devono essere stringhe"))?
+            .to_str()?;
+        match key {
+            "enabled" => policy.enabled = value.is_truthy()?,
+            "max_retries" => {
+                policy.max_retries = if value.is_none() {
+                    None
+                } else {
+                    Some(value.extract::<u32>()?)
+                };
+            }
+            "interval_start" => policy.interval_start = seconds(&value, key)?,
+            "interval_step" => policy.interval_step = seconds(&value, key)?,
+            "interval_max" => policy.interval_max = seconds(&value, key)?,
+            _ => {}
+        }
+    }
+    Ok(policy)
+}
+
+fn seconds(value: &Bound<'_, PyAny>, key: &str) -> PyResult<Duration> {
+    let seconds: f64 = value
+        .extract()
+        .map_err(|_| PyTypeError::new_err(format!("retry_policy[{key}]: atteso un numero")))?;
+    if !seconds.is_finite() || seconds < 0.0 {
+        return Err(PyValueError::new_err(format!(
+            "retry_policy[{key}]: atteso un numero non negativo"
+        )));
+    }
+    Ok(Duration::from_secs_f64(seconds))
+}
+
 struct StreamState {
     queues: Vec<CompactString>,
     prefetch: u16,
@@ -521,11 +650,12 @@ fn delivery_to_py<'py>(
 #[pymethods]
 impl Connection {
     #[new]
-    #[pyo3(signature = (url, transport_options=None))]
+    #[pyo3(signature = (url, transport_options=None, retry_policy=None))]
     fn new(
         py: Python<'_>,
         url: &str,
         transport_options: Option<&Bound<'_, PyDict>>,
+        retry_policy: Option<&Bound<'_, PyDict>>,
     ) -> PyResult<Self> {
         let parsed = Url::parse(url).map_err(transport_error)?;
         let options = match transport_options {
@@ -534,9 +664,18 @@ impl Connection {
             }
             None => TransportOptions::default(),
         };
+        let policy = retry_policy_from_py(retry_policy)?;
         let virtual_transport = parsed.kind.is_virtual();
         let body_encoding = options.body_encoding.clone();
-        let transport = py.detach(|| block(connect_parsed(&parsed, options)))?;
+        let transport = py.detach(|| {
+            block(celery_transport::connect_parsed_with_config(
+                &parsed,
+                &celery_transport::ConnectConfig {
+                    transport_options: options,
+                    retry_policy: policy,
+                },
+            ))
+        })?;
         Ok(Self {
             transport,
             virtual_transport,
@@ -640,7 +779,7 @@ impl Connection {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[pyo3(signature = (body, exchange=None, routing_key="", headers=None, properties=None, content_type=None, content_encoding=None, priority=None, delivery_mode=None))]
+    #[pyo3(signature = (body, exchange=None, routing_key="", headers=None, properties=None, content_type=None, content_encoding=None, priority=None, delivery_mode=None, omit_priority=false))]
     fn publish(
         &self,
         py: Python<'_>,
@@ -653,6 +792,7 @@ impl Connection {
         content_encoding: Option<&str>,
         priority: Option<u8>,
         delivery_mode: Option<u8>,
+        omit_priority: bool,
     ) -> PyResult<()> {
         self.ensure_open()?;
         let body = body_from_py(body)?;
@@ -664,16 +804,20 @@ impl Connection {
             Some(dict) => py_to_headers(dict)?.into(),
             None => Properties::new(),
         };
-        // Il Producer di kombu imposta sempre delivery_mode e priority.
+        // Il Producer di kombu imposta sempre delivery_mode e priority; con
+        // `omit_priority` la proprietà non viene inviata (py-amqp la omette
+        // quando Celery passa `priority=None` per una coda esplicita).
         match delivery_mode {
             Some(mode) => properties.set_delivery_mode(mode),
             None if properties.delivery_mode().is_none() => properties.set_delivery_mode(2),
             None => {}
         }
-        match priority {
-            Some(priority) => properties.set_priority(priority),
-            None if properties.priority().is_none() => properties.set_priority(0),
-            None => {}
+        if !omit_priority {
+            match priority {
+                Some(priority) => properties.set_priority(priority),
+                None if properties.priority().is_none() => properties.set_priority(0),
+                None => {}
+            }
         }
         let message = Message {
             body,
@@ -812,5 +956,24 @@ mod tests {
         let second = runtime().expect("runtime");
         assert!(std::ptr::eq(first, second));
         assert_eq!(first.block_on(async { 1 + 1 }), 2);
+    }
+
+    #[test]
+    fn runtime_is_rebuilt_after_fork_marker() {
+        let before = runtime().expect("runtime");
+        // `after_fork` azzera il puntatore: il pid cambia solo nel figlio, ma
+        // qui verifichiamo che il runtime successivo venga ricreato.
+        after_fork();
+        let after = runtime().expect("runtime");
+        assert!(!std::ptr::eq(before, after));
+        assert_eq!(after.block_on(async { 2 + 2 }), 4);
+    }
+
+    #[test]
+    fn runtime_zero_delay_is_sleep_free() {
+        // La politica di default non serve qui: verifichiamo solo che il
+        // runtime condiviso non richieda un secondo thread.
+        let runtime = runtime().expect("runtime");
+        assert_eq!(runtime.block_on(async { 3 + 4 }), 7);
     }
 }

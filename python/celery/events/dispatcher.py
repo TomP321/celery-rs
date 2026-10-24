@@ -85,7 +85,10 @@ class EventDispatcher:
         conninfo = self.connection or self.app.connection_for_write()
         self.exchange = get_exchange(conninfo,
                                      name=self.app.conf.event_exchange)
-        if conninfo.transport.driver_type in self.DISABLED_TRANSPORTS:
+        # `FastConnection` espone il driver senza importare il trasporto.
+        from celery.app._rs_producer import connection_driver_type
+
+        if connection_driver_type(conninfo) in self.DISABLED_TRANSPORTS:
             self.enabled = False
         if self.enabled:
             self.enable()

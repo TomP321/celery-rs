@@ -49,7 +49,7 @@ use compact_str::CompactString;
 use futures_core::Stream;
 
 use crate::message::{Delivery, DeliveryTag, Headers, Message};
-use crate::url::TransportOptions;
+use crate::url::{TransportOptions, Url};
 
 /// Risultato delle operazioni di trasporto.
 pub type Result<T> = std::result::Result<T, Error>;
@@ -59,6 +59,80 @@ pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 /// Stream di consegne restituito da [`Transport::consume`].
 pub type DeliveryStream = Pin<Box<dyn Stream<Item = Result<Delivery>> + Send>>;
+
+/// Client library il cui testo d'errore va riprodotto.
+///
+/// Le due librerie di riferimento formattano gli errori di connessione in modo
+/// diverso: redis-py `"Error 111 connecting to host:port. Connection refused."`,
+/// py-amqp `"[Errno 111] Connection refused"`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClientKind {
+    Redis,
+    Amqp,
+}
+
+/// Causa di un errore di connessione, nei termini della libreria client.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ConnectFailure {
+    /// Errore di sistema: `errno` e testo di `strerror` (`"Connection refused"`).
+    Errno { code: i32, text: String },
+    /// Timeout di connessione.
+    Timeout,
+    /// Errore senza errno (handshake TLS, protocollo, ...).
+    Other(String),
+}
+
+impl ConnectFailure {
+    /// Classifica un messaggio di errore già formattato (utile per redis-rs,
+    /// che non espone l'`io::Error` nella catena delle cause).
+    pub fn from_message(text: &str) -> Self {
+        let text = text.trim();
+        let lowered = text.to_ascii_lowercase();
+        if lowered == "timed out" || lowered.ends_with("timed out") {
+            return Self::Timeout;
+        }
+        if let Some(rest) = text.strip_prefix("failed to lookup address information: ") {
+            // `getaddrinfo` non ha un errno positivo: redis-py/socket usano -2
+            // e il testo di `gai_strerror` ("Name or service not known").
+            return Self::Errno {
+                code: -2,
+                text: rest.trim_end_matches('.').to_string(),
+            };
+        }
+        if let Some(start) = text.rfind("(os error ")
+            && text.ends_with(')')
+            && let Ok(code) = text[start + "(os error ".len()..text.len() - 1].parse::<i32>()
+        {
+            return Self::Errno {
+                code,
+                text: text[..start].trim_end().to_string(),
+            };
+        }
+        Self::Other(text.to_string())
+    }
+
+    /// Classifica un errore guardando la catena delle cause.
+    pub fn from_error(error: &(dyn std::error::Error + 'static)) -> Self {
+        let mut source: Option<&(dyn std::error::Error + 'static)> = Some(error);
+        while let Some(current) = source {
+            if let Some(io) = current.downcast_ref::<std::io::Error>() {
+                if io.kind() == std::io::ErrorKind::TimedOut {
+                    return Self::Timeout;
+                }
+                if io.raw_os_error().is_some() {
+                    return Self::from_message(&io.to_string());
+                }
+                let text = io.to_string();
+                if text.starts_with("failed to lookup address information: ") {
+                    return Self::from_message(&text);
+                }
+                return Self::from_message(&text);
+            }
+            source = current.source();
+        }
+        Self::from_message(&error.to_string())
+    }
+}
 
 /// Errori comuni a tutti i trasporti.
 #[derive(Debug, thiserror::Error)]
@@ -75,6 +149,26 @@ pub enum Error {
     InvalidArgument(String),
     #[error("exchange non equivalente a quello già dichiarato: {0}")]
     ExchangeNotEquivalent(String),
+    /// Il broker ha rifiutato una dichiarazione con 406 PRECONDITION_FAILED.
+    #[error("{method_name}: ({reply_code}) {reply_text}")]
+    PreconditionFailed {
+        reply_code: u16,
+        reply_text: String,
+        /// `(class_id, method_id)` del metodo AMQP, come py-amqp.
+        method_sig: (u16, u16),
+        method_name: &'static str,
+    },
+    /// Connessione al broker fallita: `errno` e host servono per riprodurre il
+    /// messaggio della libreria client di riferimento.
+    #[error("connessione a {host}:{port} fallita: {message}")]
+    Connect {
+        host: CompactString,
+        port: u16,
+        errno: Option<i32>,
+        message: String,
+        timeout: bool,
+        client: ClientKind,
+    },
     #[error("tipo di exchange non supportato: {0}")]
     UnsupportedExchangeType(String),
     #[error("exchange non dichiarato: {0}")]
@@ -95,6 +189,63 @@ pub enum Error {
     ConnectionLost(String),
     #[error("trasporto chiuso")]
     Closed,
+}
+
+impl Error {
+    /// Errore di connessione con i dati necessari al messaggio della libreria
+    /// client (`host:port`, errno, testo).
+    pub fn connect(url: &Url, client: ClientKind, failure: ConnectFailure) -> Self {
+        let info = url.info();
+        let port = info.port.unwrap_or_default();
+        let (errno, message, timeout) = match failure {
+            ConnectFailure::Errno { code, text } => (Some(code), text, false),
+            ConnectFailure::Timeout => (None, "timeout".to_string(), true),
+            ConnectFailure::Other(text) => (None, text, false),
+        };
+        Self::Connect {
+            host: CompactString::from(info.hostname.as_str()),
+            port,
+            errno,
+            message,
+            timeout,
+            client,
+        }
+    }
+
+    /// Messaggio identico a quello che produrrebbe la libreria client di
+    /// riferimento per lo stesso errore; `None` per gli altri errori.
+    pub fn client_message(&self) -> Option<String> {
+        let Self::Connect {
+            host,
+            port,
+            errno,
+            message,
+            timeout,
+            client,
+        } = self
+        else {
+            return None;
+        };
+        if *timeout {
+            return Some(
+                match client {
+                    ClientKind::Redis => "Timeout connecting to server",
+                    ClientKind::Amqp => "timed out",
+                }
+                .to_string(),
+            );
+        }
+        Some(match client {
+            ClientKind::Redis => match errno {
+                Some(code) => format!("Error {code} connecting to {host}:{port}. {message}."),
+                None => message.clone(),
+            },
+            ClientKind::Amqp => match errno {
+                Some(code) => format!("[Errno {code}] {message}"),
+                None => message.clone(),
+            },
+        })
+    }
 }
 
 /// Tipo di exchange (i quattro tipi standard AMQP 0.9.1).
@@ -398,6 +549,60 @@ pub trait Transport: Send + Sync {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn connect_failure_classifies_client_messages() {
+        assert_eq!(
+            ConnectFailure::from_message("Connection refused (os error 111)"),
+            ConnectFailure::Errno {
+                code: 111,
+                text: "Connection refused".to_string()
+            }
+        );
+        assert_eq!(
+            ConnectFailure::from_message(
+                "failed to lookup address information: Name or service not known"
+            ),
+            ConnectFailure::Errno {
+                code: -2,
+                text: "Name or service not known".to_string()
+            }
+        );
+        assert_eq!(
+            ConnectFailure::from_message("IO error: timed out"),
+            ConnectFailure::Timeout
+        );
+        assert_eq!(
+            ConnectFailure::from_message("something else"),
+            ConnectFailure::Other("something else".to_string())
+        );
+    }
+
+    #[test]
+    fn connect_error_formats_like_redis_py_and_pyamqp() {
+        let url = Url::parse("redis://127.0.0.1:6399/0").expect("url");
+        let redis = Error::connect(
+            &url,
+            ClientKind::Redis,
+            ConnectFailure::Errno {
+                code: 111,
+                text: "Connection refused".to_string(),
+            },
+        );
+        assert_eq!(
+            redis.client_message().as_deref(),
+            Some("Error 111 connecting to 127.0.0.1:6399. Connection refused.")
+        );
+        let url = Url::parse("amqp://guest:guest@127.0.0.1:5699//").expect("url");
+        let amqp = Error::connect(&url, ClientKind::Amqp, ConnectFailure::Timeout);
+        assert_eq!(amqp.client_message().as_deref(), Some("timed out"));
+        let redis = Error::connect(&url, ClientKind::Redis, ConnectFailure::Timeout);
+        assert_eq!(
+            redis.client_message().as_deref(),
+            Some("Timeout connecting to server")
+        );
+        assert_eq!(Error::Closed.client_message(), None);
+    }
 
     #[test]
     fn retry_policy_defaults_match_celery() {

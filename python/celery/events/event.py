@@ -55,7 +55,10 @@ def get_exchange(conn, name=EVENT_EXCHANGE_NAME):
         (from topic -> fanout).
     """
     ex = copy(event_exchange)
-    if conn.transport.driver_type in {'redis', 'gcpubsub'}:
+    # `FastConnection` espone il driver senza importare il trasporto.
+    from celery.app._rs_producer import connection_driver_type
+
+    if connection_driver_type(conn) in {'redis', 'gcpubsub'}:
         # quick hack for Issue #436
         ex.type = 'fanout'
     if name != ex.name:

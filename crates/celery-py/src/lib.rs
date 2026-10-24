@@ -17,6 +17,7 @@ fn _celery_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(compress::compress, m)?)?;
     m.add_function(wrap_pyfunction!(compress::decompress, m)?)?;
     m.add_function(wrap_pyfunction!(task::encode_task_v2, m)?)?;
+    m.add_function(wrap_pyfunction!(transport::after_fork, m)?)?;
     m.add_class::<transport::Connection>()?;
     Ok(())
 }

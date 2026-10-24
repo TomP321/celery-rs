@@ -16,9 +16,9 @@ pub use memory::MemoryTransport;
 pub use message::{Decimal, Delivery, DeliveryTag, HeaderValue, Headers, Message, Properties};
 pub use redis::RedisTransport;
 pub use transport::{
-    BoxFuture, ConnectConfig, Consumer, ConsumerControl, DeliveryStream, Error, ExchangeDecl,
-    ExchangeType, PublishRequest, QueueBinding, QueueDecl, QueueInfo, Result, RetryPolicy,
-    Transport,
+    BoxFuture, ClientKind, ConnectConfig, ConnectFailure, Consumer, ConsumerControl,
+    DeliveryStream, Error, ExchangeDecl, ExchangeType, PublishRequest, QueueBinding, QueueDecl,
+    QueueInfo, Result, RetryPolicy, Transport,
 };
 pub use url::{FanoutPrefix, QueueOrderStrategy, TransportKind, TransportOptions, Url, UrlInfo};
 

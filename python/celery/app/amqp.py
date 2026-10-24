@@ -15,7 +15,21 @@ from celery.utils.saferepr import saferepr
 from celery.utils.text import indent as textindent
 from celery.utils.time import add_seconds_to_datetime, maybe_make_aware
 
+from . import _rs_producer
 from . import routes as _routes
+
+try:
+    from _celery_rs import saferepr as _rs_saferepr
+except ImportError:  # pragma: no cover - senza estensione nativa
+    _rs_saferepr = None
+
+
+def _task_repr(obj, maxsize, maxlevels):
+    """`saferepr` nativo quando c'è, altrimenti quello Python (stessa resa)."""
+    if _rs_saferepr is None:
+        return saferepr(obj, maxsize, maxlevels=maxlevels)
+    return _rs_saferepr(obj, maxsize, maxlevels)
+
 
 __all__ = ('AMQP', 'Queues', 'task_message')
 
@@ -360,9 +374,9 @@ class AMQP:
             expires = expires and expires.isoformat()
 
         if argsrepr is None:
-            argsrepr = saferepr(args, self.argsrepr_maxsize, maxlevels=self.app.conf.task_repr_maxlevels)
+            argsrepr = _task_repr(args, self.argsrepr_maxsize, self.app.conf.task_repr_maxlevels)
         if kwargsrepr is None:
-            kwargsrepr = saferepr(kwargs, self.kwargsrepr_maxsize, maxlevels=self.app.conf.task_repr_maxlevels)
+            kwargsrepr = _task_repr(kwargs, self.kwargsrepr_maxsize, self.app.conf.task_repr_maxlevels)
 
         if not root_id:  # empty root_id defaults to task_id
             root_id = task_id
@@ -639,9 +653,17 @@ class AMQP:
     @property
     def producer_pool(self):
         if self._producer_pool is None:
-            self._producer_pool = pools.producers[
-                self.app.connection_for_write()]
-            self._producer_pool.limit = self.app.pool.limit
+            connection = _rs_producer.fast_connection(self.app)
+            if connection is not None:
+                # `app.pool` registra l'after-fork dell'app: il percorso veloce
+                # non lo crea (importerebbe il trasporto), quindi lo fa qui.
+                self.app._ensure_after_fork()
+                self._producer_pool = _rs_producer.FastProducerPool(
+                    connection, limit=_rs_producer.pool_limit(self.app))
+            else:
+                self._producer_pool = pools.producers[
+                    self.app.connection_for_write()]
+                self._producer_pool.limit = self.app.pool.limit
         return self._producer_pool
     publisher_pool = producer_pool  # compat alias
 
@@ -658,7 +680,8 @@ class AMQP:
     def _event_dispatcher(self):
         # We call Dispatcher.publish with a custom producer
         # so don't need the dispatcher to be enabled.
-        return self.app.events.Dispatcher(enabled=False)
+        connection = _rs_producer.fast_connection(self.app)
+        return self.app.events.Dispatcher(enabled=False, connection=connection)
 
     def _handle_conf_update(self, *args, **kwargs):
         route_keys = self.app.conf._to_keys('task_routes')
