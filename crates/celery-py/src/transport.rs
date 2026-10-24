@@ -95,12 +95,14 @@ pub fn after_fork() {
     let _ = RUNTIME.swap(ptr::null_mut(), Ordering::AcqRel);
 }
 
-fn block<T: Send>(future: impl Future<Output = Result<T, TransportError>>) -> PyResult<T> {
+pub(crate) fn block<T: Send>(
+    future: impl Future<Output = Result<T, TransportError>>,
+) -> PyResult<T> {
     let runtime = runtime().map_err(PyRuntimeError::new_err)?;
     runtime.block_on(future).map_err(transport_error)
 }
 
-fn transport_error(error: TransportError) -> PyErr {
+pub(crate) fn transport_error(error: TransportError) -> PyErr {
     // Gli errori di connessione portano già il testo della libreria client.
     if let Some(message) = error.client_message() {
         return PyConnectionError::new_err(message);
@@ -154,7 +156,7 @@ fn amqp_precondition_failed(
 }
 
 /// `dict` Python -> [`Headers`] ordinati.
-fn py_to_headers(dict: &Bound<'_, PyDict>) -> PyResult<Headers> {
+pub(crate) fn py_to_headers(dict: &Bound<'_, PyDict>) -> PyResult<Headers> {
     let mut headers = Headers::with_capacity(dict.len());
     for (key, value) in dict.iter() {
         let key = key
@@ -375,7 +377,7 @@ fn tag_to_py<'py>(py: Python<'py>, tag: &DeliveryTag) -> PyResult<Bound<'py, PyA
     })
 }
 
-fn tag_from_py(tag: &Bound<'_, PyAny>) -> PyResult<DeliveryTag> {
+pub(crate) fn tag_from_py(tag: &Bound<'_, PyAny>) -> PyResult<DeliveryTag> {
     if tag.cast::<PyBool>().is_ok() {
         return Err(PyTypeError::new_err(
             "delivery_tag deve essere int o str, non bool",
@@ -402,7 +404,7 @@ fn body_from_py(body: &Bound<'_, PyAny>) -> PyResult<Bytes> {
 
 /// `retry_policy` Python -> [`RetryPolicy`]; le chiavi sconosciute (es.
 /// `errback`) sono ignorate perché gestite nel guscio Python.
-fn retry_policy_from_py(
+pub(crate) fn retry_policy_from_py(
     dict: Option<&Bound<'_, PyDict>>,
 ) -> PyResult<celery_transport::RetryPolicy> {
     let mut policy = celery_transport::RetryPolicy::default();
@@ -602,11 +604,12 @@ fn poll_now(stream: &mut DeliveryStream) -> Option<Result<Delivery, TransportErr
     }
 }
 
-fn delivery_to_py<'py>(
+pub(crate) fn delivery_to_py<'py>(
     py: Python<'py>,
     delivery: &Delivery,
     virtual_transport: bool,
     body_encoding: &str,
+    include_virtual_content_type: bool,
 ) -> PyResult<Bound<'py, PyTuple>> {
     let body = PyBytes::new(py, &delivery.message.body).into_any();
     let headers = headers_to_py(py, &delivery.message.headers)?.into_any();
@@ -625,6 +628,27 @@ fn delivery_to_py<'py>(
         delivery_info.set_item("redelivered", redelivered)?;
     }
     if virtual_transport {
+        // Il worker li rimette in `properties` come
+        // `kombu.transport.virtual.base.Message`; `Connection.drain` mantiene
+        // il formato storico dei test differenziali (stessi campi di prima).
+        if include_virtual_content_type {
+            if let Some(content_type) = delivery.message.content_type.as_deref()
+                && !properties.contains_key("content_type")
+            {
+                properties.insert(
+                    "content_type",
+                    HeaderValue::Str(CompactString::from(content_type)),
+                );
+            }
+            if let Some(content_encoding) = delivery.message.content_encoding.as_deref()
+                && !properties.contains_key("content_encoding")
+            {
+                properties.insert(
+                    "content_encoding",
+                    HeaderValue::Str(CompactString::from(content_encoding)),
+                );
+            }
+        }
         if !properties.contains_key("body_encoding") {
             properties.insert(
                 "body_encoding",
@@ -876,6 +900,7 @@ impl Connection {
                 delivery,
                 self.virtual_transport,
                 &self.body_encoding,
+                false,
             )?)?;
         }
         Ok(out)
@@ -897,6 +922,7 @@ impl Connection {
                 &delivery,
                 self.virtual_transport,
                 &self.body_encoding,
+                false,
             )?)),
             None => Ok(None),
         }

@@ -477,6 +477,15 @@ dependencies = [
 [[package]]
 name = "celery-worker"
 version = "0.1.0"
+dependencies = [
+ "bytes",
+ "celery-transport",
+ "compact_str",
+ "futures-core",
+ "thiserror",
+ "tokio",
+ "uuid",
+]
 
 [[package]]
 name = "cfg-if"

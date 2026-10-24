@@ -46,8 +46,13 @@ class Events(bootsteps.StartStopStep):
             buffer_group=['task'] if c.hub else None,
             on_send_buffered=c.on_send_event_buffered if c.hub else None,
         )
-        # register for reads so broker heartbeats are consumed.
-        if c.hub and c.amqheartbeat and conn.supports_heartbeats:
+        # register for reads so broker heartbeats are consumed. Con il
+        # producer Rust la connessione non esiste come socket kombu: gli
+        # heartbeat li gestisce il runtime del core.
+        from celery.worker._rs_consumer import is_fast_connection
+
+        if (c.hub and c.amqheartbeat and not is_fast_connection(conn)
+                and conn.supports_heartbeats):
             conn.transport.register_with_event_loop(conn.connection, c.hub)
         if prev:
             dis.extend_buffer(prev)

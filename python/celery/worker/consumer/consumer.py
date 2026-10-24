@@ -22,6 +22,7 @@ from kombu.utils.limits import TokenBucket
 from vine import ppartial, promise
 
 from celery import bootsteps, signals
+from celery.app import _rs_producer
 from celery.app.trace import build_tracer
 from celery.exceptions import (CPendingDeprecationWarning, InvalidTaskError, NotRegistered, WorkerShutdown,
                                WorkerTerminate)
@@ -32,7 +33,7 @@ from celery.utils.objects import Bunch
 from celery.utils.text import truncate
 from celery.utils.threads import bound_open_broker_sockets
 from celery.utils.time import humanize_seconds, rate
-from celery.worker import loops
+from celery.worker import _rs_consumer, loops
 from celery.worker.state import (active_requests, maybe_shutdown, requests, reserved_requests, scheduled_requests,
                                  successful_requests, task_reserved)
 
@@ -624,14 +625,34 @@ class Consumer:
         """
         conn = self.connection_for_read(heartbeat=self.amqheartbeat)
         if self.hub:
-            conn.transport.register_with_event_loop(conn.connection, self.hub)
+            if _rs_consumer.is_rs_connection(conn):
+                # I fd della connessione kombu lazy (pidbox/gossip) verranno
+                # registrati quando quella connessione viene aperta.
+                conn.register_with_event_loop(self.hub)
+            else:
+                conn.transport.register_with_event_loop(
+                    conn.connection, self.hub)
         return conn
 
     def connection_for_read(self, heartbeat=None):
+        # Worker `-P solo` su Redis/AMQP: la lettura passa dal core Rust.
+        # Le stesse regole di `use_fast_producer`; i test upstream con pool
+        # mock non vengono promossi.
+        if _rs_consumer.use_rs_worker(self):
+            connection = _rs_consumer.connection(self, heartbeat=heartbeat)
+            if connection is not None:
+                return self.ensure_connected(connection)
         return self.ensure_connected(
             self.app.connection_for_read(heartbeat=heartbeat))
 
     def connection_for_write(self, url=None, heartbeat=None):
+        # Dopo la connessione di lettura Rust, anche gli eventi del worker
+        # escono dal producer Rust: nessun socket kombu nel percorso caldo.
+        if _rs_consumer.is_rs_connection(getattr(self, 'connection', None)):
+            connection = _rs_producer.fast_connection(
+                self.app, url or self.app.conf.broker_write_url)
+            if connection is not None:
+                return connection
         return self.ensure_connected(
             self.app.connection_for_write(url=url, heartbeat=heartbeat))
 
@@ -937,7 +958,12 @@ class Evloop(bootsteps.StartStopStep):
 
     def start(self, c):
         self.patch_all(c)
-        c.loop(*c.loop_args())
+        loop = c.loop
+        # Solo se il loop è ancora quello di default: i test che sostituiscono
+        # `Consumer.loop` restano sul loro mock.
+        if loop is loops.asynloop and _rs_consumer.is_rs_connection(c.connection):
+            loop = _rs_consumer.rsloop
+        loop(*c.loop_args())
 
     def patch_all(self, c):
         c.qos._mutex = DummyLock()

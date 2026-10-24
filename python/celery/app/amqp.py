@@ -331,6 +331,15 @@ class AMQP:
     def TaskConsumer(self, channel, queues=None, accept=None, **kw):
         if accept is None:
             accept = self.app.conf.accept_content
+        # Worker `-P solo`: sottoscrizione, prefetch e ack dal core Rust.
+        from celery.worker._rs_consumer import RsConnection, RsTaskConsumer
+
+        if isinstance(channel, RsConnection):
+            return RsTaskConsumer(
+                channel, accept=accept,
+                queues=queues or list(self.queues.consume_from.values()),
+                **kw
+            )
         return self.Consumer(
             channel, accept=accept,
             queues=queues or list(self.queues.consume_from.values()),

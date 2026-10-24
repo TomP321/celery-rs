@@ -101,12 +101,23 @@ class EventDispatcher:
     def __exit__(self, *exc_info):
         self.close()
 
+    def _create_producer(self):
+        target = self.channel or self.connection
+        if self.channel is None:
+            from celery.app import _rs_producer
+
+            # Con una connessione veloce gli eventi escono dal producer Rust
+            # (stesso messaggio di kombu, nessun socket py-amqp).
+            if _rs_producer.use_fast_producer(target):
+                return _rs_producer.RsProducer(
+                    target, exchange=self.exchange,
+                    serializer=self.serializer, auto_declare=False)
+        return Producer(target, exchange=self.exchange,
+                        serializer=self.serializer, auto_declare=False)
+
     def enable(self):
         with self.mutex:
-            self.producer = Producer(self.channel or self.connection,
-                                     exchange=self.exchange,
-                                     serializer=self.serializer,
-                                     auto_declare=False)
+            self.producer = self._create_producer()
             self._closed = False
             self.enabled = True
         for callback in self.on_enabled:

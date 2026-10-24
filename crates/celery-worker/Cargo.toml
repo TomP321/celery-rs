@@ -6,3 +6,13 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+bytes.workspace = true
+celery-transport.workspace = true
+compact_str.workspace = true
+futures-core.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["rt", "sync", "time", "macros"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "time"] }
+uuid.workspace = true
