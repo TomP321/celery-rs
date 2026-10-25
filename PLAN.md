@@ -122,8 +122,8 @@ Infrastruttura via docker su porte dedicate: Redis `:6390`, RabbitMQ `:5673`.
 | 4 ✅ | Result backend | redis/rpc/memory, chord join/counter, get/wait/propagate | matrix: client rs + worker ref verde |
 | 5 ✅ | Worker | master Python + core Rust (consumer, rsloop su epoll, zygote+pool), trace, ack late, retry, time limit, revoke, eventi, control, autoscale, shutdown/warm/cold, segnali | matrix completa verde |
 | 6 ✅ | Beat | scheduler, crontab/solar, persistenza | `test_beat` + `t/unit/app/test_schedules` |
-| 7 | CLI | `celery worker/beat/call/inspect/control/purge/result/events/status/multi` | output e exit code identici |
-| 8 | Ottimizzazione | profiling, misure, tuning; pidbox/mingle/gossip fuori da kombu, mimalloc, latenza rpc, import redis-py, PSS beat su AMQP (lapin), tick di beat (ScheduleEntry) | target tabella §Ottimizzazioni |
+| 7 ✅ | CLI | `celery worker/beat/call/inspect/control/purge/result/events/status/multi` | output e exit code identici |
+| 8 | Ottimizzazione | profiling, misure, tuning; pidbox/mingle/gossip fuori da kombu, mimalloc, latenza rpc, import redis-py, PSS beat su AMQP (lapin), tick di beat (ScheduleEntry), latenza ping in-process su AMQP (+1,5 ms) | target tabella §Ottimizzazioni |
 | 9 | Hardening | beat embedded (-B) avviato dallo zygote invece che in thread, connection recovery, test leak, fuzz del parser messaggi | `t/integration` completa |
 
 ## Metodo di lavoro (orchestrazione)
