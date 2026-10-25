@@ -263,6 +263,12 @@ class Scheduler:
                              app.conf.beat_max_loop_interval or
                              self.max_interval)
         self.Producer = Producer or app.amqp.Producer
+        #: Il percorso Rust vale solo se il producer non è stato ridefinito:
+        #: una sottoclasse che espone `Producer` (django-celery-beat, redbeat)
+        #: resta su kombu anche quando punta alla stessa classe dell'app.
+        self._default_producer = (
+            Producer is None and getattr(type(self), 'Producer', None) is None
+        )
         self._heap = None
         self.old_schedulers = None
         self.sync_every_tasks = (
@@ -492,6 +498,10 @@ class Scheduler:
             connection = self.__dict__.pop('connection', None)
             if connection is not None:
                 try:
+                    from .app import _rs_producer
+                    if _rs_producer.is_fast_connection(connection):
+                        # Il socket è nel core Rust, non nel descrittore kombu.
+                        _rs_producer.release_connection(connection)
                     ignore_errors(connection, connection.release)
                 except Exception:
                     if not sync_failed:
@@ -539,7 +549,16 @@ class Scheduler:
             error('beat: Connection error: %s. '
                   'Trying again in %s seconds...', exc, interval)
 
-        return self.connection.ensure_connection(
+        connection = self.connection
+        from .app import _rs_producer
+        if _rs_producer.is_fast_connection(connection):
+            # Stessa politica di `ensure_connection`, ma la connessione la
+            # apre il core Rust (niente import di redis-py/py-amqp).
+            return _rs_producer.ensure_connection(
+                connection, _error_handler,
+                self.app.conf.broker_connection_max_retries,
+            )
+        return connection.ensure_connection(
             _error_handler, self.app.conf.broker_connection_max_retries
         )
 
@@ -552,11 +571,20 @@ class Scheduler:
 
     @cached_property
     def connection(self):
-        return self.app.connection_for_write()
+        from .app import _rs_producer
+        connection = _rs_producer.fast_connection(self.app)
+        return connection if connection is not None \
+            else self.app.connection_for_write()
 
     @cached_property
     def producer(self):
-        return self.Producer(self._ensure_connected(), auto_declare=False)
+        from .app import _rs_producer
+        connection = self._ensure_connected()
+        if (self._default_producer and
+                _rs_producer.is_fast_connection(connection) and
+                self.Producer is self.app.amqp.Producer):
+            return _rs_producer.RsProducer(connection, auto_declare=False)
+        return self.Producer(connection, auto_declare=False)
 
     @property
     def info(self):

@@ -12,6 +12,7 @@ crate-type = ["cdylib"]
 [dependencies]
 bytes.workspace = true
 celery-backend.workspace = true
+celery-beat.workspace = true
 celery-proto.workspace = true
 celery-transport.workspace = true
 celery-worker.workspace = true

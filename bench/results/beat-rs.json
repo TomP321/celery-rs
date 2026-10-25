@@ -1,0 +1,41 @@
+{
+ "micro": {
+  "remaining_estimate_simple_ns": 3643.6312992009334,
+  "is_due_simple_ns": 7835.69025079487,
+  "remaining_estimate_mixed_ns": 3531.920100795105,
+  "is_due_mixed_ns": 8068.382499914151
+ },
+ "brokers": {
+  "redis": {
+   "pss_3_kb": 45654,
+   "pss_1000_kb": 56256,
+   "tick": {
+    "tick_us": 1160.9040915,
+    "tick_wall_us": 1161.029224502272,
+    "entries": 1000
+   },
+   "sends": {
+    "sends": 1493,
+    "seconds": 3.000792624981841,
+    "sends_s": 497.53521372008663,
+    "cpu_sends_s": 561.144491843798
+   }
+  },
+  "amqp": {
+   "pss_3_kb": 45665,
+   "pss_1000_kb": 56579,
+   "tick": {
+    "tick_us": 1147.5603845,
+    "tick_wall_us": 1147.5718170113396,
+    "entries": 1000
+   },
+   "sends": {
+    "sends": 1659,
+    "seconds": 3.000861414009705,
+    "sends_s": 552.8412582649959,
+    "cpu_sends_s": 558.7310193503098
+   }
+  }
+ },
+ "label": "rs"
+}

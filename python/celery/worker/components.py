@@ -213,9 +213,14 @@ class Beat(bootsteps.StartStopStep):
         pool_module = w.pool_cls if isinstance(w.pool_cls, str) else w.pool_cls.__module__
         if pool_module.endswith(('gevent', 'eventlet')):
             raise ImproperlyConfigured(ERR_B_GREEN)
+        # Il master di celery-rs ha già i thread del core Rust: un `fork`
+        # del beat incorporato lascerebbe nel figlio un runtime tokio non
+        # valido (PLAN: si forka solo prima di avviare i thread). Il beat
+        # gira quindi in un thread dello stesso processo.
         b = w.beat = EmbeddedService(w.app,
                                      schedule_filename=w.schedule_filename,
-                                     scheduler_cls=w.scheduler)
+                                     scheduler_cls=w.scheduler,
+                                     thread=True)
         return b
 
 

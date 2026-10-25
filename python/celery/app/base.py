@@ -61,6 +61,10 @@ __all__ = ('Celery',)
 
 _OMITTED = object()
 
+#: `timezone.utc` è una property di `celery.utils.time._Zone`: il suo valore
+#: resta lo stesso per tutta la vita del processo (cache di `ZoneInfo`).
+_UTC_ZONE = timezone.utc
+
 logger = get_logger(__name__)
 
 if sys.version_info >= (3, 14):
@@ -1388,7 +1392,11 @@ class Celery:
     def now(self):
         """Return the current time and date as a datetime."""
         now_in_utc = to_utc(datetime.now(datetime_timezone.utc))
-        return now_in_utc.astimezone(self.timezone)
+        zone = self.timezone
+        if zone is _UTC_ZONE:
+            # `to_utc` restituisce già UTC: `astimezone` non cambierebbe nulla.
+            return now_in_utc
+        return now_in_utc.astimezone(zone)
 
     def select_queues(self, queues=None):
         """Select subset of queues.

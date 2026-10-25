@@ -35,7 +35,7 @@ from kombu.transport import TRANSPORT_ALIASES
 from kombu.transport.base import to_rabbitmq_queue_arguments
 from kombu.utils.functional import dictfilter
 from kombu.utils.json import JSONEncoder
-from kombu.utils.url import parse_url
+from kombu.utils.url import as_url, parse_url
 
 try:  # il pacchetto completo lo installa sempre; il riferimento no.
     import _celery_rs
@@ -186,6 +186,31 @@ class FastConnection(KombuConnection):
         """``transport.driver_type`` senza importare il trasporto."""
         return _SCHEMES[(self.transport_cls or '').lower()]
 
+    def as_uri(self, include_password=False, mask='**', getfields=None):
+        """Come ``Connection.as_uri`` senza `self.transport` (nessun import)."""
+        return as_url(
+            self.transport_cls or '', self.hostname or 'localhost', self.port,
+            self.userid, self.password, self.virtual_host,
+            sanitize=not include_password, mask=mask,
+        )
+
+    def release(self):
+        """Chiude senza istanziare il trasporto kombu.
+
+        `kombu.Connection._close` legge `self._transport`, che se assente
+        verrebbe creato (importando redis-py/py-amqp) solo per essere chiuso.
+        Sul percorso Rust il socket vive nella connessione nativa: qui si
+        azzerano solo i riferimenti lazy quando non c'è nulla da chiudere.
+        """
+        if (self._transport is None and self._connection is None
+                and self._default_channel is None):
+            self.declared_entities.clear()
+            self._closed = True
+            return
+        super().release()
+
+    close = release
+
     @contextmanager
     def _reraise_as_library_errors(
         self,
@@ -249,6 +274,47 @@ def fast_connection(app, url=None):
     if not use_fast_producer(connection):
         return None
     return connection
+
+
+def is_fast_connection(connection):
+    """True se *connection* è una :class:`FastConnection` (percorso Rust)."""
+    return isinstance(connection, FastConnection)
+
+
+def ensure_connection(connection, errback=None, max_retries=None,
+                      interval_start=2, interval_step=2, interval_max=30):
+    """``kombu.Connection.ensure_connection`` senza aprire un trasporto kombu.
+
+    Stessa sequenza di tentativi e di intervalli di kombu (2, 4, ... fino a
+    ``interval_max``), con ``errback(exc, interval)`` a ogni fallimento che
+    non ha ancora esaurito ``max_retries``. La connessione Rust viene creata
+    al primo tentativo riuscito e riusata dai producer dello stesso processo.
+    """
+    retries = 0
+    while True:
+        try:
+            _native_entry(connection)
+            return connection
+        except _RETRY_ERRORS as exc:
+            if max_retries is not None and retries >= max_retries:
+                raise OperationalError(str(exc)) from exc
+            interval = min(interval_start + interval_step * retries, interval_max)
+            if errback is not None:
+                errback(exc, interval)
+            if interval:
+                # Come `retry_over_time`, che dorme in passi da un secondo.
+                for _ in range(int(interval)):
+                    time.sleep(1.0)
+                time.sleep(abs(int(interval) - interval))
+            retries += 1
+            _STATS['retries'] += 1
+
+
+def release_connection(connection):
+    """Chiude la connessione Rust associata a *connection* (best effort)."""
+    entry = _entries.get(_native_key(connection))
+    if entry is not None:
+        _discard_entry(connection, entry)
 
 
 def pool_limit(app):
