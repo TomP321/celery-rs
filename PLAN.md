@@ -120,10 +120,10 @@ Infrastruttura via docker su porte dedicate: Redis `:6390`, RabbitMQ `:5673`.
 | 2 ✅ | Trasporti | 02a API+memory, poi 02b Redis e 02c AMQP in parallelo (worktree separati) | interop con kombu + `compat wire` sui comandi |
 | 3 ✅ | Client Python | guscio `celery`: app, conf/defaults, Task, registry, routing, amqp producer, signature/canvas, AsyncResult/GroupResult | `compat api` verde; unit `t/unit/app`, `tasks`, `test_canvas` |
 | 4 ✅ | Result backend | redis/rpc/memory, chord join/counter, get/wait/propagate | matrix: client rs + worker ref verde |
-| 5 | Worker | master Rust, zygote+pool, trace, ack late, retry, time limit, revoke, eventi, control, autoscale, shutdown/warm/cold, segnali | matrix completa verde |
+| 5 ✅ | Worker | master Python + core Rust (consumer, rsloop su epoll, zygote+pool), trace, ack late, retry, time limit, revoke, eventi, control, autoscale, shutdown/warm/cold, segnali | matrix completa verde |
 | 6 | Beat | scheduler, crontab/solar, persistenza | `test_beat` + `t/unit/app/test_schedules` |
 | 7 | CLI | `celery worker/beat/call/inspect/control/purge/result/events/status/multi` | output e exit code identici |
-| 8 | Ottimizzazione | profiling, misure, tuning | target tabella §Ottimizzazioni |
+| 8 | Ottimizzazione | profiling, misure, tuning; pidbox/mingle/gossip fuori da kombu, mimalloc, latenza rpc, import redis-py | target tabella §Ottimizzazioni |
 | 9 | Hardening | connection recovery, test leak, fuzz del parser messaggi | `t/integration` completa |
 
 ## Metodo di lavoro (orchestrazione)
