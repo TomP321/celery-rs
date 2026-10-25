@@ -95,6 +95,25 @@ def inspect():
 
 
 @scenario
+def two_workers(phase='main'):
+    """Due worker: mingle sincronizza le revoche, gossip/inspect vedono entrambi i nodi.
+
+    Il driver avvia il primo worker, esegue la fase ``pre``, avvia il secondo
+    (``compat2@``, che consuma anche ``compat2``) e poi la fase ``main``.
+    """
+    if phase == 'pre':
+        app.control.revoke('mingle-0')
+        time.sleep(0.5)
+        return
+    replies = app.control.inspect(timeout=1).ping() or {}
+    assert len(replies) == 2, replies
+    # solo il secondo worker consuma `compat2`: la revoca gli arriva da mingle
+    r = add.apply_async((1, 2), task_id='mingle-0', queue='compat2')
+    wait_state(r, states.REVOKED)
+    assert add.apply_async((2, 2), task_id='mingle-1', queue='compat2').get(timeout=TIMEOUT) == 4
+
+
+@scenario
 def long_task():
     # il driver manda SIGTERM al worker dopo il client: il task deve essere già finito
     assert sleep.apply_async((1,), task_id='sleep-0').get(timeout=TIMEOUT) == 1
@@ -104,11 +123,13 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--list', action='store_true')
     ap.add_argument('--scenario')
+    ap.add_argument('--phase', default='main')
     args = ap.parse_args()
     if args.list:
         print('\n'.join(SCENARIOS))
         return
-    SCENARIOS[args.scenario]()
+    fn = SCENARIOS[args.scenario]
+    fn(phase=args.phase) if args.phase != 'main' else fn()
 
 
 if __name__ == '__main__':

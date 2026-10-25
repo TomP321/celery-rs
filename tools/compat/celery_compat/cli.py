@@ -318,42 +318,75 @@ def _worker_semantic(broker, records, norm):
     return sorted(out)
 
 
-def run_worker_scenario(venv, ref_venv, broker, name, pool):
+#: scenari che richiedono un secondo worker avviato tra la fase `pre` e la fase `main`
+TWO_WORKER_SCENARIOS = {'two_workers'}
+
+
+def _spawn_worker(venv, env, pool, nodename, queues=None):
     import threading
+    argv = [py(venv), '-P', '-m', 'celery', '-A', 'worker_app', 'worker', '-P', pool, '-c', '2',
+            '-E', '-n', nodename, '-l', 'info']
+    if queues:
+        argv += ['-Q', queues]
+    worker = subprocess.Popen(argv, cwd=OUT, env=env, stdout=subprocess.PIPE,
+                              stderr=subprocess.STDOUT, text=True, start_new_session=True)
+    log, ready = [], threading.Event()
+
+    def pump():
+        for line in worker.stdout:
+            log.append(line)
+            if ' ready.' in line:
+                ready.set()
+    threading.Thread(target=pump, daemon=True).start()
+    return worker, log, ready
+
+
+def _stop_workers(workers):
+    for worker in workers:
+        if worker.poll() is None:
+            worker.send_signal(15)
+    for worker in workers:
+        try:
+            worker.wait(30)
+        except subprocess.TimeoutExpired:
+            pass
+        if worker.poll() is None:
+            os.killpg(worker.pid, 9)
+            worker.wait()
+
+
+def run_worker_scenario(venv, ref_venv, broker, name, pool):
     from . import wire
     url, _ = BROKERS[broker]
     backend = 'redis://127.0.0.1:6390/1'
     env = venv_env()
     env.update(COMPAT_BROKER=url, COMPAT_BACKEND=backend, PYTHONPATH=str(HERE))
     norm = wire.Normalizer()
+    client_argv = [py(ref_venv), '-P', '-s', str(HERE / 'worker_client.py'), '--scenario', name]
+    workers = []
     with wire.capture(broker) as cap:
-        worker = subprocess.Popen(
-            [py(venv), '-P', '-m', 'celery', '-A', 'worker_app', 'worker', '-P', pool, '-c', '2',
-             '-E', '-n', 'compat@%h', '-l', 'info'],
-            cwd=OUT, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
-            start_new_session=True)
-        log, ready = [], threading.Event()
-
-        def pump():
-            for line in worker.stdout:
-                log.append(line)
-                if ' ready.' in line:
-                    ready.set()
-        threading.Thread(target=pump, daemon=True).start()
+        worker, log, ready = _spawn_worker(venv, env, pool, 'compat@%h')
+        workers.append(worker)
         try:
             if not ready.wait(30):
                 return None, 'worker non pronto: ' + ''.join(log[-5:])[-300:]
-            client = subprocess.run([py(ref_venv), '-P', '-s', str(HERE / 'worker_client.py'),
-                                     '--scenario', name],
-                                    cwd=OUT, env=env, capture_output=True, text=True, timeout=90)
+            if name in TWO_WORKER_SCENARIOS:
+                pre = subprocess.run([*client_argv, '--phase', 'pre'], cwd=OUT, env=env,
+                                     capture_output=True, text=True, timeout=90)
+                if pre.returncode != 0:
+                    err = pre.stderr.strip().splitlines()
+                    return None, 'client pre: ' + (err[-1] if err else 'exit != 0')
+                second, log2, ready2 = _spawn_worker(venv, env, pool, 'compat2@%h',
+                                                     queues='celery,compat2')
+                workers.append(second)
+                if not ready2.wait(30):
+                    return None, 'secondo worker non pronto: ' + ''.join(log2[-5:])[-300:]
+            client = subprocess.run(client_argv, cwd=OUT, env=env, capture_output=True,
+                                    text=True, timeout=90)
             # gli eventi dei task sono bufferizzati: lascia che il dispatcher li scarichi
             time.sleep(1.5)
-            worker.send_signal(15)
-            worker.wait(30)
         finally:
-            if worker.poll() is None:
-                os.killpg(worker.pid, 9)
-                worker.wait()
+            _stop_workers(workers)
     if client.returncode != 0:
         err = client.stderr.strip().splitlines()
         return None, 'client: ' + (err[-1] if err else 'exit != 0')
