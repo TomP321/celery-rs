@@ -51,6 +51,8 @@ use futures_core::Stream;
 use crate::message::{Delivery, DeliveryTag, Headers, Message};
 use crate::url::{TransportOptions, Url};
 
+use crate::control::{ControlOutcome, ControlRequest};
+
 /// Risultato delle operazioni di trasporto.
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -535,6 +537,20 @@ pub trait Transport: Send + Sync {
     /// Con `no_ack=false` entra nell'insieme in volo del trasporto e va
     /// confermato con [`Transport::ack`]/[`Transport::reject`].
     fn get<'a>(&'a self, queue: &'a str, no_ack: bool) -> BoxFuture<'a, Result<Option<Delivery>>>;
+
+    /// Comando remote-control: pubblica sul mailbox e, se c'è una coda di
+    /// risposta, raccoglie le risposte con la semantica di `kombu.pidbox`.
+    ///
+    /// Il default dichiara exchange e coda di risposta, pubblica, consuma con
+    /// `no_ack` e cancella la coda (`Mailbox._broadcast`/`_collect`). Il
+    /// trasporto Redis lo sostituisce per riprodurre gli stessi comandi di
+    /// kombu (script di binding e BRPOP con il suo timeout).
+    fn control_request<'a>(
+        &'a self,
+        request: ControlRequest,
+    ) -> BoxFuture<'a, Result<ControlOutcome>> {
+        Box::pin(crate::control::control_request_default(self, request))
+    }
 
     /// Conferma una consegna. No-op se il tag è sconosciuto (come il QoS di
     /// kombu), così un ack tardivo dopo un reconnect non fa cadere il worker.

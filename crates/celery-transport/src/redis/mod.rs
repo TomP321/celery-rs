@@ -49,6 +49,7 @@ use compact_str::CompactString;
 use futures_core::Stream;
 use tokio::sync::Notify;
 
+use crate::control::{ControlOutcome, ControlRequest, ReplyRoute};
 use crate::message::{Delivery, DeliveryTag, HeaderValue, Headers, Message};
 use crate::routing::{PreparedBinding, TopicMatcher, key_to_pattern};
 use crate::transport::{
@@ -102,13 +103,16 @@ end
 return #overdue
 ";
 
-/// Rilascio del mutex: `DEL` solo se il token è ancora il nostro.
+/// Rilascio del mutex: script identico a `redis.lock.Lock.LUA_RELEASE_SCRIPT`
+/// (stesso SHA1, quindi stesso `EVALSHA` di redis-py in `MONITOR`).
 const RELEASE_LOCK: &str = r"
-if redis.call('GET', KEYS[1]) == ARGV[1] then
-    return redis.call('DEL', KEYS[1])
-end
-return 0
-";
+        local token = redis.call('get', KEYS[1])
+        if not token or token ~= ARGV[1] then
+            return 0
+        end
+        redis.call('del', KEYS[1])
+        return 1
+    ";
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex
@@ -290,8 +294,19 @@ struct Shared {
     /// Connessione dedicata alle transazioni `WATCH`/`MULTI`/`EXEC`.
     transactions: tokio::sync::Mutex<MultiplexedConnection>,
     state: Mutex<State>,
+    /// Timestamp dell'ultimo refresh/sweep dei binding con `x-expires`
+    /// (`Channel._binding_expiry_refreshed_at`/`_bindings_swept_at`).
+    binding_maintenance: Mutex<BindingMaintenance>,
     closed: AtomicBool,
 }
+
+/// Stato dei timer di manutenzione dei binding.
+#[derive(Default)]
+struct BindingMaintenance {
+    refreshed_at: Option<Instant>,
+    swept_at: Option<Instant>,
+}
+
 
 impl Shared {
     fn ensure_open(&self) -> Result<()> {
@@ -804,7 +819,170 @@ impl Shared {
         let _ = self.sweep_bindings(100).await;
         Ok(())
     }
+
+    /// Binding con `x-expires` delle *queues*, con il TTL effettivo.
+    fn binding_rows(&self, queues: &[CompactString]) -> Vec<BindingRefreshRow> {
+        let state = lock(&self.state);
+        let mut rows = Vec::new();
+        for binding in &state.bindings {
+            if !queues.contains(&binding.queue) {
+                continue;
+            }
+            let Some(expire) = state.queue_expires.get(&binding.queue).copied() else {
+                continue;
+            };
+            let kind = state
+                .exchanges
+                .get(&binding.exchange)
+                .map_or(ExchangeType::Direct, |info| info.kind);
+            let pattern = PreparedBinding::new(kind, &binding.queue, &binding.routing_key)
+                .ok()
+                .and_then(|prepared| prepared.pattern);
+            rows.push(BindingRefreshRow {
+                exchange: binding.exchange.to_string(),
+                member: binding_member(
+                    &self.config.sep,
+                    &binding.routing_key,
+                    pattern.as_deref(),
+                    &binding.queue,
+                ),
+                ttl: expire
+                    .saturating_mul(BINDING_EXPIRES_FACTOR)
+                    .max(MIN_BINDING_TTL),
+            });
+        }
+        rows
+    }
+
+    /// `MultiChannelPoller.get` all'inizio di `drain_events`:
+    /// `maybe_refresh_binding_expiry()` con il suo throttle.
+    ///
+    /// `_refresh_bindings` invoca lo script dentro un `pipeline`, quindi
+    /// redis-py manda prima `SCRIPT EXISTS` e poi `MULTI`/`EVALSHA`/`EXEC`.
+    async fn refresh_binding_expiry_control(&self, queues: &[CompactString]) -> Result<()> {
+        let rows = self.binding_rows(queues);
+        if rows.is_empty() {
+            return Ok(());
+        }
+        let refresh_every = rows
+            .iter()
+            .map(|row| row.ttl as f64 / 1000.0 / 3.0)
+            .fold(f64::INFINITY, f64::min);
+        let refresh = {
+            let maintenance = lock(&self.binding_maintenance);
+            maintenance
+                .refreshed_at
+                .is_none_or(|at| at.elapsed().as_secs_f64() >= refresh_every)
+        };
+        let script = ::redis::Script::new(REFRESH_BINDING);
+        let mut conn = self.command_conn();
+        if refresh {
+            lock(&self.binding_maintenance).refreshed_at = Some(Instant::now());
+            // redis-py registra lo script nel pipeline e ne verifica l'esistenza
+            // prima del MULTI.
+            let _: Vec<i64> = ::redis::cmd("SCRIPT")
+                .arg("EXISTS")
+                .arg(script.get_hash())
+                .query_async(&mut conn)
+                .await
+                .map_err(transport_error)?;
+            let mut pipe = ::redis::pipe();
+            pipe.atomic();
+            for row in &rows {
+                pipe.cmd("EVALSHA")
+                    .arg(script.get_hash())
+                    .arg(2)
+                    .arg(self.config.binding_key(&row.exchange))
+                    .arg(self.config.deadlines_key())
+                    .arg(&row.member)
+                    .arg(&row.exchange)
+                    .arg(row.ttl)
+                    .ignore();
+            }
+            pipe.query_async::<()>(&mut conn)
+                .await
+                .map_err(transport_error)?;
+        }
+        let sweep = {
+            let maintenance = lock(&self.binding_maintenance);
+            maintenance
+                .swept_at
+                .is_none_or(|at| at.elapsed() >= BINDING_SWEEP_INTERVAL)
+        };
+        if sweep {
+            lock(&self.binding_maintenance).swept_at = Some(Instant::now());
+            self.sweep_bindings(100).await?;
+        }
+        Ok(())
+    }
+
+    /// `QoS.restore_visible` come la chiama `maybe_restore_messages`:
+    /// mutex, `ZRANGE ... BYSCORE REV WITHSCORES`, ripristino e rilascio.
+    ///
+    /// Ordine e comandi differiscono da [`Shared::restore_visible`] (usata dal
+    /// consumatore) perché qui devono coincidere con kombu.
+    async fn restore_visible_kombu(&self) -> Result<()> {
+        let ceil = now_seconds() - self.config.visibility_timeout;
+        let mut token = CompactString::new("");
+        use std::fmt::Write as _;
+        let _ = write!(token, "{}", uuid::Uuid::new_v4());
+        let mut lock_conn = self.command_conn();
+        let acquired: Option<String> = ::redis::cmd("SET")
+            .arg(self.config.unacked_mutex_key())
+            .arg(token.as_str())
+            .arg("NX")
+            .arg("PX")
+            .arg(self.config.unacked_mutex_expire.saturating_mul(1000))
+            .query_async(&mut lock_conn)
+            .await
+            .map_err(transport_error)?;
+        if acquired.is_none() {
+            return Ok(());
+        }
+        let mut result = Ok(());
+        match self.visible_unacked(ceil).await {
+            Ok(visible) => {
+                for tag in visible {
+                    if let Err(error) = self.restore_by_tag(&tag, false).await {
+                        result = Err(error);
+                        break;
+                    }
+                }
+            }
+            Err(error) => result = Err(error),
+        }
+        let _ = ::redis::Script::new(RELEASE_LOCK)
+            .key(self.config.unacked_mutex_key())
+            .arg(token.as_str())
+            .invoke_async::<i64>(&mut lock_conn)
+            .await;
+        result
+    }
+
+    /// `client.zrange(unacked_index, ceil, 0, desc, byscore, withscores)`.
+    async fn visible_unacked(&self, ceil: f64) -> Result<Vec<String>> {
+        let mut conn = self.command_conn();
+        let rows: Vec<(String, f64)> = ::redis::cmd("ZRANGE")
+            .arg(self.config.unacked_index_key())
+            .arg(float_string(ceil))
+            .arg(0)
+            .arg("BYSCORE")
+            .arg("REV")
+            .arg("WITHSCORES")
+            .query_async(&mut conn)
+            .await
+            .map_err(transport_error)?;
+        Ok(rows.into_iter().map(|(tag, _score)| tag).collect())
+    }
 }
+
+/// Riga di binding da rinfrescare (`_refresh_bindings`).
+struct BindingRefreshRow {
+    exchange: String,
+    member: String,
+    ttl: u64,
+}
+
 
 fn binding_member(sep: &str, routing_key: &str, pattern: Option<&str>, queue: &str) -> String {
     let mut member =
@@ -980,6 +1158,7 @@ pub(crate) async fn connect(url: &Url, config: &ConnectConfig) -> Result<RedisTr
         command,
         transactions: tokio::sync::Mutex::new(transactions),
         state: Mutex::new(State::default()),
+        binding_maintenance: Mutex::new(BindingMaintenance::default()),
         closed: AtomicBool::new(false),
     });
 
@@ -1024,6 +1203,101 @@ enum PublishAction {
     },
     /// `PUBLISH` sul topic di un exchange fanout.
     Publish { topic: String, payload: Vec<u8> },
+}
+
+impl RedisTransport {
+    /// `Mailbox._collect` sul trasporto Redis: `drain_events` di kombu.
+    ///
+    /// Il `BRPOP` viene inviato con il timeout del canale (`brpop_timeout`,
+    /// 1s di default) e resta in volo; il timeout Python è quello del
+    /// `poll`, al cui scadere kombu esegue `maybe_restore_messages`.
+    async fn control_collect(
+        &self,
+        reply: &ReplyRoute,
+        ticket: &str,
+        timeout: f64,
+        limit: Option<usize>,
+    ) -> Result<ControlOutcome> {
+        let config = &self.shared.config;
+        // `MultiChannelPoller.get`: refresh dei binding prima del BRPOP.
+        let queues = [reply.name.clone()];
+        self.shared
+            .refresh_binding_expiry_control(&queues)
+            .await?;
+
+        let mut keys = Vec::with_capacity(config.priority_steps.len());
+        for step in &config.priority_steps {
+            keys.push(config.queue_key(&reply.name, *step));
+        }
+        let brpop_timeout = config.options.polling_interval.unwrap_or(1.0);
+        let mut conn = config
+            .client
+            .get_multiplexed_async_connection_with_config(&config.conn_config)
+            .await
+            .map_err(|error| Error::Connection(format!("connessione Redis: {error}")))?;
+
+        let wait = if timeout.is_finite() && timeout > 0.0 {
+            Duration::from_secs_f64(timeout)
+        } else {
+            Duration::ZERO
+        };
+        let mut deadline = Instant::now() + wait;
+        let mut outcome = ControlOutcome::default();
+        let mut iterations = 0usize;
+        loop {
+            if limit.is_some_and(|limit| iterations >= limit) {
+                break;
+            }
+            let mut cmd = ::redis::cmd("BRPOP");
+            cmd.arg(&keys);
+            // kombu passa `brpop_timeout` così com'è: il default è l'intero 1,
+            // `polling_interval` un float (stessa resa di redis-py).
+            if brpop_timeout.fract() == 0.0 {
+                cmd.arg(brpop_timeout as i64);
+            } else {
+                cmd.arg(brpop_timeout);
+            }
+            let mut brpop = Box::pin(
+                cmd.query_async::<Option<(String, Vec<u8>)>>(&mut conn),
+            );
+            let item = if wait.is_zero() {
+                // `poller.poll(0)`: un solo poll senza attesa.
+                poll_future_once(&mut brpop)
+            } else {
+                tokio::time::timeout_at(deadline.into(), brpop).await.ok()
+            };
+            let Some(item) = item else {
+                // Nessun evento: `maybe_restore_messages` e `Empty`.
+                let _ = self.shared.restore_visible_kombu().await;
+                break;
+            };
+            match item {
+                Ok(Some((_key, raw))) => {
+                    iterations += 1;
+                    let envelope = json::decode(&raw)?;
+                    outcome.push(delivery_from(envelope), ticket, now_seconds());
+                    deadline = Instant::now() + wait;
+                }
+                // BRPOP scaduto sul server: nessun evento, come sopra.
+                Ok(None) => {
+                    let _ = self.shared.restore_visible_kombu().await;
+                    break;
+                }
+                Err(error) => return Err(transport_error(error)),
+            }
+        }
+        Ok(outcome)
+    }
+}
+
+/// Un solo poll di una future, senza attesa (per `timeout=0`).
+fn poll_future_once<F: Future>(future: &mut Pin<Box<F>>) -> Option<F::Output> {
+    let waker = std::task::Waker::noop();
+    let mut context = Context::from_waker(waker);
+    match future.as_mut().poll(&mut context) {
+        Poll::Ready(value) => Some(value),
+        Poll::Pending => None,
+    }
 }
 
 impl RedisTransport {
@@ -1326,6 +1600,41 @@ impl Transport for RedisTransport {
 
     fn publish_batch<'a>(&'a self, requests: Vec<PublishRequest>) -> BoxFuture<'a, Result<()>> {
         Box::pin(async move { self.enqueue(requests, true).await })
+    }
+
+    fn control_request<'a>(
+        &'a self,
+        request: ControlRequest,
+    ) -> BoxFuture<'a, Result<ControlOutcome>> {
+        Box::pin(async move {
+            self.shared.ensure_open()?;
+            if let Some(reply) = &request.reply {
+                self.declare_exchange(&request.reply_exchange_declaration(reply))
+                    .await?;
+                self.declare_queue(&request.reply_queue_declaration(reply))
+                    .await?;
+                self.bind(&request.reply_binding(reply)).await?;
+            }
+            self.declare_exchange(&request.exchange_declaration())
+                .await?;
+            self.publish(request.publish_request()).await?;
+
+            let Some(reply) = request.reply.clone() else {
+                return Ok(ControlOutcome::default());
+            };
+            // `Consumer.declare()`: coda e binding vengono ridichiarati.
+            self.declare_queue(&request.reply_queue_declaration(&reply))
+                .await?;
+            self.bind(&request.reply_binding(&reply)).await?;
+
+            let ticket = request.ticket.clone().unwrap_or_default();
+            let outcome = self
+                .control_collect(&reply, &ticket, request.timeout, request.limit)
+                .await?;
+            // `chan.after_reply_message_received(queue.name)` nel `finally`.
+            self.delete_queue(&reply.name).await?;
+            Ok(outcome)
+        })
     }
 
     fn consume<'a>(

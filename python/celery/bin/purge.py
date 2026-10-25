@@ -59,8 +59,20 @@ def purge(ctx, force, queues, exclude_queues, **kwargs):
             except conn.channel_errors:
                 return 0
 
-        with app.connection_for_write() as conn:
-            messages = sum(_purge(conn, queue) for queue in names)
+        # `app.connection_for_write()` è lazy: con il producer Rust la
+        # connessione al broker resta nel core (niente redis-py/py-amqp).
+        from celery.app import _rs_producer
+        fast_connection = _rs_producer.fast_connection(app)
+        if fast_connection is not None:
+            try:
+                native = _rs_producer._native_entry(fast_connection).connection
+                messages = sum(native.purge(queue) for queue in names)
+            except (ConnectionError, OSError) as exc:
+                from kombu.exceptions import OperationalError
+                raise OperationalError(str(exc)) from exc
+        else:
+            with app.connection_for_write() as conn:
+                messages = sum(_purge(conn, queue) for queue in names)
 
         if messages:
             messages_headline = text.pluralize(messages, 'message')

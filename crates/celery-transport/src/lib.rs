@@ -4,6 +4,7 @@
 //! `amqp://`/`amqps://`/`pyamqp://` sono tutti implementati.
 
 pub mod amqp;
+pub mod control;
 pub mod memory;
 pub mod message;
 pub mod redis;
@@ -12,6 +13,10 @@ pub mod transport;
 pub mod url;
 
 pub use amqp::AmqpTransport;
+pub use control::{
+    ControlOutcome, ControlReply, ControlRequest, ReplyKind, ReplyRoute, collect_replies,
+    control_request_default, now_seconds,
+};
 pub use memory::MemoryTransport;
 pub use message::{Decimal, Delivery, DeliveryTag, HeaderValue, Headers, Message, Properties};
 pub use redis::RedisTransport;

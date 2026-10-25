@@ -44,7 +44,6 @@ from celery.utils.time import subtract_datetimes, timezone, to_utc
 from ..utils.annotations import annotation_is_class, annotation_issubclass, get_optional_arg
 from ..utils.quorum_queues import detect_quorum_queues
 # Load all builtin tasks
-from . import _rs_producer
 from . import backends, builtins  # noqa
 from .annotations import prepare as prepare_annotations
 from .autoretry import add_autoretry_behaviour
@@ -1124,6 +1123,7 @@ class Celery:
             options, route_name or name, args, kwargs, task_type)
 
         if eta or countdown:
+            from . import _rs_producer
             pool = self.producer_pool
             # Il pool Rust sa già il driver: evita di importare il trasporto.
             if isinstance(pool, _rs_producer.FastProducerPool):
@@ -1486,6 +1486,7 @@ class Celery:
         except (AttributeError, KeyError):
             pass
         # Connessioni e runtime Rust del padre non valgono nel figlio.
+        from . import _rs_producer
         _rs_producer.after_fork()
         self.on_after_fork.send(sender=self)
 

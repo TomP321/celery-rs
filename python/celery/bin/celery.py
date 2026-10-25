@@ -1,4 +1,5 @@
 """Celery Command Line Interface."""
+import importlib
 import os
 import pathlib
 import sys
@@ -12,22 +13,97 @@ from click_plugins import with_plugins
 
 from celery import VERSION_BANNER
 from celery.app.utils import find_app
-from celery.bin.amqp import amqp
 from celery.bin.base import CeleryCommand, CeleryOption, CLIContext, consume_preload_options
-from celery.bin.beat import beat
-from celery.bin.call import call
-from celery.bin.control import control, inspect, status
-from celery.bin.events import events
-from celery.bin.graph import graph
-from celery.bin.list import list_
-from celery.bin.logtool import logtool
-from celery.bin.migrate import migrate
-from celery.bin.multi import multi
-from celery.bin.purge import purge
-from celery.bin.result import result
-from celery.bin.shell import shell
-from celery.bin.upgrade import upgrade
-from celery.bin.worker import worker
+
+#: Comandi caricati solo quando servono davvero (help, esecuzione o `compat
+#: api`). Le import qui sotto sarebbero tutte pagate da ogni invocazione,
+#: anche da `celery call`/`status`.
+_COMMANDS = {
+    'amqp': ('celery.bin.amqp', 'amqp'),
+    'beat': ('celery.bin.beat', 'beat'),
+    'call': ('celery.bin.call', 'call'),
+    'control': ('celery.bin.control', 'control'),
+    'events': ('celery.bin.events', 'events'),
+    'graph': ('celery.bin.graph', 'graph'),
+    'inspect': ('celery.bin.control', 'inspect'),
+    'list': ('celery.bin.list', 'list_'),
+    'logtool': ('celery.bin.logtool', 'logtool'),
+    'migrate': ('celery.bin.migrate', 'migrate'),
+    'multi': ('celery.bin.multi', 'multi'),
+    'purge': ('celery.bin.purge', 'purge'),
+    'result': ('celery.bin.result', 'result'),
+    'shell': ('celery.bin.shell', 'shell'),
+    'status': ('celery.bin.control', 'status'),
+    'upgrade': ('celery.bin.upgrade', 'upgrade'),
+    'worker': ('celery.bin.worker', 'worker'),
+}
+
+#: Nomi pubblici del modulo (come nel riferimento, ``list_`` incluso) → comando.
+#: Risolti al primo accesso da ``__getattr__`` (PEP 562): ``from
+#: celery.bin.celery import worker`` restituisce il comando vero.
+_ATTRIBUTES = {('list_' if name == 'list' else name): entry
+               for name, entry in _COMMANDS.items()}
+
+
+def __getattr__(name):
+    entry = _ATTRIBUTES.get(name)
+    if entry is None:
+        raise AttributeError(f'module {__name__!r} has no attribute {name!r}')
+    module, attribute = entry
+    value = getattr(importlib.import_module(module), attribute)
+    globals()[name] = value
+    return value
+
+
+def __dir__():
+    return sorted(set(globals()) | set(_ATTRIBUTES))
+
+
+class _LazyCeleryGroup(DYMGroup):
+    """``DYMGroup`` che importa i sottocomandi su richiesta.
+
+    ``self.commands`` contiene solo i comandi già materializzati (``report`` e
+    i plugin); ``get_command`` importa il modulo del comando richiesto.
+    L'accesso diretto a ``commands`` (``compat api``, plugin, terze parti)
+    materializza tutto, così la superficie pubblica resta identica.
+    """
+
+    def __init__(self, *args, **kwargs):
+        self._commands = {}
+        self._lazy = dict(_COMMANDS)
+        super().__init__(*args, **kwargs)
+
+    def _load_all(self):
+        for name in list(self._lazy):
+            self.get_command(None, name)
+
+    @property
+    def commands(self):
+        self._load_all()
+        return self._commands
+
+    @commands.setter
+    def commands(self, value):
+        self._commands = value
+
+    def add_command(self, cmd, name=None):
+        name = name or cmd.name
+        if name is None:
+            raise TypeError("Command has no name.")
+        self._commands[name] = cmd
+
+    def get_command(self, ctx, cmd_name):
+        command = self._commands.get(cmd_name)
+        if command is None and cmd_name in self._lazy:
+            module, attribute = self._lazy[cmd_name]
+            command = getattr(importlib.import_module(module), attribute)
+            self._lazy.pop(cmd_name, None)
+            self._commands[cmd_name] = command
+        return command
+
+    def list_commands(self, ctx):
+        return sorted(set(self._commands) | set(self._lazy))
+
 
 UNABLE_TO_LOAD_APP_MODULE_NOT_FOUND = click.style("""
 Unable to load celery application.
@@ -53,7 +129,7 @@ else:
 
 
 @with_plugins(_PLUGINS)
-@click.group(cls=DYMGroup, invoke_without_command=True)
+@click.group(cls=_LazyCeleryGroup, invoke_without_command=True)
 @click.option('-A',
               '--app',
               envvar='APP',
@@ -155,16 +231,17 @@ def celery(ctx, app, broker, result_backend, loader, config, workdir,
                          quiet=quiet)
 
     # User options
-    worker.params.extend(ctx.obj.app.user_options.get('worker', []))
-    beat.params.extend(ctx.obj.app.user_options.get('beat', []))
-    events.params.extend(ctx.obj.app.user_options.get('events', []))
+    for name in ('worker', 'beat', 'events'):
+        options = ctx.obj.app.user_options.get(name, ())
+        if options:
+            celery.get_command(ctx, name).params.extend(options)
 
     # Plugin callbacks such as Flower do not declare these options. Take
     # them off the keyword arguments before Click calls the callback (#7894).
     preload_options = ctx.obj.app.user_options.get('preload', ())
-    for command in celery.commands.values():
-        command.params.extend(preload_options)
-        if preload_options:
+    if preload_options:
+        for command in celery.commands.values():
+            command.params.extend(preload_options)
             command.callback = consume_preload_options(command.callback)
 
 
@@ -176,24 +253,6 @@ def report(ctx, **kwargs):
     app.loader.import_default_modules()
     ctx.obj.echo(app.bugreport())
 
-
-celery.add_command(purge)
-celery.add_command(call)
-celery.add_command(beat)
-celery.add_command(list_)
-celery.add_command(result)
-celery.add_command(migrate)
-celery.add_command(status)
-celery.add_command(worker)
-celery.add_command(events)
-celery.add_command(inspect)
-celery.add_command(control)
-celery.add_command(graph)
-celery.add_command(upgrade)
-celery.add_command(logtool)
-celery.add_command(amqp)
-celery.add_command(shell)
-celery.add_command(multi)
 
 # Monkey-patch click to display a custom error
 # when -A or --app are used as sub-command options instead of as options

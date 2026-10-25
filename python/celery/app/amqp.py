@@ -15,7 +15,6 @@ from celery.utils.saferepr import saferepr
 from celery.utils.text import indent as textindent
 from celery.utils.time import add_seconds_to_datetime, maybe_make_aware
 
-from . import _rs_producer
 from . import routes as _routes
 
 try:
@@ -662,6 +661,7 @@ class AMQP:
     @property
     def producer_pool(self):
         if self._producer_pool is None:
+            from . import _rs_producer
             connection = _rs_producer.fast_connection(self.app)
             if connection is not None:
                 # `app.pool` registra l'after-fork dell'app: il percorso veloce
@@ -689,6 +689,7 @@ class AMQP:
     def _event_dispatcher(self):
         # We call Dispatcher.publish with a custom producer
         # so don't need the dispatcher to be enabled.
+        from . import _rs_producer
         connection = _rs_producer.fast_connection(self.app)
         return self.app.events.Dispatcher(enabled=False, connection=connection)
 
