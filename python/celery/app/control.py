@@ -773,8 +773,18 @@ class Control:
             pattern (str): Custom pattern string to match
             matcher (Callable): Custom matcher to run the pattern to match
         """
+        arguments = dict(arguments or {}, **extra_kwargs)
+        if connection is None and channel is None:
+            from . import _rs_control
+            fast_connection = _rs_control.fast_connection(self.app)
+            if fast_connection is not None:
+                return _rs_control.broadcast(
+                    self, fast_connection, command, arguments,
+                    destination=destination, reply=reply, timeout=timeout,
+                    limit=limit, callback=callback, pattern=pattern,
+                    matcher=matcher,
+                )
         with self.app.connection_or_acquire(connection) as conn:
-            arguments = dict(arguments or {}, **extra_kwargs)
             if pattern and matcher:
                 # tests pass easier without requiring pattern/matcher to
                 # always be sent in

@@ -1,8 +1,12 @@
 """Redis result store backend."""
+import importlib
+import importlib.util
 import select
 import selectors
+import sys
 import threading
 import time
+import types
 import warnings
 from contextlib import contextmanager
 from functools import partial
@@ -13,7 +17,6 @@ from kombu.utils import symbol_by_name
 from kombu.utils.functional import retry_over_time
 from kombu.utils.objects import cached_property
 from kombu.utils.url import _parse_url, maybe_sanitize_url
-from redis import CredentialProvider
 
 from celery import states
 from celery._state import task_join_will_block
@@ -28,17 +31,131 @@ from celery.utils.time import humanize_seconds
 from .asynchronous import AsyncBackendMixin, BaseResultConsumer
 from .base import BaseKeyValueStoreBackend
 
-try:
-    import redis.connection
-    from kombu.transport.redis import get_redis_error_classes
-except ImportError:
-    redis = None
-    get_redis_error_classes = None
+logger = get_logger(__name__)
 
-try:
-    import redis.sentinel
-except ImportError:
-    pass
+
+def _lazy_module(name):
+    """Modulo segnaposto che importa ``name`` al primo attributo usato.
+
+    Serve a non caricare redis-py (e quindi ``redis.connection``/
+    ``redis.sentinel``) quando il backend usa il client Rust. Il tipo si chiama
+    ``module`` come un modulo vero: la superficie pubblica di questo modulo
+    (``compat api``) continua a vedere un modulo.
+    """
+    def __getattr__(self, attr):
+        if attr.startswith('__') and attr.endswith('__'):
+            raise AttributeError(attr)
+        return getattr(importlib.import_module(name), attr)
+
+    return type('module', (types.ModuleType,), {'__getattr__': __getattr__})(name)
+
+
+class _LazyClassMeta(type):
+    """Metaclasse di una classe segnaposto risolta al primo uso."""
+
+    def __new__(mcs, name, bases, namespace, **kwargs):
+        if '_resolver' in namespace:
+            return super().__new__(mcs, name, bases, namespace)
+        # Sottoclasse di un segnaposto (`class X(SentinelManagedSSLConnection)`):
+        # si deriva dalla classe vera, altrimenti `X()` creerebbe la base.
+        bases = tuple(b._resolver() if isinstance(b, _LazyClassMeta) else b
+                      for b in bases)
+        return types.new_class(name, bases, kwargs,
+                               lambda ns: ns.update(namespace))
+
+    def __call__(cls, *args, **kwargs):
+        return cls._resolver()(*args, **kwargs)
+
+    def __instancecheck__(cls, instance):
+        return isinstance(instance, cls._resolver())
+
+    def __subclasscheck__(cls, subclass):
+        return issubclass(subclass, cls._resolver())
+
+    def __getattr__(cls, name):
+        if name.startswith('_'):
+            raise AttributeError(name)
+        return getattr(cls._resolver(), name)
+
+
+def _lazy_class(module, qualname, resolver):
+    """Classe segnaposto con ``__module__``/``__qualname__`` della classe vera."""
+    return _LazyClassMeta(qualname, (), {
+        '__module__': module,
+        '__qualname__': qualname,
+        '_resolver': staticmethod(resolver),
+    })
+
+
+def _ssl_connection_class():
+    import redis
+    return redis.SSLConnection
+
+
+def _sentinel_ssl_connection_class():
+    import redis
+    SentinelManagedConnection = redis.sentinel.SentinelManagedConnection
+
+    class SentinelManagedSSLConnection(
+            SentinelManagedConnection, redis.SSLConnection):
+        """Connect to a Redis server using Sentinel + TLS.
+
+        Use Sentinel to identify which Redis server is the current master
+        to connect to and when connecting to the Master server, use an
+        SSL Connection.
+        """
+
+    # Definita dentro una funzione: senza questo l'origine sarebbe
+    # ``..._sentinel_ssl_connection_class.<locals>...`` (``compat api``).
+    SentinelManagedSSLConnection.__module__ = __name__
+    SentinelManagedSSLConnection.__qualname__ = 'SentinelManagedSSLConnection'
+    return SentinelManagedSSLConnection
+
+
+#: Moduli e classi del client: se redis-py è già importato (test, app che lo
+#: usa) si usano gli oggetti veri; altrimenti segnaposto risolti al primo uso,
+#: così il percorso Rust non carica redis-py all'avvio.
+if 'redis' in sys.modules:
+    redis = sys.modules['redis']
+    try:
+        _sentinel = redis.sentinel
+    except AttributeError:  # pragma: no cover - redis.sentinel sempre presente
+        _sentinel = _lazy_module('redis.sentinel')
+    _SSLConnection = redis.SSLConnection
+    try:
+        SentinelManagedSSLConnection = _sentinel_ssl_connection_class()
+    except (AttributeError, ImportError):  # pragma: no cover
+        SentinelManagedSSLConnection = _lazy_class(
+            __name__, 'SentinelManagedSSLConnection',
+            _sentinel_ssl_connection_class)
+else:
+    redis = _lazy_module('redis')
+    _sentinel = _lazy_module('redis.sentinel')
+    _SSLConnection = _lazy_class('redis.connection', 'SSLConnection',
+                                 _ssl_connection_class)
+    SentinelManagedSSLConnection = _lazy_class(
+        __name__, 'SentinelManagedSSLConnection',
+        _sentinel_ssl_connection_class)
+
+
+def _redis_installed():
+    try:
+        return importlib.util.find_spec('redis') is not None
+    except (ImportError, ValueError):
+        return False
+
+
+def _get_redis_error_classes():
+    from kombu.transport.redis import get_redis_error_classes
+    return get_redis_error_classes()
+
+
+def _is_ssl_class(cls):
+    """True per ``redis.SSLConnection`` o i segnaposto (senza import)."""
+    return cls in (_SSLConnection, SentinelManagedSSLConnection) or (
+        getattr(cls, '__name__', '') == 'SSLConnection' and
+        str(getattr(cls, '__module__', '')).startswith('redis'))
+
 
 __all__ = ('RedisBackend', 'SentinelBackend')
 
@@ -115,7 +232,6 @@ class ResultConsumer(BaseResultConsumer):
         self._get_key_for_task = self.backend.get_key_for_task
         self._decode_result = self.backend.decode_result
         self._ensure = self.backend.ensure
-        self._connection_errors = self.backend.connection_errors
         self.subscribed_to = set()
         # redis-py pubsub is not safe for concurrent use, but subscribe/
         # unsubscribe can be called from any thread or greenlet (e.g. from
@@ -132,6 +248,19 @@ class ResultConsumer(BaseResultConsumer):
         self._pubsub_read = threading.Condition(self._pubsub_lock)
         self._socket_waiter = False
         self._lock_depth = _LockDepth()
+
+    @property
+    def _connection_errors(self):
+        # Risolte solo quando serve davvero (nessun import di redis-py
+        # all'avvio con il client Rust).
+        override = self.__dict__.get('_connection_errors_override')
+        if override is not None:
+            return override
+        return self.backend.connection_errors
+
+    @_connection_errors.setter
+    def _connection_errors(self, value):
+        self.__dict__['_connection_errors_override'] = value
 
     def on_after_fork(self):
         # the lock may have been held by a thread that did not survive
@@ -384,9 +513,9 @@ class RedisBackend(BaseKeyValueStoreBackend, AsyncBackendMixin):
 
     ResultConsumer = ResultConsumer
 
-    #: :pypi:`redis` client module.
+    #: :pypi:`redis` client module (lazy: il client Rust non lo carica).
     redis = redis
-    connection_class_ssl = redis.SSLConnection if redis else None
+    connection_class_ssl = _SSLConnection
 
     #: Maximum number of connections in the pool.
     max_connections = None
@@ -410,7 +539,7 @@ class RedisBackend(BaseKeyValueStoreBackend, AsyncBackendMixin):
         self.failure_expires = (
             self.expires if failure_expires is None
             else self.prepare_expires(failure_expires, type=int))
-        if self.redis is None:
+        if self.redis is None or not _redis_installed():
             raise ImproperlyConfigured(E_REDIS_MISSING.strip())
 
         if host and '://' in host:
@@ -459,6 +588,7 @@ class RedisBackend(BaseKeyValueStoreBackend, AsyncBackendMixin):
                 credential_provider_cls = symbol_by_name(credential_provider)
                 credential_provider = credential_provider_cls()
 
+            from redis import CredentialProvider
             if not isinstance(credential_provider, CredentialProvider):
                 raise ValueError(
                     "Credential provider is not an instance of a redis.CredentialProvider or a subclass"
@@ -496,7 +626,7 @@ class RedisBackend(BaseKeyValueStoreBackend, AsyncBackendMixin):
         # redis_backend_use_ssl dict, check ssl_cert_reqs is valid. If set
         # via query string ssl_cert_reqs will be a string so convert it here
         if ('connection_class' in self.connparams and
-                issubclass(self.connparams['connection_class'], redis.SSLConnection)):
+                _is_ssl_class(self.connparams['connection_class'])):
             ssl_cert_reqs_missing = 'MISSING'
             ssl_string_to_constant = {'CERT_REQUIRED': CERT_REQUIRED,
                                       'CERT_OPTIONAL': CERT_OPTIONAL,
@@ -520,9 +650,10 @@ class RedisBackend(BaseKeyValueStoreBackend, AsyncBackendMixin):
         # Add driver identification for redis-py
         self._add_driver_info()
 
-        self.connection_errors, self.channel_errors = (
-            get_redis_error_classes() if get_redis_error_classes
-            else ((), ()))
+        # Le classi di errore di redis-py (usate da `ensure`, dal result
+        # consumer e da `error_safe_to_retry`) vengono risolte solo al primo
+        # uso: finché si usa il client Rust non serve importare redis-py.
+        self._extra_connection_errors = ()
         transport_options = self.app.conf.get(
             'result_backend_transport_options', {})
         additional = transport_options.get(
@@ -562,13 +693,31 @@ class RedisBackend(BaseKeyValueStoreBackend, AsyncBackendMixin):
                         cls, resolved,
                     )
             if extra:
-                self.connection_errors = (
-                    self.connection_errors + tuple(extra)
-                )
+                self._extra_connection_errors = tuple(extra)
         self.result_consumer = self.ResultConsumer(
             self, self.app, self.accept,
             self._pending_results, self._pending_messages,
         )
+
+    def _error_classes(self):
+        """``(connection_errors, channel_errors)`` risolte al primo uso."""
+        classes = self.__dict__.get('_error_classes_cache')
+        if classes is None:
+            classes = _get_redis_error_classes()
+            extra = self.__dict__.get('_extra_connection_errors') or ()
+            if extra:
+                classes = (classes[0] + tuple(extra), classes[1])
+            self.__dict__['_error_classes_cache'] = classes
+        return classes
+
+    def __getattr__(self, name):
+        # Attributi lazy: se impostati (o se la classe li definisce) non si
+        # arriva qui. `dir()` non li elenca, come nel riferimento.
+        if name == 'connection_errors':
+            return self._error_classes()[0]
+        if name == 'channel_errors':
+            return self._error_classes()[1]
+        raise AttributeError(name)
 
     def _params_from_url(self, url, defaults):
         scheme, host, port, username, password, path, query = _parse_url(url)
@@ -624,6 +773,7 @@ class RedisBackend(BaseKeyValueStoreBackend, AsyncBackendMixin):
                 credential_provider_cls = symbol_by_name(credential_provider)
                 credential_provider = credential_provider_cls()
 
+            from redis import CredentialProvider
             if not isinstance(credential_provider, CredentialProvider):
                 raise ValueError(
                     "Credential provider is not an instance of a redis.CredentialProvider or a subclass"
@@ -644,6 +794,13 @@ class RedisBackend(BaseKeyValueStoreBackend, AsyncBackendMixin):
         connparams.update(query)
         return connparams
 
+    def _will_use_rs(self):
+        """True se questo backend userà il client Rust (niente redis-py)."""
+        if type(self) is not RedisBackend:
+            return False
+        from . import _rs_redis
+        return _rs_redis.use_rs_backend(self)
+
     def _add_driver_info(self):
         """Add driver identification to connection parameters.
 
@@ -651,6 +808,13 @@ class RedisBackend(BaseKeyValueStoreBackend, AsyncBackendMixin):
         lib_name/lib_version for older versions.
         """
         from celery import __version__
+
+        if self._will_use_rs():
+            # Il client Rust ignora questi parametri: non serve importare
+            # redis-py solo per leggerne la versione.
+            self.connparams['lib_name'] = f'redis-py(celery_v{__version__})'
+            self.connparams['lib_version'] = 'unknown'
+            return
 
         # Try to use DriverInfo class
         try:
@@ -939,16 +1103,9 @@ class RedisBackend(BaseKeyValueStoreBackend, AsyncBackendMixin):
             args, dict(kwargs, expires=self.expires, url=self.url))
 
 
-if getattr(redis, "sentinel", None):
-    class SentinelManagedSSLConnection(
-            redis.sentinel.SentinelManagedConnection,
-            redis.SSLConnection):
-        """Connect to a Redis server using Sentinel + TLS.
-
-        Use Sentinel to identify which Redis server is the current master
-        to connect to and when connecting to the Master server, use an
-        SSL Connection.
-        """
+#: ``SentinelManagedSSLConnection`` è un segnaposto (`_lazy_class`) che
+#: definisce le basi vere al primo uso: a import del modulo non serve
+#: caricare redis-py.
 
 
 class SentinelBackend(RedisBackend):
@@ -957,8 +1114,8 @@ class SentinelBackend(RedisBackend):
     # URL looks like `sentinel://0.0.0.0:26347/3;sentinel://0.0.0.0:26348/3`
     _SERVER_URI_SEPARATOR = ";"
 
-    sentinel = getattr(redis, "sentinel", None)
-    connection_class_ssl = SentinelManagedSSLConnection if sentinel else None
+    sentinel = _sentinel
+    connection_class_ssl = SentinelManagedSSLConnection
 
     def __init__(self, *args, **kwargs):
         if self.sentinel is None:

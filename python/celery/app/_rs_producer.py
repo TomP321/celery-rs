@@ -252,6 +252,10 @@ def fast_connection(app, url=None):
     """
     if not _enabled() or _celery_rs is None:
         return None
+    if not _connection_not_overridden(app):
+        # Test/utenti che sostituiscono `app.connection_for_write` (mock,
+        # connessione custom): il percorso veloce non la userebbe.
+        return None
     url = url or app.conf.broker_write_url
     if not isinstance(url, str) or not url or ';' in url:
         return None
@@ -279,6 +283,14 @@ def fast_connection(app, url=None):
 def is_fast_connection(connection):
     """True se *connection* è una :class:`FastConnection` (percorso Rust)."""
     return isinstance(connection, FastConnection)
+
+
+def _connection_not_overridden(app):
+    """False se l'app ha sostituito ``connection_for_write`` (mock, custom)."""
+    if 'connection_for_write' in getattr(app, '__dict__', {}):
+        return False
+    from celery.app.base import Celery
+    return type(app).connection_for_write is Celery.connection_for_write
 
 
 def ensure_connection(connection, errback=None, max_retries=None,

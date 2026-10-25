@@ -24,9 +24,9 @@ use pyo3::types::{
 };
 
 use celery_transport::{
-    Consumer, Delivery, DeliveryStream, DeliveryTag, Error as TransportError, ExchangeDecl,
-    ExchangeType, HeaderValue, Headers, Message, Properties, PublishRequest, QueueBinding,
-    QueueDecl, Transport, TransportOptions, Url,
+    Consumer, ControlOutcome, ControlReply, ControlRequest, Delivery, DeliveryStream, DeliveryTag,
+    Error as TransportError, ExchangeDecl, ExchangeType, HeaderValue, Headers, Message, Properties,
+    PublishRequest, QueueBinding, QueueDecl, ReplyRoute, Transport, TransportOptions, Url,
 };
 
 /// Runtime tokio condiviso, single-thread, più il pid che l'ha creato.
@@ -696,6 +696,62 @@ pub(crate) fn delivery_to_py<'py>(
     )
 }
 
+fn reply_route_from_py(dict: &Bound<'_, PyDict>) -> PyResult<ReplyRoute> {
+    let text = |key: &str| -> PyResult<String> {
+        dict.get_item(key)?
+            .ok_or_else(|| PyValueError::new_err(format!("reply[{key}]: mancante")))?
+            .extract::<String>()
+    };
+    let flag = |key: &str, default: bool| -> PyResult<bool> {
+        match dict.get_item(key)? {
+            Some(value) => value.extract::<bool>(),
+            None => Ok(default),
+        }
+    };
+    let kind = ExchangeType::parse(&text("exchange_type")?).map_err(transport_error)?;
+    let arguments = match dict.get_item("arguments")? {
+        Some(value) if !value.is_none() => {
+            let arguments = value.cast::<PyDict>().map_err(|_| {
+                PyTypeError::new_err("reply['arguments'] deve essere un dict")
+            })?;
+            py_to_headers(arguments)?
+        }
+        _ => Headers::new(),
+    };
+    Ok(ReplyRoute {
+        exchange: CompactString::from(text("exchange")?),
+        exchange_kind: kind,
+        name: CompactString::from(text("name")?),
+        routing_key: CompactString::from(text("routing_key")?),
+        durable: flag("durable", false)?,
+        exclusive: flag("exclusive", true)?,
+        auto_delete: flag("auto_delete", true)?,
+        arguments,
+    })
+}
+
+fn opt_string<'py>(py: Python<'py>, value: Option<&str>) -> Bound<'py, PyAny> {
+    match value {
+        Some(value) => PyString::new(py, value).into_any(),
+        None => py.None().into_bound(py),
+    }
+}
+
+fn control_reply_to_py<'py>(
+    py: Python<'py>,
+    reply: &ControlReply,
+) -> PyResult<Bound<'py, PyTuple>> {
+    PyTuple::new(
+        py,
+        [
+            PyBytes::new(py, &reply.body).into_any(),
+            opt_string(py, reply.content_type.as_deref()),
+            opt_string(py, reply.content_encoding.as_deref()),
+            headers_to_py(py, &reply.headers)?.into_any(),
+        ],
+    )
+}
+
 #[pymethods]
 impl Connection {
     #[new]
@@ -877,6 +933,67 @@ impl Connection {
         };
         let request = PublishRequest::new(exchange, routing_key, message);
         py.detach(|| block(self.transport.publish(request)))
+    }
+
+    /// Comando remote-control: pubblica e raccoglie le risposte.
+    ///
+    /// Restituisce `(replies, unclaimed)`: liste di `(body, headers)` e, per
+    /// le risposte di altri ticket, `(ticket, body, headers)`.
+    #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (exchange, exchange_type, body, content_type=None, content_encoding=None, headers=None, reply=None, timeout=1.0, limit=None, ticket=None))]
+    fn control_request<'py>(
+        &self,
+        py: Python<'py>,
+        exchange: &str,
+        exchange_type: &str,
+        body: &Bound<'_, PyAny>,
+        content_type: Option<&str>,
+        content_encoding: Option<&str>,
+        headers: Option<&Bound<'_, PyDict>>,
+        reply: Option<&Bound<'_, PyDict>>,
+        timeout: f64,
+        limit: Option<usize>,
+        ticket: Option<&str>,
+    ) -> PyResult<(Bound<'py, PyList>, Bound<'py, PyList>)> {
+        self.ensure_open()?;
+        let request = ControlRequest {
+            exchange: CompactString::from(exchange),
+            exchange_kind: ExchangeType::parse(exchange_type).map_err(transport_error)?,
+            body: body_from_py(body)?,
+            content_type: content_type.map(CompactString::from),
+            content_encoding: content_encoding.map(CompactString::from),
+            headers: match headers {
+                Some(dict) => py_to_headers(dict)?,
+                None => Headers::new(),
+            },
+            reply: match reply {
+                Some(dict) => Some(reply_route_from_py(dict)?),
+                None => None,
+            },
+            timeout,
+            limit,
+            ticket: ticket.map(CompactString::from),
+        };
+        let outcome: ControlOutcome =
+            py.detach(|| block(self.transport.control_request(request)))?;
+        let replies = PyList::empty(py);
+        for reply in &outcome.replies {
+            replies.append(control_reply_to_py(py, reply)?)?;
+        }
+        let unclaimed = PyList::empty(py);
+        for (ticket, reply) in &outcome.unclaimed {
+            unclaimed.append(PyTuple::new(
+                py,
+                [
+                    PyString::new(py, ticket).into_any(),
+                    PyBytes::new(py, &reply.body).into_any(),
+                    opt_string(py, reply.content_type.as_deref()),
+                    opt_string(py, reply.content_encoding.as_deref()),
+                    headers_to_py(py, &reply.headers)?.into_any(),
+                ],
+            )?)?;
+        }
+        Ok((replies, unclaimed))
     }
 
     #[pyo3(signature = (queues, timeout=1.0, prefetch=0, no_ack=false))]

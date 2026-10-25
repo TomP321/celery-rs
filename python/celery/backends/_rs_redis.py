@@ -16,15 +16,10 @@ import os
 import threading
 import weakref
 
-import redis
-import redis.exceptions
-
 try:  # il pacchetto completo lo installa sempre; il riferimento no.
     import _celery_rs
 except ImportError:  # pragma: no cover - solo senza estensione nativa
     _celery_rs = None
-
-from redis.exceptions import DataError
 
 __all__ = (
     'RsRedis', 'RsPipeline', 'RsPubSub', 'RsConnectionPool',
@@ -64,12 +59,38 @@ def _enabled():
     return value.strip().lower() not in ('0', 'false', 'no', 'off')
 
 
+def _data_error(message):
+    """``redis.exceptions.DataError`` importato solo quando serve.
+
+    A import di questo modulo non si carica redis-py: il client Rust non ne
+    ha bisogno e il costo in RSS si vedrebbe su ogni comando che usa il
+    backend (``celery call``/``result``).
+    """
+    try:
+        from redis.exceptions import DataError
+    except ImportError:  # pragma: no cover - redis-py è una dipendenza del backend
+        return ValueError(message)
+    return DataError(message)
+
+
+def _is_connection_error(exc):
+    """True per gli errori di connessione di redis-py (o builtin equivalenti)."""
+    try:
+        from redis.exceptions import ConnectionError as RedisConnectionError
+        from redis.exceptions import TimeoutError as RedisTimeoutError
+    except ImportError:  # pragma: no cover
+        return isinstance(exc, (ConnectionError, TimeoutError, OSError))
+    return isinstance(
+        exc, (RedisConnectionError, RedisTimeoutError, ConnectionError,
+              TimeoutError, OSError))
+
+
 def _encode(value):
     """Stessa codifica degli argomenti di ``redis.Encoder``."""
     if isinstance(value, (bytes, bytearray, memoryview)):
         return bytes(value)
     if isinstance(value, bool):
-        raise DataError(
+        raise _data_error(
             "Invalid input of type: 'bool'. Convert to a "
             "bytes, string, int or float first."
         )
@@ -77,7 +98,7 @@ def _encode(value):
         return repr(value).encode()
     if isinstance(value, str):
         return value.encode('utf-8')
-    raise DataError(
+    raise _data_error(
         f"Invalid input of type: '{type(value).__name__}'. "
         "Convert to a bytes, string, int or float first."
     )
@@ -106,11 +127,16 @@ _REQUIRED_CERT_REQS = frozenset({
 
 
 def _is_ssl_connection(connection_class):
-    return connection_class is getattr(redis, 'SSLConnection', None)
+    # Confronto per nome: la classe vera di redis-py (o il segnaposto lazy del
+    # backend) senza importare il pacchetto.
+    return (getattr(connection_class, '__name__', '') == 'SSLConnection' and
+            str(getattr(connection_class, '__module__', '')).startswith('redis'))
 
 
 def _is_unix_connection(connection_class):
-    return connection_class is getattr(redis, 'UnixDomainSocketConnection', None)
+    return (getattr(connection_class, '__name__', '') ==
+            'UnixDomainSocketConnection' and
+            str(getattr(connection_class, '__module__', '')).startswith('redis'))
 
 
 class RsRedis:
@@ -508,7 +534,7 @@ class RsPubSub:
         if kwargs:
             channels.extend(kwargs)
         if not channels:
-            raise DataError('No channels to subscribe to')
+            raise _data_error('No channels to subscribe to')
         keys = [_channel_key(channel) for channel in channels]
         self._native.subscribe(keys)
         for channel, key in zip(channels, keys):
@@ -540,7 +566,9 @@ class RsPubSub:
     def wait_readable(self, timeout):
         try:
             return self._native.can_read(timeout)
-        except (redis.exceptions.ConnectionError, redis.exceptions.TimeoutError):
+        except Exception as exc:
+            if not _is_connection_error(exc):
+                raise
             # Stesso contratto di ``_socket_readable``: un socket chiuso o
             # sostituito è "leggibile". L'errore vero viene sollevato dal
             # successivo ``can_read`` dentro ``reconnect_on_error``, così il
@@ -576,11 +604,15 @@ def use_rs_backend(backend):
     if _celery_rs is None or not _enabled():
         return False
     # Sostituzioni di `Backend.redis` nei test upstream (finto modulo): lì
-    # deve restare redis-py.
+    # deve restare redis-py. Il modulo segnaposto del backend si chiama
+    # ``redis`` ed è un ``module``, senza importare redis-py.
     module = getattr(backend, 'redis', None)
-    if module is not redis:
+    if type(module).__name__ != 'module' or getattr(module, '__name__', None) != 'redis':
         return False
-    if backend._get_client() is not redis.StrictRedis:
+    # `_get_client` sovrascritto (Sentinel o test): resta redis-py.
+    getter = getattr(type(backend), '_get_client', None)
+    if (getattr(getter, '__module__', None) != 'celery.backends.redis' or
+            getattr(getter, '__name__', None) != '_get_client'):
         return False
     if getattr(backend, '_ConnectionPool', None) is not None:
         return False
