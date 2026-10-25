@@ -1,0 +1,127 @@
+"""Casi di `compat cli`: ogni comando `celery ...` gira con la CLI del riferimento e con quella
+di celery-rs, in sequenza, contro lo stesso worker del riferimento.
+
+Campi di un caso:
+  argv     argomenti dopo `celery` ({broker}, {backend}, {tmp}, {last_id} sostituiti)
+  worker   True se serve il worker del riferimento in esecuzione
+  numbers  True se l'output contiene contatori/tempi del worker (normalizzati a <n>)
+  stdin    testo passato su stdin
+  only     limita il caso a un broker
+I casi sono eseguiti nell'ordine dato: `{last_id}` è l'ultimo uuid stampato dalla stessa CLI.
+"""
+
+APP = ['-A', 'worker_app']
+
+CASES = [
+    # --- help e versione -------------------------------------------------------------------
+    {'name': 'help', 'argv': ['--help']},
+    {'name': 'version', 'argv': ['--version']},
+    *({'name': f'help-{cmd}', 'argv': [cmd, '--help']} for cmd in (
+        'worker', 'beat', 'call', 'inspect', 'control', 'purge', 'result', 'events', 'status',
+        'multi', 'shell', 'amqp', 'list', 'graph', 'migrate', 'upgrade', 'logtool', 'report')),
+    {'name': 'help-inspect-list', 'argv': ['inspect', '--list']},
+    {'name': 'help-control-list', 'argv': ['control', '--list']},
+    {'name': 'help-amqp-queue-declare', 'argv': ['amqp', 'queue.declare', '--help']},
+
+    # --- errori di uso ---------------------------------------------------------------------
+    {'name': 'err-unknown-command', 'argv': ['nonexistent']},
+    {'name': 'err-unknown-option', 'argv': ['--bogus', 'status']},
+    {'name': 'err-app-missing', 'argv': ['-A', 'no_such_module_xyz', 'status']},
+    {'name': 'err-app-attr', 'argv': ['-A', 'worker_app:no_such_attr', 'status']},
+    {'name': 'err-call-no-name', 'argv': [*APP, 'call']},
+    {'name': 'err-call-bad-json', 'argv': [*APP, 'call', 'compat.add', '-a', '[1,']},
+    {'name': 'err-worker-bad-pool', 'argv': [*APP, 'worker', '-P', 'bogus']},
+    {'name': 'err-worker-bad-loglevel', 'argv': [*APP, 'worker', '-l', 'LOUD']},
+    {'name': 'err-worker-bad-autoscale', 'argv': [*APP, 'worker', '--autoscale', 'x,y']},
+    {'name': 'err-inspect-unknown', 'argv': [*APP, 'inspect', 'nonexistent']},
+    {'name': 'err-control-unknown', 'argv': [*APP, 'control', 'nonexistent']},
+    {'name': 'err-control-missing-arg', 'argv': [*APP, 'control', 'rate_limit']},
+    {'name': 'err-result-no-id', 'argv': [*APP, 'result']},
+    {'name': 'err-multi-unknown', 'argv': ['multi', 'bogus']},
+
+    # --- senza worker ----------------------------------------------------------------------
+    {'name': 'status-no-workers', 'argv': [*APP, '-b', '{empty_broker}', 'status']},
+    {'name': 'inspect-ping-no-workers', 'argv': [*APP, '-b', '{empty_broker}', 'inspect', 'ping']},
+    {'name': 'inspect-ping-no-workers-json',
+     'argv': [*APP, '-b', '{empty_broker}', 'inspect', 'ping', '-j']},
+    {'name': 'report', 'argv': [*APP, 'report']},
+    {'name': 'graph-bootsteps', 'argv': [*APP, 'graph', 'bootsteps']},
+    {'name': 'list-bindings', 'argv': [*APP, 'list', 'bindings']},
+    {'name': 'amqp-queue-declare', 'argv': [*APP, 'amqp', 'queue.declare', 'compat_cli_q']},
+    {'name': 'amqp-basic-publish',
+     'argv': [*APP, 'amqp', 'basic.publish', 'hello', '', 'compat_cli_q']},
+    {'name': 'amqp-basic-get', 'argv': [*APP, 'amqp', 'basic.get', 'compat_cli_q']},
+    {'name': 'amqp-queue-delete', 'argv': [*APP, 'amqp', 'queue.delete', 'compat_cli_q']},
+    {'name': 'shell-python', 'argv': [*APP, 'shell', '--python'],
+     'stdin': 'print(sorted(t for t in app.tasks if t.startswith("compat.")))\n'},
+    {'name': 'multi-show', 'argv': ['multi', 'show', 'w1', 'w2', '-A', 'worker_app', '-c', '3',
+                                    '--pidfile={tmp}/%n.pid', '--logfile={tmp}/%n.log']},
+    {'name': 'multi-names', 'argv': ['multi', 'names', '3', '-A', 'worker_app', '--pidfile={tmp}/%n.pid',
+                                     '--logfile={tmp}/%n.log']},
+    {'name': 'multi-expand', 'argv': ['multi', 'expand', '%n-%h', 'w1', 'w2', '--pidfile={tmp}/%n.pid',
+                                      '--logfile={tmp}/%n.log']},
+    {'name': 'multi-get', 'argv': ['multi', 'get', 'w2', 'w1', 'w2', '-A', 'worker_app',
+                                   '--pidfile={tmp}/%n.pid', '--logfile={tmp}/%n.log']},
+    {'name': 'multi-help', 'argv': ['multi', 'help']},
+    {'name': 'err-multi-no-pidfile-dir', 'argv': ['multi', 'names', '2']},
+    {'name': 'purge-empty', 'argv': [*APP, 'purge', '-f', '-Q', 'compat_cli_empty']},
+    {'name': 'call-queued', 'argv': [*APP, 'call', 'compat.add', '-a', '[1, 2]',
+                                     '--queue', 'compat_cli_hold']},
+    {'name': 'purge-queued', 'argv': [*APP, 'purge', '-f', '-Q', 'compat_cli_hold']},
+
+    # --- con il worker del riferimento -----------------------------------------------------
+    {'name': 'status', 'argv': [*APP, 'status'], 'worker': True},
+    {'name': 'status-json', 'argv': [*APP, 'status', '-j'], 'worker': True},
+    {'name': 'call', 'argv': [*APP, 'call', 'compat.add', '-a', '[2, 3]'], 'worker': True},
+    {'name': 'result', 'argv': [*APP, 'result', '{last_id}'], 'worker': True, 'wait': 1.0},
+    {'name': 'call-kwargs-countdown',
+     'argv': [*APP, 'call', 'compat.add', '-k', '{"x": 1, "y": 1}', '--countdown', '0.2'],
+     'worker': True},
+    {'name': 'result-kwargs', 'argv': [*APP, 'result', '{last_id}'], 'worker': True, 'wait': 1.5},
+    {'name': 'call-fail', 'argv': [*APP, 'call', 'compat.fail', '-a', '["boom"]'], 'worker': True},
+    {'name': 'result-traceback', 'argv': [*APP, 'result', '{last_id}', '--traceback'],
+     'worker': True, 'wait': 1.0},
+    {'name': 'result-task', 'argv': [*APP, 'result', '{last_id}', '-t', 'compat.fail'],
+     'worker': True},
+    *({'name': f'inspect-{cmd}', 'argv': [*APP, 'inspect', cmd], 'worker': True}
+      for cmd in ('ping', 'active', 'scheduled', 'reserved', 'revoked', 'registered',
+                  'active_queues', 'conf', 'report')),
+    {'name': 'inspect-ping-json', 'argv': [*APP, 'inspect', 'ping', '-j'], 'worker': True},
+    {'name': 'inspect-registered-json', 'argv': [*APP, 'inspect', 'registered', '-j'],
+     'worker': True},
+    {'name': 'inspect-stats-json', 'argv': [*APP, 'inspect', 'stats', '-j'], 'worker': True,
+     'numbers': True},
+    {'name': 'inspect-clock', 'argv': [*APP, 'inspect', 'clock'], 'worker': True,
+     'numbers': True},
+    {'name': 'inspect-query-task',
+     'argv': [*APP, 'inspect', 'query_task', '00000000-0000-0000-0000-000000000000'],
+     'worker': True},
+    {'name': 'inspect-destination',
+     'argv': [*APP, 'inspect', 'ping', '-d', 'compat@{host}'], 'worker': True},
+    {'name': 'inspect-destination-missing',
+     'argv': [*APP, 'inspect', 'ping', '-d', 'nobody@nowhere', '-t', '0.5'], 'worker': True},
+    {'name': 'control-rate-limit',
+     'argv': [*APP, 'control', 'rate_limit', 'compat.add', '100/s'], 'worker': True},
+    {'name': 'control-rate-limit-json',
+     'argv': [*APP, 'control', 'rate_limit', 'compat.add', '200/s', '-j'], 'worker': True},
+    {'name': 'control-time-limit',
+     'argv': [*APP, 'control', 'time_limit', 'compat.add', '30', '60'], 'worker': True},
+    {'name': 'control-enable-events', 'argv': [*APP, 'control', 'enable_events'],
+     'worker': True},
+    {'name': 'control-disable-events', 'argv': [*APP, 'control', 'disable_events'],
+     'worker': True},
+    {'name': 'control-add-consumer',
+     'argv': [*APP, 'control', 'add_consumer', 'compat_cli_extra'], 'worker': True},
+    {'name': 'control-cancel-consumer',
+     'argv': [*APP, 'control', 'cancel_consumer', 'compat_cli_extra'], 'worker': True},
+    {'name': 'control-pool-grow', 'argv': [*APP, 'control', 'pool_grow', '1'], 'worker': True},
+    {'name': 'control-pool-shrink', 'argv': [*APP, 'control', 'pool_shrink', '1'],
+     'worker': True},
+    {'name': 'control-autoscale', 'argv': [*APP, 'control', 'autoscale', '4', '1'],
+     'worker': True},
+    {'name': 'control-revoke',
+     'argv': [*APP, 'control', 'revoke', '11111111-1111-1111-1111-111111111111'],
+     'worker': True},
+    {'name': 'control-heartbeat', 'argv': [*APP, 'control', 'heartbeat'], 'worker': True},
+    {'name': 'inspect-revoked-after', 'argv': [*APP, 'inspect', 'revoked'], 'worker': True},
+]

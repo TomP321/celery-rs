@@ -4,6 +4,7 @@
     python -m celery_compat wire       [--ref VENV] [--rs VENV] [--broker redis amqp] [-s SCENARIO...]
     python -m celery_compat wire-worker [--ref VENV] [--rs VENV] [--broker redis amqp] [--pool solo]
     python -m celery_compat wire-beat  [--ref VENV] [--rs VENV] [--broker redis amqp]
+    python -m celery_compat cli        [--ref VENV] [--rs VENV] [--broker redis amqp] [-s CASO...]
     python -m celery_compat upstream   [--venv VENV] [--suite unit|integration] [-k EXPR] [paths...]
 
 Ogni comando scrive i risultati in tools/compat/out/ ed esce con codice != 0 se il gate fallisce.
@@ -499,6 +500,156 @@ def cmd_wire_beat(args):
     return 1 if failures else 0
 
 
+# ---------------------------------------------------------------------------- cli
+
+#: broker senza worker (vhost/db dedicati): `status` e `inspect` devono non ricevere risposte
+EMPTY_BROKERS = {'redis': 'redis://127.0.0.1:6390/3', 'amqp': 'amqp://guest:guest@127.0.0.1:5673//'}
+NUMBER_RE = __import__('re').compile(r'(?<![\w<])-?\d+(?:\.\d+)?(?![\w>])')
+
+
+def _start_ref_worker(ref_venv, env):
+    import threading
+    worker = subprocess.Popen(
+        [py(ref_venv), '-P', '-m', 'celery', '-A', 'worker_app', 'worker', '-P', 'prefork', '-c',
+         '2', '-n', 'compat@%h', '-l', 'info', '--without-mingle', '--without-gossip'],
+        cwd=OUT, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+        start_new_session=True)
+    log, ready = [], threading.Event()
+
+    def pump():
+        for line in worker.stdout:
+            log.append(line)
+            if ' ready.' in line:
+                ready.set()
+    threading.Thread(target=pump, daemon=True).start()
+    if not ready.wait(30):
+        os.killpg(worker.pid, 9)
+        raise RuntimeError('worker del riferimento non pronto: ' + ''.join(log[-5:])[-300:])
+    return worker
+
+
+def _stop_worker(worker):
+    if worker is None:
+        return
+    worker.send_signal(15)
+    try:
+        worker.wait(30)
+    except subprocess.TimeoutExpired:
+        os.killpg(worker.pid, 9)
+        worker.wait()
+
+
+def _cli_normalize(text, venv, tmp, numbers):
+    from . import wire
+    import socket
+    text = text.replace(str(Path(venv).resolve()), '<venv>').replace(str(venv), '<venv>')
+    text = text.replace(str(tmp), '<tmp>').replace(str(HERE), '<compat>')
+    # shebang dello script `celery`: pip scrive python3, `maturin develop` python
+    text = text.replace('<venv>/bin/python3', '<venv>/bin/python')
+    text = TRACEBACK_RE.sub(r'File \1"<path>/\2\1", line <n>', text)
+    text = wire.Normalizer()(text)
+    text = ANY_ID_RE.sub('<id>', text)
+    text = text.replace(socket.gethostname(), '<host>')
+    if numbers:
+        text = NUMBER_RE.sub('<n>', text)
+    return text
+
+
+def run_cli_cases(venv, ref_venv, broker, cases):
+    import re
+    import shutil
+    import socket
+    url, _ = BROKERS[broker]
+    # `celery result` da un altro processo richiede un backend persistente (rpc:// no)
+    backend = 'redis://127.0.0.1:6390/1'
+    tmp = OUT / 'cli-tmp'
+    shutil.rmtree(tmp, ignore_errors=True)
+    tmp.mkdir(parents=True)
+    env = venv_env()
+    env.update(COMPAT_BROKER=url, COMPAT_BACKEND=backend, PYTHONPATH=str(HERE), COLUMNS='100',
+               TERM='dumb')
+    subst = {'broker': url, 'backend': backend, 'tmp': str(tmp), 'host': socket.gethostname(),
+             'empty_broker': EMPTY_BROKERS[broker]}
+    out, last_id, worker = {}, '', None
+    venv = Path(venv).resolve()
+    celery = str(venv / 'bin' / 'celery')
+    try:
+        for case in cases:
+            if case.get('worker') and worker is None:
+                worker = _start_ref_worker(ref_venv, env)
+            if case.get('wait'):
+                time.sleep(case['wait'])
+            values = {**subst, 'last_id': last_id}
+            argv = []
+            for a in case['argv']:
+                for k, v in values.items():
+                    a = a.replace('{' + k + '}', v)
+                argv.append(a)
+            t0 = time.monotonic()
+            try:
+                proc = subprocess.run([celery, *argv], cwd=tmp, env=env, input=case.get('stdin', ''),
+                                      capture_output=True, text=True, timeout=30)
+                rc, stdout, stderr = proc.returncode, proc.stdout, proc.stderr
+            except subprocess.TimeoutExpired as exc:
+                rc, stdout, stderr = 'timeout', exc.stdout or '', exc.stderr or ''
+            elapsed = time.monotonic() - t0
+            ids = re.findall(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', stdout)
+            if ids:
+                last_id = ids[-1]
+            numbers = case.get('numbers', False)
+            out[case['name']] = {
+                'rc': rc,
+                'stdout': _cli_normalize(stdout, venv, tmp, numbers),
+                'stderr': _cli_normalize(stderr, venv, tmp, numbers),
+                'seconds': round(elapsed, 3),
+            }
+    finally:
+        _stop_worker(worker)
+    return out
+
+
+def cmd_cli(args):
+    """Stessi comandi `celery ...` con la CLI ref e rs: stdout, stderr ed exit code identici."""
+    import difflib
+    from . import cli_cases
+    OUT.mkdir(parents=True, exist_ok=True)
+    cases = cli_cases.CASES
+    if args.scenario:
+        cases = [c for c in cases if any(s in c['name'] for s in args.scenario)
+                 or c['name'] in ('call', 'call-fail', 'call-kwargs-countdown')]
+    lines, failures, results, timing = [], 0, {}, {'ref': 0.0, 'rs': 0.0}
+    for broker in args.broker:
+        cs = [c for c in cases if c.get('only', broker) == broker]
+        ref = run_cli_cases(args.ref, args.ref, broker, cs)
+        rs = run_cli_cases(args.rs, args.ref, broker, cs)
+        for case in cs:
+            name = case['name']
+            if args.scenario and not any(s in name for s in args.scenario):
+                continue
+            a, b = ref[name], rs[name]
+            timing['ref'] += a['seconds']
+            timing['rs'] += b['seconds']
+            diff = [k for k in ('rc', 'stdout', 'stderr') if a[k] != b[k]]
+            ok = not diff
+            failures += not ok
+            key = f'{broker}:{name}'
+            status = 'ok' if ok else 'diverso: ' + ', '.join(diff)
+            results[key] = {'status': status, 'ref': a, 'rs': b}
+            print(f'{"✓" if ok else "✗"} {key:45} {status}  (rc {a["rc"]})')
+            if not ok:
+                lines.append(f'## {key}\n```diff')
+                for k in diff:
+                    lines += difflib.unified_diff(str(a[k]).splitlines(), str(b[k]).splitlines(),
+                                                  f'ref {k}', f'rs {k}', lineterm='', n=1)
+                lines.append('```')
+    (OUT / 'cli-report.md').write_text(
+        f'# celery-compat cli — {failures} comandi diversi\n\n' + '\n'.join(lines) + '\n')
+    (OUT / 'cli.json').write_text(json.dumps(results, indent=1, ensure_ascii=False))
+    print(f'cli: {failures} comandi diversi su {len(results)} '
+          f'(tempo totale ref {timing["ref"]:.1f}s, rs {timing["rs"]:.1f}s) → {OUT / "cli-report.md"}')
+    return 1 if failures else 0
+
+
 # ---------------------------------------------------------------------- upstream
 
 def junit_failures(xml_path):
@@ -634,6 +785,13 @@ def main(argv=None):
     wb.add_argument('--rs', default=VENV_RS)
     wb.add_argument('--broker', nargs='+', choices=tuple(BROKERS), default=list(BROKERS))
     wb.set_defaults(fn=cmd_wire_beat)
+
+    c = sub.add_parser('cli', help='diff di output ed exit code della CLI `celery` ref vs rs')
+    c.add_argument('--ref', default=VENV_REF)
+    c.add_argument('--rs', default=VENV_RS)
+    c.add_argument('--broker', nargs='+', choices=tuple(BROKERS), default=list(BROKERS))
+    c.add_argument('-s', '--scenario', nargs='+', help='filtra i casi per sottostringa')
+    c.set_defaults(fn=cmd_cli)
 
     u = sub.add_parser('upstream', help='esegue la test suite di Celery contro un venv')
     u.add_argument('--venv', default=VENV_RS)
