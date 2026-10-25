@@ -185,6 +185,9 @@ class _Zone:
 
 timezone = _Zone()
 
+#: `_Zone.utc` è una cached_property: il valore è lo stesso per tutto il processo.
+_UTC_ZONE = timezone.utc
+
 
 def maybe_timedelta(delta: int) -> timedelta:
     """Convert integer to timedelta, if argument is an integer."""
@@ -458,7 +461,9 @@ def localize(dt: datetime, tz: tzinfo) -> datetime:
 
 def to_utc(dt: datetime) -> datetime:
     """Convert naive :class:`~datetime.datetime` to UTC."""
-    return make_aware(dt, timezone.utc)
+    # UTC non è mai ambiguo né immaginario: `make_aware` farebbe solo
+    # `replace(tzinfo=...)` dopo il controllo (inutile) di dateutil.
+    return dt.replace(tzinfo=_UTC_ZONE)
 
 
 def maybe_make_aware(dt: datetime, tz: tzinfo | None = None,

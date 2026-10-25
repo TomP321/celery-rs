@@ -7,6 +7,7 @@ from collections import namedtuple
 from datetime import datetime, timedelta, tzinfo
 from typing import Any, Callable, Iterable, Mapping, Sequence, Union
 
+import _celery_rs
 from kombu.utils.objects import cached_property
 
 from celery import Celery
@@ -14,8 +15,9 @@ from celery import Celery
 from . import current_app
 from .exceptions import ImproperlyConfigured
 from .utils.collections import AttributeDict
-from .utils.time import (ffwd, humanize_seconds, localize, maybe_make_aware, maybe_timedelta, remaining,
-                         subtract_datetimes, timezone, weekday, yearmonth)
+from .utils.time import (ffwd, humanize_seconds, is_naive, localize, maybe_make_aware,
+                         maybe_timedelta, remaining, subtract_datetimes, timezone, weekday,
+                         yearmonth)
 
 __all__ = (
     'ParseException', 'schedule', 'crontab', 'crontab_parser',
@@ -23,6 +25,56 @@ __all__ = (
 )
 
 schedstate = namedtuple('schedstate', ('is_due', 'next'))
+
+#: Classe `ffwd` globale del modulo: `remaining_estimate` usa il percorso
+#: veloce solo se non ne è stata passata una diversa.
+_GLOBAL_FFWD = ffwd
+
+#: `timezone.utc` del riferimento è una property: tenerne il valore fisso
+#: evita un accesso a ogni chiamata nel percorso caldo.
+_UTC = timezone.utc
+
+
+def _ffwd_from_args(args, ffwd=ffwd):
+    """Costruisce l'`ffwd` del riferimento dagli argomenti restituiti da Rust.
+
+    Gli stessi rami di `remaining_delta`: il ramo "_delta_to_next" usa sempre
+    la classe globale, gli altri quella eventualmente passata dal chiamante.
+    """
+    year, month, weeks, weekday, day, hour, minute = args
+    if year is not None:
+        return _GLOBAL_FFWD(year=year, month=month, day=day, hour=hour,
+                            minute=minute, second=0, microsecond=0)
+    if weekday is not None:
+        return ffwd(weeks=weeks, weekday=weekday, hour=hour,
+                    minute=minute, second=0, microsecond=0)
+    if hour is not None:
+        return ffwd(hour=hour, minute=minute, second=0, microsecond=0)
+    return ffwd(minute=minute, second=0, microsecond=0)
+
+
+def _add_ffwd(start, args):
+    """`start + ffwd(...)` per gli argomenti prodotti da Rust."""
+    year, month, weeks, weekday, day, hour, minute = args
+    if year is not None:
+        # Rust produce solo giorni validi: il clamp di `ffwd` è inutile.
+        ret = start.replace(year=year, month=month, day=day, hour=hour,
+                            minute=minute, second=0, microsecond=0)
+    elif weekday is not None:
+        ret = start.replace(hour=hour, minute=minute, second=0,
+                            microsecond=0)
+        ret += timedelta(days=(7 - ret.weekday() + weekday) % 7)
+    elif hour is not None:
+        ret = start.replace(hour=hour, minute=minute, second=0,
+                            microsecond=0)
+    else:
+        ret = start.replace(minute=minute, second=0, microsecond=0)
+    # `ffwd.__radd__` somma sempre `timedelta(days=weeks * 7)`; l'addizione
+    # azzera `fold`, cosa che conta sulle ore ambigue del DST.
+    if weeks or ret.fold:
+        ret += timedelta(days=weeks * 7)
+    return ret
+
 
 CRON_PATTERN_INVALID = """\
 Invalid crontab pattern.  Valid range is {min}-{max}. \
@@ -289,12 +341,10 @@ class crontab_parser:
         )
 
     def parse(self, spec: str) -> set[int]:
-        acc = set()
-        for part in spec.split(','):
-            if not part:
-                raise self.ParseException('empty part')
-            acc |= set(self._parse_part(part))
-        return acc
+        try:
+            return set(_celery_rs.cron_parse(spec, self.max_, self.min_))
+        except _celery_rs.CronParseError as exc:
+            raise self.ParseException(str(exc)) from None
 
     def _parse_part(self, part: str) -> list[int]:
         for regex, handler in self.pats:
@@ -453,6 +503,11 @@ class crontab(BaseSchedule):
                 month_of_year=self._orig_month_of_year,
             ))
         super().__init__(**kwargs)
+        #: `remaining_estimate` può usare il percorso veloce solo se la
+        #: sottoclasse non ridefinisce `remaining_delta`.
+        self._fast_estimate = (
+            type(self).remaining_delta is crontab.remaining_delta)
+        self._rs_cached = None
 
     @classmethod
     def from_string(cls, crontab: str) -> crontab:
@@ -528,72 +583,63 @@ class crontab(BaseSchedule):
 
         Only called when ``day_of_month`` and/or ``month_of_year``
         cronspec is specified to further limit scheduled task execution.
+
+        Il calcolo è in Rust (`crates/celery-beat`); i fusi orari restano qui.
         """
-        datedata = AttributeDict(year=last_run_at.year)
-        days_of_month = sorted(self.day_of_month)
-        months_of_year = sorted(self.month_of_year)
+        return _ffwd_from_args(self._rs_spec().delta_to_next(
+            last_run_at.year, last_run_at.month, last_run_at.day,
+            next_hour, next_minute))
 
-        def day_out_of_range(year: int, month: int, day: int) -> bool:
-            try:
-                datetime(year=year, month=month, day=day)
-            except ValueError:
-                return True
-            return False
+    def _rs_spec(self):
+        """CronSpec Rust per i campi correnti, ricostruito se i set cambiano."""
+        cached = self._rs_cached
+        minute = self.minute
+        hour = self.hour
+        day_of_week = self.day_of_week
+        day_of_month = self.day_of_month
+        month_of_year = self.month_of_year
+        all_dom_moy = (self._orig_day_of_month == '*' and
+                       self._orig_month_of_year == '*')
+        if (cached is None or cached[0] is not minute or
+                cached[1] is not hour or cached[2] is not day_of_week or
+                cached[3] is not day_of_month or
+                cached[4] is not month_of_year or
+                cached[5] != all_dom_moy):
+            spec = _celery_rs.CronSpec(
+                list(minute), list(hour), list(day_of_week),
+                list(day_of_month), list(month_of_year), all_dom_moy)
+            cached = (minute, hour, day_of_week, day_of_month, month_of_year,
+                      all_dom_moy, spec)
+            self._rs_cached = cached
+        return cached[6]
 
-        def is_before_last_run(year: int, month: int, day: int) -> bool:
-            return self.maybe_make_aware(
-                datetime(year, month, day, next_hour, next_minute),
-                naive_as_utc=False) < last_run_at
+    def _next_ffwd_args(self, last_run_at):
+        return self._rs_spec().next_ffwd(
+            last_run_at.year, last_run_at.month, last_run_at.day,
+            last_run_at.hour, last_run_at.minute)
 
-        def roll_over() -> None:
-            for _ in range(2000):
-                flag = (datedata.dom == len(days_of_month) or
-                        day_out_of_range(datedata.year,
-                                         months_of_year[datedata.moy],
-                                         days_of_month[datedata.dom]) or
-                        (is_before_last_run(datedata.year,
-                                            months_of_year[datedata.moy],
-                                            days_of_month[datedata.dom])))
-
-                if flag:
-                    datedata.dom = 0
-                    datedata.moy += 1
-                    if datedata.moy == len(months_of_year):
-                        datedata.moy = 0
-                        datedata.year += 1
-                else:
-                    break
-            else:
-                # Tried 2000 times, we're most likely in an infinite loop
-                raise RuntimeError('unable to rollover, '
-                                   'time specification is probably invalid')
-
-        if last_run_at.month in self.month_of_year:
-            datedata.dom = bisect(days_of_month, last_run_at.day)
-            datedata.moy = bisect_left(months_of_year, last_run_at.month)
+    def _remaining_delta_fast(self, last_run_at, tz=None):
+        if tz is None:
+            # `CachedProperty` di kombu salva il valore in `__dict__['tz']`;
+            # può essere una stringa (es. app.timezone impostato dai test).
+            cached_tz = self.__dict__.get('tz')
+            schedule_tz: tzinfo = (
+                cached_tz if isinstance(cached_tz, tzinfo)
+                else timezone.get_timezone(cached_tz or self.tz))
         else:
-            datedata.dom = 0
-            datedata.moy = bisect(months_of_year, last_run_at.month)
-            if datedata.moy == len(months_of_year):
-                datedata.moy = 0
-        roll_over()
-
-        while 1:
-            th = datetime(year=datedata.year,
-                          month=months_of_year[datedata.moy],
-                          day=days_of_month[datedata.dom])
-            if th.isoweekday() % 7 in self.day_of_week:
-                break
-            datedata.dom += 1
-            roll_over()
-
-        return ffwd(year=datedata.year,
-                    month=months_of_year[datedata.moy],
-                    day=days_of_month[datedata.dom],
-                    hour=next_hour,
-                    minute=next_minute,
-                    second=0,
-                    microsecond=0)
+            schedule_tz = timezone.get_timezone(tz)
+        current_tz = last_run_at.tzinfo
+        if current_tz is None or current_tz.utcoffset(last_run_at) is None:
+            last_run_at = self.maybe_make_aware(last_run_at)
+        if last_run_at.tzinfo is not schedule_tz:
+            last_run_at = last_run_at.astimezone(schedule_tz)
+        now = self.now()
+        current_tz = now.tzinfo
+        if current_tz is None or current_tz.utcoffset(now) is None:
+            now = self.maybe_make_aware(now)
+        if now.tzinfo is not schedule_tz:
+            now = now.astimezone(schedule_tz)
+        return last_run_at, self._next_ffwd_args(last_run_at), now
 
     def __repr__(self) -> str:
         return CRON_REPR.format(self)
@@ -615,62 +661,12 @@ class crontab(BaseSchedule):
                         tz: str | tzinfo | None = None,
                         ffwd: type = ffwd) -> tuple[datetime, Any, datetime]:
         # caching global ffwd
-        schedule_tz: tzinfo = timezone.get_timezone(tz or self.tz)
         # Normalize both datetimes into the schedule's timezone, so that the
         # crontab field matching and the next-run arithmetic below operate in
         # the frame the crontab is defined in. An aware last_run_at may arrive
         # in a different timezone (e.g. from django-celery-beat).
-        last_run_at = self.maybe_make_aware(last_run_at).astimezone(schedule_tz)
-        now = self.maybe_make_aware(self.now()).astimezone(schedule_tz)
-        dow_num = last_run_at.isoweekday() % 7  # Sunday is day 0, not day 7
-
-        execute_this_date = (
-            last_run_at.month in self.month_of_year and
-            last_run_at.day in self.day_of_month and
-            dow_num in self.day_of_week
-        )
-
-        execute_this_hour = (
-            execute_this_date and
-            last_run_at.hour in self.hour and
-            last_run_at.minute < max(self.minute)
-        )
-
-        if execute_this_hour:
-            next_minute = min(minute for minute in self.minute
-                              if minute > last_run_at.minute)
-            delta = ffwd(minute=next_minute, second=0, microsecond=0)
-        else:
-            next_minute = min(self.minute)
-            execute_today = (execute_this_date and
-                             last_run_at.hour < max(self.hour))
-
-            if execute_today:
-                next_hour = min(hour for hour in self.hour
-                                if hour > last_run_at.hour)
-                delta = ffwd(hour=next_hour, minute=next_minute,
-                             second=0, microsecond=0)
-            else:
-                next_hour = min(self.hour)
-                all_dom_moy = (self._orig_day_of_month == '*' and
-                               self._orig_month_of_year == '*')
-                if all_dom_moy:
-                    next_day = min([day for day in self.day_of_week
-                                    if day > dow_num] or self.day_of_week)
-                    add_week = next_day == dow_num
-
-                    delta = ffwd(
-                        weeks=add_week and 1 or 0,
-                        weekday=(next_day - 1) % 7,
-                        hour=next_hour,
-                        minute=next_minute,
-                        second=0,
-                        microsecond=0,
-                    )
-                else:
-                    delta = self._delta_to_next(last_run_at,
-                                                next_hour, next_minute)
-        return last_run_at, delta, now
+        last_run_at, args, now = self._remaining_delta_fast(last_run_at, tz)
+        return last_run_at, _ffwd_from_args(args, ffwd), now
 
     def remaining_estimate(
             self, last_run_at: datetime, ffwd: type = ffwd) -> timedelta:
@@ -681,6 +677,35 @@ class crontab(BaseSchedule):
         """
         # pylint: disable=redefined-outer-name
         # caching global ffwd
+        if (ffwd is _GLOBAL_FFWD and self._fast_estimate and
+                'remaining_delta' not in self.__dict__):
+            # Stesso calcolo di ``remaining(start, ffwd(...), now)`` senza
+            # costruire l'oggetto ffwd: è il percorso caldo di beat.
+            cached_tz = self.__dict__.get('tz')
+            schedule_tz = (
+                cached_tz if isinstance(cached_tz, tzinfo)
+                else timezone.get_timezone(cached_tz or self.tz))
+            current_tz = last_run_at.tzinfo
+            if current_tz is None or current_tz.utcoffset(last_run_at) is None:
+                last_run_at = self.maybe_make_aware(last_run_at)
+            if last_run_at.tzinfo is not schedule_tz:
+                last_run_at = last_run_at.astimezone(schedule_tz)
+            now = self.now()
+            current_tz = now.tzinfo
+            if current_tz is None or current_tz.utcoffset(now) is None:
+                now = self.maybe_make_aware(now)
+            if now.tzinfo is not schedule_tz:
+                now = now.astimezone(schedule_tz)
+            args = self._rs_spec().next_ffwd(
+                last_run_at.year, last_run_at.month, last_run_at.day,
+                last_run_at.hour, last_run_at.minute)
+            end = _add_ffwd(last_run_at, args)
+            if schedule_tz is not _UTC:
+                if end.tzinfo is not _UTC:
+                    end = end.astimezone(_UTC)
+                if now.tzinfo is not _UTC:
+                    now = now.astimezone(_UTC)
+            return end - now
         return remaining(*self.remaining_delta(last_run_at, ffwd=ffwd))
 
     def is_due(self, last_run_at: datetime) -> tuple[bool, datetime]:

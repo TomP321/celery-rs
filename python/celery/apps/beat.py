@@ -140,8 +140,14 @@ class Beat:
 
     def startup_info(self, service: beat.Service) -> str:
         scheduler = service.get_scheduler(lazy=True)
+        # `connection()` importerebbe la libreria del trasporto solo per
+        # stampare l'URL: sul percorso Rust basta la connessione lazy.
+        from celery.app import _rs_producer
+        connection = _rs_producer.fast_connection(self.app)
+        if connection is None:
+            connection = self.app.connection()
         return STARTUP_INFO_FMT.format(
-            conninfo=self.app.connection().as_uri(),
+            conninfo=connection.as_uri(),
             timestamp=datetime.now().replace(microsecond=0),
             logfile=self.logfile or '[stderr]',
             loglevel=LOG_LEVELS[self.loglevel],
