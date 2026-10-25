@@ -48,6 +48,15 @@ def value_repr(value, depth=0):
     return None
 
 
+def public_type(cls):
+    """Primo tipo pubblico nella MRO: una sottoclasse privata (`_Nome`) del tipo del riferimento
+    è un dettaglio di implementazione, non superficie pubblica."""
+    for klass in getattr(cls, '__mro__', (cls,)):
+        if not getattr(klass, '__qualname__', '_').split('.')[-1].startswith('_'):
+            return klass
+    return cls
+
+
 def origin(obj):
     mod = getattr(obj, '__module__', None)
     qual = getattr(obj, '__qualname__', None) or getattr(obj, '__name__', None)
@@ -116,7 +125,8 @@ def describe(obj):
         d['origin'] = origin(obj)
         return d
     if callable(obj) and not isinstance(obj, SIMPLE):
-        return {'kind': 'callable-instance', 'type': origin(type(obj)), 'sig': signature(obj)}
+        return {'kind': 'callable-instance', 'type': origin(public_type(type(obj))),
+                'sig': signature(obj)}
     return {'kind': 'value', 'type': type(obj).__name__, 'value': value_repr(obj)}
 
 
@@ -124,6 +134,9 @@ def public_names(mod):
     names = getattr(mod, '__all__', None)
     if names is None:
         names = [n for n in vars(mod) if not n.startswith('_')]
+        # nomi risolti al primo accesso (PEP 562: `__getattr__` + `__dir__` di modulo)
+        if '__getattr__' in vars(mod) and '__dir__' in vars(mod):
+            names += [n for n in mod.__dir__() if not n.startswith('_')]
     return sorted(set(names))
 
 
@@ -144,6 +157,8 @@ def dump_module(modname):
         # nomi importati da librerie esterne (os, kombu, ...) non fanno parte della nostra API
         # se il modulo non li dichiara in __all__
         org = getattr(obj, '__module__', None)
+        if not (inspect.isclass(obj) or inspect.isroutine(obj) or isinstance(obj, types.ModuleType)):
+            org = getattr(public_type(type(obj)), '__module__', org)
         if not out['all'] and isinstance(org, str) and not org.startswith('celery') \
                 and not isinstance(obj, types.ModuleType):
             continue
