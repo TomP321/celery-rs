@@ -1,16 +1,16 @@
 """Consumer del broker del worker nel core Rust.
 
-Sostituisce, per il worker ``-P solo``, la parte kombu del consumer: la
-connessione di lettura, la sottoscrizione alle code, il prefetch, ack/reject e
-il loop principale. Il master (bootstep, strategie, ``Request``, segnali) resta
-il codice Python del riferimento.
+Sostituisce, per il worker con pool Rust (``-P solo`` e ``-P prefork``), la
+parte kombu del consumer: la connessione di lettura, la sottoscrizione alle
+code, il prefetch, ack/reject e il loop principale. Il master (bootstep,
+strategie, ``Request``, segnali) resta il codice Python del riferimento.
 
 Cosa resta su kombu (su una connessione lazy aperta solo quando serve):
 remote control/pidbox, mingle, gossip ed eventi in *lettura*. I loro fd sono
-registrati sull'hub del worker e vengono drenati a ogni giro di :func:`rsloop`;
-i timer (ETA/countdown, rate limit, heartbeat degli eventi) restano sul timer
-kombu, e :func:`rsloop` dorme in :meth:`RsConnection.wait` fino alla loro
-prossima scadenza.
+registrati sull'hub del worker e vengono serviti dal poll di :func:`rsloop`,
+che dorme su epoll col fd del ``Waker`` Rust e il timeout del prossimo timer
+kombu. I timer (ETA/countdown, rate limit, heartbeat degli eventi e la
+manutenzione periodica delle binding Redis) restano sul timer kombu.
 
 Gli eventi del worker (``worker-online``, ``task-received``, ...) escono dal
 producer Rust: ``Consumer.connection_for_write`` restituisce una
@@ -39,7 +39,8 @@ except ImportError:  # pragma: no cover - solo senza estensione nativa
     _celery_rs = None
 
 __all__ = ('RsConnection', 'RsTaskConsumer', 'rsloop', 'use_rs_worker',
-           'connection', 'is_rs_connection', 'stats')
+           'use_rs_pool', 'connection', 'is_rs_connection', 'stats',
+           'new_waker')
 
 #: Variabile d'ambiente per tornare al consumer di kombu.
 ENV_DISABLE = 'CELERY_RS_WORKER'
@@ -76,6 +77,11 @@ def _enabled():
     return value.strip().lower() not in ('0', 'false', 'no', 'off')
 
 
+def new_waker():
+    """Un ``_celery_rs.Waker`` nuovo (usato dal pool prefork Rust)."""
+    return _celery_rs.Waker()
+
+
 def _write_state():
     path = os.environ.get(ENV_STATE)
     if not path:
@@ -94,6 +100,19 @@ def _write_state():
 def _pool_is_solo(consumer):
     from celery.concurrency.solo import TaskPool
     return isinstance(getattr(consumer, 'pool', None), TaskPool)
+
+
+def _pool_is_rs_prefork(consumer):
+    try:
+        from celery.concurrency.rs_prefork import RsTaskPool
+    except ImportError:  # pragma: no cover - solo senza estensione nativa
+        return False
+    return isinstance(getattr(consumer, 'pool', None), RsTaskPool)
+
+
+def _pool_is_rs(consumer):
+    """True per i pool serviti dal consumer Rust (``solo`` o prefork Rust)."""
+    return _pool_is_solo(consumer) or _pool_is_rs_prefork(consumer)
 
 
 def transport_is_eligible(connection):
@@ -121,7 +140,29 @@ def use_rs_worker(consumer):
     # canale kombu: il consumer Rust non lo userebbe, quindi si resta su kombu.
     if consumer.app.conf.worker_disable_prefetch:
         return False
-    return _pool_is_solo(consumer)
+    return _pool_is_rs(consumer)
+
+
+def use_rs_pool(worker):
+    """True se il pool di *worker* può essere ``RsTaskPool``.
+
+    Stesse condizioni del consumer Rust (trasporto, ``CELERY_RS_WORKER``,
+    ``worker_disable_prefetch``) più: solo con il loop asincrono e solo per il
+    pool prefork di default. Un pool scelto dall'utente resta quello richiesto.
+    """
+    if not _enabled() or _celery_rs is None:
+        return False
+    if not getattr(worker, 'use_eventloop', False):
+        return False
+    if worker.app.conf.worker_disable_prefetch:
+        return False
+    from celery.concurrency.prefork import TaskPool as PreforkPool
+    if getattr(worker, 'pool_cls', None) is not PreforkPool:
+        return False
+    try:
+        return transport_is_eligible(worker.app.connection_for_read())
+    except Exception:  # configurazione non valida: si resta sul riferimento
+        return False
 
 
 def is_rs_connection(connection):
@@ -157,21 +198,25 @@ class _RsChannel:
     """Canale presentato al codice Python che chiede un canale kombu.
 
     Solo ``basic_qos`` è gestito dal consumer Rust; tutto il resto (pidbox,
-    mingle, gossip) delega al canale kombu aperto al primo uso.
+    mingle, gossip) delega a *un* canale kombu vero. Il canale è quello scelto
+    da :meth:`RsConnection.channel` / :meth:`RsConnection.default_channel`:
+    pidbox e gossip hanno canali distinti, come nel riferimento, così la
+    manutenzione periodica delle binding (che kombu tiene per canale) produce
+    lo stesso traffico.
     """
 
-    __slots__ = ('_rs',)
+    __slots__ = ('_rs', '_channel')
 
-    def __init__(self, rs):
+    def __init__(self, rs, channel):
         self._rs = rs
+        self._channel = channel
 
     def basic_qos(self, prefetch_size=0, prefetch_count=0, apply_global=False):
         self._rs.set_default_prefetch(prefetch_count)
 
     def __getattr__(self, name):
-        # Tutto il resto (pidbox, mingle, gossip) usa il canale kombu vero:
         # `channel.connection.client` deve esistere per il Consumer di kombu.
-        return getattr(self._rs.kombu_channel(), name)
+        return getattr(self._channel, name)
 
 
 class RsConnection:
@@ -183,7 +228,7 @@ class RsConnection:
     gossip).
     """
 
-    def __init__(self, consumer, conninfo, url, options):
+    def __init__(self, consumer, conninfo, url, options, waker=None):
         self.app = consumer.app
         self._conninfo = conninfo
         self._url = url
@@ -193,7 +238,8 @@ class RsConnection:
         self.connection_errors = conninfo.connection_errors
         self.channel_errors = conninfo.channel_errors
         self._worker = None
-        self._waker = _celery_rs.Waker()
+        # Stesso waker del pool Rust: un solo fd da registrare nel loop.
+        self._waker = waker or _celery_rs.Waker()
         self._default_prefetch = 0
         self._hub = None
         self._kombu_open = False
@@ -275,11 +321,25 @@ class RsConnection:
         return self.kombu_connection().default_channel
 
     @property
+    def waker(self):
+        """Il ``_celery_rs.Waker`` condiviso con il pool (fd per l'hub)."""
+        return self._waker
+
+    @property
     def default_channel(self):
-        return _RsChannel(self)
+        # Il consumer dei task resta su Rust: il canale serve solo a
+        # basic_qos (prefetch Rust) e a mingle (coda di risposta), come il
+        # default_channel della connessione del riferimento.
+        return _RsChannel(self, self.kombu_connection().default_channel)
 
     def channel(self):
-        return _RsChannel(self)
+        """Nuovo canale kombu, come ``kombu.Connection.channel``.
+
+        Pidbox e gossip ne chiedono uno ciascuno: canali distinti tengono la
+        manutenzione delle binding per canale, con lo stesso traffico del
+        worker di riferimento.
+        """
+        return _RsChannel(self, self.kombu_connection().channel())
 
     def set_default_prefetch(self, prefetch_count):
         logger.debug('RsConnection: prefetch iniziale %s (worker=%r)',
@@ -560,7 +620,11 @@ def connection(consumer, heartbeat=None):
     if getattr(consumer, 'restart_count', 0) > 0:
         _STATS['reconnects'] += 1
         _write_state()
-    return RsConnection(consumer, conninfo, url, options)
+    # Il pool Rust (se attivo) è stato creato prima del consumer: il suo waker
+    # è già quello che il loop registra nell'hub, e deve restare lo stesso
+    # anche dopo una riconnessione.
+    waker = getattr(getattr(consumer, 'controller', None), '_rs_waker', None)
+    return RsConnection(consumer, conninfo, url, options, waker=waker)
 
 
 # ---------------------------------------------------------------------------
@@ -578,9 +642,8 @@ def _enable_heartbeats(timer, connection, rate):
 def _hub_tick(hub):
     """Esegue callback pronti, timer e I/O dell'hub senza mai bloccare.
 
-    ``Hub.create_loop`` calcola da sé il timeout del poll; qui il poll viene
-    forzato a 0 per non fermare il loop Python, e un fd sentinella sempre
-    registrato evita il ramo ``sleep`` quando non ci sono altri fd.
+    Usato solo come ripiego quando il ``Waker`` non espone un fd: il poll
+    viene forzato a 0 e un fd sentinella evita il ramo ``sleep``.
     """
     poll = hub.poller.poll
 
@@ -606,6 +669,25 @@ def _run_ready(hub):
     for callback in hub._pop_ready():
         if callback:
             callback()
+
+
+def _process_pool(obj):
+    """Consegna al pool Rust i suoi eventi pronti (callback dei task)."""
+    pool = getattr(obj, 'pool', None)
+    process = getattr(pool, 'process_events', None)
+    if process is not None:
+        process()
+
+
+def _run_pool_ready(obj, hub):
+    _process_pool(obj)
+    _run_ready(hub)
+
+
+def _pool_fatal_exitcode(obj):
+    """Exit code da usare se il pool è diventato inutilizzabile (zygote)."""
+    pool = getattr(obj, 'pool', None)
+    return getattr(pool, 'fatal_exitcode', None)
 
 
 def _install_sentinel(hub):
@@ -637,9 +719,7 @@ def _remove_sentinel(hub, sentinel):
             pass
 
 
-#: Attesa massima del loop quando non ci sono timer: i fd di pidbox/gossip
-#: non possono svegliare il Waker Rust, quindi si torna a drenare l'hub con
-#: una granularità breve (il riferimento resta bloccato nel poll dell'hub).
+#: Attesa massima del ripiego senza fd del Waker.
 HUB_POLL_INTERVAL = 0.25
 
 
@@ -653,6 +733,24 @@ def _next_timeout(hub, maximum=HUB_POLL_INTERVAL):
     return max(0.0, maximum)
 
 
+def _register_waker(hub, waker):
+    """Registra il fd del Waker nel poller dell'hub; ``None`` se assente."""
+    fd = waker.fileno() if waker is not None else -1
+    if fd < 0:
+        return None
+    hub.add_reader(fd, waker.drain)
+    return fd
+
+
+def _unregister_waker(hub, fd):
+    if fd is None:
+        return
+    try:
+        hub.remove(fd)
+    except Exception:  # dopo `hub.reset()` il fd non è più registrato
+        pass
+
+
 def rsloop(obj, connection, consumer, blueprint, hub, qos, heartbeat, clock,
            hbrate=2.0):
     """Loop del worker con le consegne dal consumer Rust.
@@ -660,13 +758,12 @@ def rsloop(obj, connection, consumer, blueprint, hub, qos, heartbeat, clock,
     Stessa semantica di :func:`celery.worker.loops.asynloop` per ordine di
     ``on_ready``, ``did_start_ok``, ``maybe_shutdown``, aggiornamento del QoS,
     errori di heartbeat e uscita su ``blueprint.state``. La differenza è
-    l'attesa: invece del poll dell'hub, il loop dorme in
-    ``connection.wait(timeout)`` (Waker Rust, GIL rilasciato) e poi svuota le
-    consegne chiamando ``consumer.on_message``.
-
-    Gli altri fd registrati sull'hub (pidbox, gossip, mingle, heartbeat degli
-    eventi) continuano a funzionare: ogni giro chiama ``hub.create_loop()``
-    con poll a 0, che esegue timer, callback pronti e callback degli fd.
+    l'attesa: il loop dorme nel poller dell'hub (epoll) con il fd del ``Waker``
+    condiviso da consumer Rust e pool Rust; una consegna, un evento del pool o
+    un comando di controllo svegliano il loop subito, senza polling. Il timeout
+    del poll è quello del prossimo timer kombu, quindi la manutenzione
+    periodica (binding Redis, ETA, rate limit, autoscale) gira come in
+    ``asynloop``. I fd di pidbox/gossip sono registrati sullo stesso hub.
     """
     from celery import bootsteps
     from celery.exceptions import WorkerLostError
@@ -699,7 +796,14 @@ def rsloop(obj, connection, consumer, blueprint, hub, qos, heartbeat, clock,
         raise WorkerLostError('Could not start worker processes')
 
     hub.propagate_errors = connection.connection_errors
-    sentinel = _install_sentinel(hub)
+    waker = getattr(connection, 'waker', None)
+    waker_fd = _register_waker(hub, waker)
+    pool_waker = getattr(getattr(obj, 'pool', None), 'waker', None)
+    logger.debug('rsloop: pool=%s waker=%s pool_waker=%s fd=%s',
+                 type(getattr(obj, 'pool', None)).__name__,
+                 id(waker), id(pool_waker), waker_fd)
+    sentinel = _install_sentinel(hub) if waker_fd is None else None
+    loop = hub.create_loop()
     try:
         while blueprint.state == RUN and obj.connection:
             state.maybe_shutdown()
@@ -713,6 +817,10 @@ def rsloop(obj, connection, consumer, blueprint, hub, qos, heartbeat, clock,
             if qos.prev != qos.value:
                 update_qos()
 
+            # Eventi del pool (ack, risultati, timeout, figli persi) prima
+            # delle consegne: i callback possono accodare ack sull'hub.
+            _run_pool_ready(obj, hub)
+
             deliveries = consumer.drain_messages()
             if deliveries:
                 logger.debug('rsloop: %d consegne dal consumer Rust',
@@ -724,19 +832,31 @@ def rsloop(obj, connection, consumer, blueprint, hub, qos, heartbeat, clock,
                     # Ack/reject del task escono subito, prima di un eventuale
                     # shutdown richiesto durante l'esecuzione.
                     _run_ready(hub)
+            if deliveries:
+                _run_pool_ready(obj, hub)
 
             error = consumer.take_error()
             if error is not None:
                 raise ConnectionError(error)
 
-            if consumer.pending():
+            fatal_exitcode = _pool_fatal_exitcode(obj)
+            if fatal_exitcode is not None:
+                raise SystemExit(fatal_exitcode)
+
+            if waker_fd is None:
+                # Ripiego (nessun fd disponibile): non bloccare il loop.
+                _hub_tick(hub)
+                if consumer.pending():
+                    continue
+                connection.wait(_next_timeout(hub))
                 continue
 
-            # Timer ETA/rate-limit e fd di pidbox/gossip.
-            _hub_tick(hub)
-            if consumer.pending():
-                continue
-            connection.wait(_next_timeout(hub))
+            # Dorme nel poll dell'hub: timer, fd di pidbox/gossip e fd del
+            # Waker (consegne, eventi del pool). `next` esegue un giro.
+            try:
+                next(loop)
+            except StopIteration:
+                loop = hub.create_loop()
     except Exception:
         # Come asynloop: ripulisce fd e callback della connessione rotta e
         # annulla le entry registrate per questa connessione. Il timer non si
@@ -749,4 +869,5 @@ def rsloop(obj, connection, consumer, blueprint, hub, qos, heartbeat, clock,
         loops._cancel_timer_entries(hub.timer, registered_timer_entries)
         raise
     finally:
+        _unregister_waker(hub, waker_fd)
         _remove_sentinel(hub, sentinel)

@@ -10,7 +10,7 @@ coda, backend e opzioni diversi.
 import os
 import time
 
-from celery import Celery
+from celery import Celery, signals
 
 BROKER = os.environ['CELERY_RS_TEST_WORKER_BROKER']
 BACKEND = os.environ.get(
@@ -23,6 +23,18 @@ def _bool(name, default):
     if value is None:
         return default
     return value.strip().lower() not in ('0', 'false', 'no', 'off')
+
+
+# Test della manutenzione periodica delle binding Redis: tempi accelerati.
+# Va fatto prima che il worker apra la connessione kombu (pidbox/gossip).
+if _bool('CELERY_RS_TEST_BINDING_SWEEP', False):
+    import kombu.transport.redis as _redis_transport
+    _redis_transport.MIN_BINDING_TTL = int(os.environ.get(
+        'CELERY_RS_TEST_BINDING_TTL_MS', '3000'))
+    _redis_transport.BINDING_SWEEP_INTERVAL = float(os.environ.get(
+        'CELERY_RS_TEST_BINDING_SWEEP_INTERVAL', '1'))
+    _redis_transport.BINDING_EXPIRES_FACTOR = float(os.environ.get(
+        'CELERY_RS_TEST_BINDING_EXPIRES_FACTOR', '0.01'))
 
 
 app = Celery('worker_consumer_app', broker=BROKER, backend=BACKEND)
@@ -42,8 +54,44 @@ app.conf.update(
         'CELERY_RS_TEST_ACKS_ON_FAILURE', True),
     worker_soft_shutdown_timeout=float(
         os.environ.get('CELERY_RS_TEST_SOFT_SHUTDOWN', '0')),
+    worker_cancel_long_running_tasks_on_connection_loss=_bool(
+        'CELERY_RS_TEST_CANCEL_LONG', False),
     broker_transport_options={},
 )
+
+#: File in cui i figli del pool annotano init/shutdown (test dei segnali).
+_CHILD_LIFECYCLE = os.environ.get('CELERY_RS_TEST_CHILD_LIFECYCLE')
+#: File in cui il master annota worker_ready/worker_shutting_down.
+_WORKER_LIFECYCLE = os.environ.get('CELERY_RS_TEST_WORKER_LIFECYCLE')
+
+
+if _CHILD_LIFECYCLE:
+    def _record(kind):
+        with open(_CHILD_LIFECYCLE, 'a', encoding='utf-8') as handle:
+            handle.write(f'{kind} {os.getpid()}\n')
+
+    @signals.worker_process_init.connect(weak=False)
+    def _child_init(**_kwargs):
+        _record('init')
+
+    @signals.worker_process_shutdown.connect(weak=False)
+    def _child_shutdown(**_kwargs):
+        _record('shutdown')
+
+
+if _WORKER_LIFECYCLE:
+    def _record_worker(kind):
+        with open(_WORKER_LIFECYCLE, 'a', encoding='utf-8') as handle:
+            handle.write(f'{kind} {os.getpid()}\n')
+
+    @signals.worker_ready.connect(weak=False)
+    def _worker_ready(**_kwargs):
+        _record_worker('ready')
+
+    @signals.worker_shutting_down.connect(weak=False)
+    def _worker_shutting_down(**_kwargs):
+        _record_worker('shutting_down')
+
 
 
 @app.task(name='rs_worker.add')
@@ -119,6 +167,17 @@ def wait_file(path, seconds=60):
 def acks_late_slow(seconds, x):
     time.sleep(seconds)
     return x
+
+
+@app.task(name='rs_worker.pid')
+def pid():
+    return os.getpid()
+
+
+@app.task(name='rs_worker.allocate')
+def allocate(mb):
+    """Alloca *mb* MiB e torna `(pid, dimensione)`: memory limit per child."""
+    return os.getpid(), len(bytearray(mb * 1024 * 1024))
 
 
 @app.task(name='rs_worker.reject_once', bind=True, acks_late=True)
