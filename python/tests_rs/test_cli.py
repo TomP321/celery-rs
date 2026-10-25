@@ -270,8 +270,13 @@ def test_multi_real_matches_reference():
     steps_ref = _multi_sequence(REF_VENV, f'redis://{REDIS_HOST}:{REDIS_PORT}/5')
     steps_rs = _multi_sequence(RS_VENV, f'redis://{REDIS_HOST}:{REDIS_PORT}/6')
     assert len(steps_ref) == len(steps_rs) == 6
+    # `Cluster.shutdown_nodes` del riferimento itera un `set` di `Node` (hash per id):
+    # l'ordine dei nodi in stop/restart dipende dagli indirizzi di memoria, non è semantica.
+    def unordered(step):
+        rc, stdout, stderr = step
+        return rc, sorted(stdout), sorted(stderr)
     for index, (ref, rust) in enumerate(zip(steps_ref, steps_rs)):
-        assert rust == ref, f'passo {index} diverso:\nref={ref}\nrs={rust}'
+        assert unordered(rust) == unordered(ref), f'passo {index} diverso:\nref={ref}\nrs={rust}'
 
 
 def test_worker_detach_and_beat_detach():

@@ -221,6 +221,12 @@ class Driver:
             if timeout_handler is not None:
                 timeout_handler.terminate()
                 timeout_handler.stop(5)
+            # Pool billiard già chiuso e atteso: il finalizzatore `_terminate_pool`
+            # rimasto registrato riscriverebbe sulla outqueue all'uscita
+            # dell'interprete e può fermarsi sul lock della coda (blocco a fine test).
+            finalizer = getattr(inner, '_terminate', None)
+            if finalizer is not None:
+                finalizer.cancel()
             self.pool = None
 
 
