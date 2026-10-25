@@ -3,6 +3,7 @@
     python -m celery_compat api        [--ref VENV] [--rs VENV]
     python -m celery_compat wire       [--ref VENV] [--rs VENV] [--broker redis amqp] [-s SCENARIO...]
     python -m celery_compat wire-worker [--ref VENV] [--rs VENV] [--broker redis amqp] [--pool solo]
+    python -m celery_compat wire-beat  [--ref VENV] [--rs VENV] [--broker redis amqp]
     python -m celery_compat upstream   [--venv VENV] [--suite unit|integration] [-k EXPR] [paths...]
 
 Ogni comando scrive i risultati in tools/compat/out/ ed esce con codice != 0 se il gate fallisce.
@@ -402,6 +403,102 @@ def cmd_wire_worker(args):
     return 1 if failures else 0
 
 
+# ---------------------------------------------------------------------- wire-beat
+
+#: durata di ogni esecuzione di beat: le voci a 300-500 ms scattano 5-10 volte
+BEAT_SECONDS = 3.5
+
+
+def run_beat(venv, broker):
+    import shutil
+    import threading
+    from . import wire
+    url, _ = BROKERS[broker]
+    env = venv_env()
+    env.update(COMPAT_BROKER=url, PYTHONPATH=str(HERE))
+    workdir = OUT / 'wire-beat'
+    shutil.rmtree(workdir, ignore_errors=True)
+    workdir.mkdir(parents=True)
+    with wire.capture(broker) as cap:
+        beat = subprocess.Popen(
+            [py(venv), '-P', '-m', 'celery', '-A', 'beat_app', 'beat', '-s',
+             str(workdir / 'celerybeat-schedule'), '-l', 'debug'],
+            cwd=workdir, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+            start_new_session=True)
+        log, started = [], threading.Event()
+
+        def pump():
+            for line in beat.stdout:
+                log.append(line)
+                if 'beat: Starting...' in line:
+                    started.set()
+        threading.Thread(target=pump, daemon=True).start()
+        try:
+            if not started.wait(30):
+                return None, 'beat non partito: ' + ''.join(log[-5:])[-300:]
+            time.sleep(BEAT_SECONDS)
+            beat.send_signal(15)
+            beat.wait(30)
+        finally:
+            if beat.poll() is None:
+                os.killpg(beat.pid, 9)
+                beat.wait()
+    errors = [line.strip() for line in log if 'Traceback' in line or ' ERROR' in line]
+    if errors:
+        return None, 'errori nel log di beat: ' + errors[0][:200]
+    if not (workdir / 'celerybeat-schedule').exists() and not list(workdir.glob('celerybeat-schedule*')):
+        return None, 'file di schedule non scritto'
+    return _worker_semantic(broker, cap.messages(lambda text: text), wire.Normalizer()), None
+
+
+def _beat_counts(records):
+    counts = {}
+    for rec in records:
+        counts[rec] = counts.get(rec, 0) + 1
+    return counts
+
+
+def cmd_wire_beat(args):
+    """Stessa forma dei messaggi di beat; il numero di invii può variare solo per i tempi."""
+    import difflib
+    from . import wire
+    OUT.mkdir(parents=True, exist_ok=True)
+    if 'amqp' in args.broker:
+        wire.enable_rabbit_trace()
+    lines, failures, results = [], 0, {}
+    for broker in args.broker:
+        ref, ref_err = run_beat(args.ref, broker)
+        rs, rs_err = run_beat(args.rs, broker)
+        problems = []
+        if ref_err:
+            status = f'ERRORE NEL RIFERIMENTO: {ref_err}'
+        elif rs_err:
+            status = f'errore rs: {rs_err}'
+        else:
+            rc, sc = _beat_counts(ref), _beat_counts(rs)
+            if set(rc) != set(sc):
+                problems.append('messaggi diversi')
+            for rec in set(rc) & set(sc):
+                # tolleranza sui tempi: stesso ordine di grandezza di invii per voce
+                if not (rc[rec] * 0.6 - 1 <= sc[rec] <= rc[rec] * 1.4 + 1):
+                    problems.append(f'invii {rc[rec]} vs {sc[rec]}: {rec[:100]}')
+            status = '; '.join(problems) if problems else 'ok'
+        ok = status == 'ok'
+        failures += not ok
+        results[broker] = {'status': status, 'ref': ref, 'rs': rs}
+        print(f'{"✓" if ok else "✗"} {broker:45} {status[:160]}')
+        if not ok and ref is not None and rs is not None:
+            lines.append(f'## {broker}\n{status}\n```diff')
+            lines += difflib.unified_diff(sorted(set(ref)), sorted(set(rs)), 'ref', 'rs',
+                                          lineterm='', n=0)
+            lines.append('```')
+    (OUT / 'wire-beat-report.md').write_text(
+        f'# celery-compat wire-beat — {failures} broker diversi\n\n' + '\n'.join(lines) + '\n')
+    (OUT / 'wire-beat.json').write_text(json.dumps(results, indent=1, ensure_ascii=False))
+    print(f'wire-beat: {failures} broker diversi su {len(results)} → {OUT / "wire-beat-report.md"}')
+    return 1 if failures else 0
+
+
 # ---------------------------------------------------------------------- upstream
 
 def junit_failures(xml_path):
@@ -530,6 +627,13 @@ def main(argv=None):
     ww.add_argument('--pool', default='solo')
     ww.add_argument('-s', '--scenario', nargs='+', help='filtra gli scenari per sottostringa')
     ww.set_defaults(fn=cmd_wire_worker)
+
+    wb = sub.add_parser('wire-beat',
+                        help='diff dei messaggi pubblicati da celery beat ref vs rs')
+    wb.add_argument('--ref', default=VENV_REF)
+    wb.add_argument('--rs', default=VENV_RS)
+    wb.add_argument('--broker', nargs='+', choices=tuple(BROKERS), default=list(BROKERS))
+    wb.set_defaults(fn=cmd_wire_beat)
 
     u = sub.add_parser('upstream', help='esegue la test suite di Celery contro un venv')
     u.add_argument('--venv', default=VENV_RS)
