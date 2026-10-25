@@ -226,7 +226,7 @@ struct Inner {
 
 enum Command {
     Wake,
-    Grow(usize),
+    Grow,
     Shrink(usize, Sender<Result<(), PoolError>>),
     TerminateJob {
         pid: i32,
@@ -236,6 +236,7 @@ enum Command {
     Restart,
     Close,
     Terminate,
+    Abandon,
     Frame {
         child: u32,
         frame: Frame,
@@ -326,7 +327,20 @@ impl Pool {
     }
 
     pub fn grow(&self, n: usize) {
-        let _ = self.inner.tx.send(Command::Grow(n));
+        // Aggiorna il target subito, come `Pool.grow` di billiard: l'autoscaler
+        // legge `num_processes` tra due `grow` e non deve vedere un valore
+        // vecchio (altrimenti sovradimensiona il pool).
+        {
+            let mut state = self
+                .inner
+                .state
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner);
+            if state.running() {
+                state.target = state.target.saturating_add(n);
+            }
+        }
+        let _ = self.inner.tx.send(Command::Grow);
     }
 
     /// Riduce il pool di `n` figli inattivi; errore se non ce ne sono.
@@ -347,6 +361,12 @@ impl Pool {
 
     pub fn restart(&self) {
         let _ = self.inner.tx.send(Command::Restart);
+    }
+
+    /// Uccide subito tutti i figli (zygote perso): i job in corso finiscono
+    /// come [`PoolEvent::WorkerLost`], quelli in coda come `PoolFailure`.
+    pub fn abandon_children(&self) {
+        let _ = self.inner.tx.send(Command::Abandon);
     }
 
     /// Scarta i job non ancora accettati (verranno riconsegnati dal broker).
@@ -480,7 +500,7 @@ fn supervisor(inner: Arc<Inner>, rx: Receiver<Command>) {
                 let wake_zygote_check = matches!(
                     command,
                     Command::Wake
-                        | Command::Grow(_)
+                        | Command::Grow
                         | Command::Shrink(..)
                         | Command::Close
                         | Command::Terminate
@@ -507,13 +527,8 @@ fn supervisor(inner: Arc<Inner>, rx: Receiver<Command>) {
 fn handle(inner: &Arc<Inner>, command: Command) {
     match command {
         Command::Wake => {}
-        Command::Grow(n) => {
-            {
-                let mut state = inner.state.lock().unwrap_or_else(PoisonError::into_inner);
-                if state.running() {
-                    state.target = state.target.saturating_add(n);
-                }
-            }
+        Command::Grow => {
+            // Il target è già stato aggiornato da `Pool::grow`.
             spawn_to_target(inner);
         }
         Command::Shrink(n, reply) => {
@@ -579,6 +594,19 @@ fn handle(inner: &Arc<Inner>, command: Command) {
         }
         Command::Frame { child, frame } => on_frame(inner, child, frame),
         Command::Closed { child, exitcode } => on_closed(inner, child, exitcode),
+        Command::Abandon => {
+            let pids: Vec<i32> = inner
+                .state
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .children
+                .values()
+                .map(|child| child.pid)
+                .collect();
+            for pid in pids {
+                let _ = inner.spawner.signal(pid, SIGKILL);
+            }
+        }
     }
 }
 
@@ -1500,6 +1528,9 @@ mod tests {
         let pool = Pool::new(Config::new(1), spawner, Waker::new());
         assert_eq!(pool.pids().len(), 1);
         pool.grow(2);
+        // Il target è visibile subito (come billiard): l'autoscaler non deve
+        // sovradimensionare mentre i figli vengono creati.
+        assert_eq!(pool.num_processes(), 3);
         let deadline = Instant::now() + Duration::from_secs(2);
         while pool.pids().len() < 3 && Instant::now() < deadline {
             thread::sleep(Duration::from_millis(5));
@@ -1559,6 +1590,22 @@ mod tests {
         );
         assert!(wait_stopped(&pool, Duration::from_secs(3)));
         assert!(spawner.state.lock().expect("state").shutdown);
+    }
+
+    #[test]
+    fn abandon_children_reports_worker_lost() {
+        let spawner = FakeSpawner::new();
+        let pool = Pool::new(Config::new(1), spawner.clone(), Waker::new());
+        pool.submit(spec(30, 1)).expect("submit");
+        let events = collect(&pool, 1, Duration::from_secs(2));
+        assert_eq!(kinds(&events), ["accepted"]);
+        let pid = pool.pids()[0];
+        // Zygote perso: i figli vanno uccisi e il job in corso risulta perso.
+        spawner.alive.store(false, Ordering::Release);
+        pool.abandon_children();
+        let events = collect(&pool, 1, Duration::from_secs(2));
+        assert!(kinds(&events).contains(&"lost"), "{events:?}");
+        assert!(spawner.signals().contains(&(pid, SIGKILL)));
     }
 
     #[test]

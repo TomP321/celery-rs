@@ -4,25 +4,26 @@
  "pool": "prefork",
  "concurrency": 4,
  "n": 20000,
- "pss_idle_kb": 150910,
+ "pss_idle_kb": 98576,
  "pss_idle_per_process_kb": [
-  33007,
-  23864,
-  31328,
-  31351,
-  31360
+  26896,
+  12420,
+  14813,
+  14815,
+  14815,
+  14817
  ],
- "pss_peak_kb": 154992,
- "pss_after_kb": 155496,
- "client_publish_per_s": 2915.5688335793598,
- "client_maxrss_kb": 48248,
- "end_to_end_s": 21.2622127532959,
- "end_to_end_tasks_per_s": 940.6358704081615,
- "drain_after_publish_s": 14.319057269996847,
+ "pss_peak_kb": 112441,
+ "pss_after_kb": 117017,
+ "client_publish_per_s": 2928.0768609988545,
+ "client_maxrss_kb": 48728,
+ "end_to_end_s": 7.090766668319702,
+ "end_to_end_tasks_per_s": 2820.5694723190486,
+ "drain_after_publish_s": 0.1599416299868608,
  "latency_ms": {
-  "p50": 2.71254549807054,
-  "p99": 3.429252996284049,
-  "max": 3.6146000056760386
+  "p50": 1.9343684980412945,
+  "p99": 2.999689007992856,
+  "max": 5.978799003059976
  },
  "python": "3.13.9"
 }

@@ -30,6 +30,7 @@ from billiard.exceptions import Terminated, TimeLimitExceeded, WorkerLostError
 from billiard.pool import TERM_SIGNAL
 
 from celery.concurrency.base import BasePool
+from celery.platforms import EX_FAILURE
 from celery.utils.log import get_logger
 
 from . import _rs_zygote
@@ -220,6 +221,13 @@ class RsTaskPool(BasePool):
         self._zygote_pid = 0
         self._pool_created = False
         self._zygote_lost = False
+        #: Putlock condiviso con `Worker._process_task_sem`: billiard lo
+        #: rilascia quando un job è pronto; senza, dopo `-c` task il master
+        #: smetterebbe di consegnare lavoro al pool.
+        self._putlock = self.options.get('semaphore')
+        #: Exit code con cui il worker deve uscire se il pool non è più
+        #: utilizzabile (zygote perso). ``None`` finché il pool è sano.
+        self._fatal_exitcode = None
 
     # -- lifecycle ---------------------------------------------------------
 
@@ -253,6 +261,7 @@ class RsTaskPool(BasePool):
             self.process_events()
             self._pool = None
         self._finish_zygote()
+        self._clear_putlock()
 
     def on_terminate(self):
         """Terminazione immediata (SIGTERM, poi SIGKILL)."""
@@ -267,10 +276,29 @@ class RsTaskPool(BasePool):
                 logger.error('pool Rust non terminato entro il timeout')
             self._pool = None
         self._finish_zygote()
+        self._clear_putlock()
 
     def on_close(self):
         if self._pool is not None:
             self._pool.close()
+        self._clear_putlock()
+
+    def _release_putlock(self):
+        """Rilascia uno slot del semaforo di `_process_task_sem` (come billiard)."""
+        if self._putlock is not None:
+            try:
+                self._putlock.release()
+            except Exception:  # pragma: no cover - semaforo in stato strano
+                logger.exception('Error releasing pool putlock')
+
+    def _clear_putlock(self):
+        # billiard lo azzera alla chiusura: i callback in attesa non devono
+        # essere richiamati dopo lo shutdown.
+        if self._putlock is not None:
+            try:
+                self._putlock.clear()
+            except Exception:  # pragma: no cover
+                pass
 
     def _finish_zygote(self):
         sock, pid = self._control_sock, self._zygote_pid
@@ -341,12 +369,27 @@ class RsTaskPool(BasePool):
         kind = event.kind
         if kind == 'zygote-lost':
             self._zygote_lost = True
-            logger.error(
-                'Pool zygote exited: no new child processes can be created')
+            if self._fatal_exitcode is None:
+                self._fatal_exitcode = EX_FAILURE
+                # Nessun altro figlio può nascere: i job in corso finiscono
+                # con WorkerLostError e i messaggi tornano al broker secondo
+                # acks_late/reject_on_worker_lost. Il master deve uscire con
+                # un exit code != 0 perché systemd/supervisor lo riavvii.
+                logger.critical(
+                    'Pool zygote process %s exited: no new child processes '
+                    'can be created. Shutting down the worker with exit '
+                    'code %s.', self._zygote_pid or '?', EX_FAILURE)
+                if self._pool is not None:
+                    self._pool.abandon_children()
             return
         result = self._cache.get(event.job)
         if result is None:
             return
+        if kind in ('ready', 'worker-lost', 'terminated', 'hard-timeout',
+                    'pool-failure'):
+            # Come billiard: lo slot si libera appena il job ha un esito.
+            if not result.ready():
+                self._release_putlock()
         if kind == 'accepted':
             result._ack(event.job, event.time_accepted, event.pid)
         elif kind == 'ready':
@@ -394,6 +437,11 @@ class RsTaskPool(BasePool):
     def did_start_ok(self):
         return self._pool is not None and self._pool.did_start_ok()
 
+    @property
+    def fatal_exitcode(self):
+        """Exit code richiesto al worker se il pool è inutilizzabile."""
+        return self._fatal_exitcode
+
     def flush(self):
         pool = self._pool
         if pool is None or self._state == self.TERMINATE:
@@ -418,10 +466,14 @@ class RsTaskPool(BasePool):
     def grow(self, n=1):
         if self._pool is not None:
             self._pool.grow(n)
+        if self._putlock is not None:
+            self._putlock.grow(n)
 
     def shrink(self, n=1):
         if self._pool is not None:
             self._pool.shrink(n)
+        if self._putlock is not None:
+            self._putlock.shrink(n)
 
     def _get_info(self):
         info = super()._get_info()

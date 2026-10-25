@@ -452,7 +452,7 @@ def start_worker(broker_name, *, queues=None, venv=RS_VENV, rust=True,
                  args=(), env_extra=None, nodename=None, db=None,
                  backend=None, multiplier=1, concurrency=1,
                  acks_on_failure=True, directory=None, full=False,
-                 loglevel='info'):
+                 loglevel='info', pool='solo'):
     info = BROKERS[broker_name]
     queue = queues or unique(f'rs-worker-{broker_name}')
     nodename = nodename or (unique('rs-worker') + '@localhost')
@@ -477,7 +477,7 @@ def start_worker(broker_name, *, queues=None, venv=RS_VENV, rust=True,
         env.update({key: str(value) for key, value in env_extra.items()})
     command = [
         str(Path(venv) / 'bin' / 'python'), '-m', 'celery',
-        '-A', 'worker_consumer_app', 'worker', '-P', 'solo',
+        '-A', 'worker_consumer_app', 'worker', '-P', pool,
         '-c', str(concurrency),
         '-l', loglevel, '-Q', queue, '-n', nodename,
         *(() if full else ('--without-gossip', '--without-mingle')),

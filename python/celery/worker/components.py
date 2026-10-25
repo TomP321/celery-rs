@@ -151,8 +151,21 @@ class Pool(bootsteps.StartStopStep):
             if w.pool_putlocks and w.pool_cls.uses_semaphore:
                 w.process_task = w._process_task_sem
         allow_restart = w.pool_restarts
+        pool_cls = w.pool_cls
+        extra = {}
+        # Pool di default con il consumer Rust: zygote + supervisore Rust al
+        # posto di billiard. Stesso waker del consumer, così il loop ha un solo
+        # fd da registrare nell'hub.
+        from celery.worker import _rs_consumer
+        if _rs_consumer.use_rs_pool(w):
+            from celery.concurrency.rs_prefork import RsTaskPool
+            pool_cls = RsTaskPool
+            waker = getattr(w, '_rs_waker', None)
+            if waker is None:
+                waker = w._rs_waker = _rs_consumer.new_waker()
+            extra['waker'] = waker
         pool = w.pool = self.instantiate(
-            w.pool_cls, w.min_concurrency,
+            pool_cls, w.min_concurrency,
             initargs=(w.app, w.hostname),
             maxtasksperchild=w.max_tasks_per_child,
             max_memory_per_child=w.max_memory_per_child,
@@ -167,6 +180,7 @@ class Pool(bootsteps.StartStopStep):
             semaphore=semaphore,
             sched_strategy=self.optimization,
             app=w.app,
+            **extra,
         )
         _set_task_join_will_block(pool.task_join_will_block)
         return pool

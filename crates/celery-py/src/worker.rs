@@ -47,6 +47,19 @@ impl PyWaker {
         let waker = self.inner.clone();
         Ok(py.detach(move || waker.wait(timeout)))
     }
+
+    /// fd leggibile quando c'è una notifica (`-1` se non disponibile).
+    ///
+    /// Il loop Python lo registra nel poller dell'hub (`add_reader`); la
+    /// callback chiama :meth:`drain` per consumare la notifica.
+    fn fileno(&self) -> i32 {
+        self.inner.fileno()
+    }
+
+    /// Consuma la notifica pendente (svuota il fd e lo stato `pending`).
+    fn drain(&self) {
+        self.inner.drain();
+    }
 }
 
 fn timeout_from_py(timeout: Option<f64>) -> PyResult<Option<Duration>> {
@@ -494,6 +507,13 @@ impl PyPool {
 
     fn restart(&self) {
         self.inner.restart();
+    }
+
+    /// Uccide i figli dopo la perdita dello zygote: i job in corso arrivano
+    /// come ``worker-lost`` (WorkerLostError) e i messaggi vengono
+    /// riconsegnati secondo ``acks_late``/``reject_on_worker_lost``.
+    fn abandon_children(&self) {
+        self.inner.abandon_children();
     }
 
     fn flush(&self, py: Python<'_>) -> Vec<u64> {
