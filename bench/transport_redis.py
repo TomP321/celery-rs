@@ -22,7 +22,7 @@ from kombu import Consumer, Producer, Queue
 
 import _celery_rs as rs
 
-URL = os.environ.get("CELERY_RS_TEST_REDIS", "redis://127.0.0.1:6390")
+URL = os.environ.get('CELERY_RS_REDIS_URL', os.environ.get("CELERY_RS_TEST_REDIS", 'redis://127.0.0.1:6390'))
 BODY = json.dumps({"task": "bench.add", "args": [1, 2], "kwargs": {}}).encode()
 
 

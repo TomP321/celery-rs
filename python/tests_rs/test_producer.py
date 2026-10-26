@@ -19,8 +19,8 @@ from celery import Celery
 from celery.app import _rs_producer
 from celery.app._rs_producer import FastProducerPool, RsProducer, use_fast_producer
 
-REDIS_URL = os.environ.get('CELERY_RS_TEST_REDIS', 'redis://127.0.0.1:6390')
-AMQP_URL = os.environ.get('CELERY_RS_TEST_AMQP', 'amqp://guest:guest@127.0.0.1:5673//')
+REDIS_URL = os.environ.get('CELERY_RS_REDIS_URL', os.environ.get('CELERY_RS_TEST_REDIS', 'redis://127.0.0.1:6390'))
+AMQP_URL = os.environ.get('CELERY_RS_AMQP_URL', os.environ.get('CELERY_RS_TEST_AMQP', 'amqp://guest:guest@127.0.0.1:5673//'))
 
 
 def with_db(url, db):
@@ -136,7 +136,7 @@ def test_wire_scenarios_publish_through_rust(monkeypatch):
 
     monkeypatch.setattr(KombuProducer, 'publish', boom)
 
-    app = wire_scenarios.make_app(REDIS_URL, 'redis://127.0.0.1:6390/1')
+    app = wire_scenarios.make_app(REDIS_URL, os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390') + '/1')
     try:
         assert isinstance(app.amqp.producer_pool, FastProducerPool)
         before = _rs_producer.stats()['publishes']
@@ -296,7 +296,7 @@ def test_use_fast_producer_rejects_unsupported_connections():
     assert not use_fast_producer(KombuConnection(
         REDIS_URL, transport_options={'socket_keepalive': True}))
     assert not use_fast_producer(KombuConnection(
-        f'{REDIS_URL};redis://127.0.0.1:6391/0'))
+        f'{REDIS_URL};redis://127.0.0.1:6499/0'))
     assert use_fast_producer(KombuConnection(REDIS_URL))
     assert use_fast_producer(KombuConnection(AMQP_URL))
 
@@ -505,10 +505,10 @@ def rust_connection_error(url, transport_options=None, connect_timeout=5):
 
 @pytest.mark.parametrize('label, url, options, timeout', [
     ('redis-refused', 'redis://127.0.0.1:6399/0', {}, 5),
-    ('redis-nohost', 'redis://no-such-host.invalid:6390/0', {}, 5),
+    ('redis-nohost', 'redis://no-such-host.invalid:6387/0', {}, 5),
     ('amqp-refused', 'amqp://guest:guest@127.0.0.1:5699//', {}, 5),
-    ('amqp-nohost', 'amqp://guest:guest@no-such-host.invalid:5673//', {}, 5),
-    ('amqp-timeout', 'amqp://guest:guest@192.0.2.1:5673//', {}, 1),
+    ('amqp-nohost', 'amqp://guest:guest@no-such-host.invalid:5687//', {}, 5),
+    ('amqp-timeout', 'amqp://guest:guest@192.0.2.1:5687//', {}, 1),
 ])
 def test_connection_error_messages_match_kombu(label, url, options, timeout):
     reference = reference_connection_error(url, options, timeout)
@@ -520,7 +520,7 @@ def test_connection_error_messages_match_kombu(label, url, options, timeout):
 # 5. heartbeat AMQP: connessione viva dopo un periodo di riposo
 # ---------------------------------------------------------------------------
 
-RABBIT_API = 'http://127.0.0.1:15673/api'
+RABBIT_API = os.environ.get('CELERY_RS_RABBIT_API', 'http://127.0.0.1:15673/api')
 
 
 def rabbit_api(path, method='GET'):

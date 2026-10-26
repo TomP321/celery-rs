@@ -22,10 +22,10 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 VENVS = ('ref', 'rs')
 BROKERS = {
-    'redis': 'redis://127.0.0.1:6390/7',
-    'amqp': 'amqp://guest:guest@127.0.0.1:5673//',
+    'redis': os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390') + '/7',
+    'amqp': os.environ.get('CELERY_RS_AMQP_URL', 'amqp://guest:guest@127.0.0.1:5673//'),
 }
-BACKEND = 'redis://127.0.0.1:6390/8'
+BACKEND = os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390') + '/8'
 WATCH = ('kombu.connection', 'kombu.serialization', 'kombu.transport', 'redis', 'amqp', 'billiard',
          'click', 'yaml', 'msgpack', 'greenlet', 'cffi', 'ssl', 'multiprocessing', 'importlib.metadata',
          'dateutil', 'decimal', 'email')

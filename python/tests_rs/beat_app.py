@@ -15,7 +15,7 @@ from kombu import Producer as KombuProducer
 from celery.beat import PersistentScheduler
 
 BROKER = os.environ.get(
-    'BEAT_TEST_BROKER', 'redis://127.0.0.1:6390/11')
+    'BEAT_TEST_BROKER', os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390') + '/11')
 QUEUE = os.environ.get('BEAT_TEST_QUEUE', 'beat-tests')
 SINK_KEY = os.environ.get('BEAT_TEST_SINK_KEY', 'beat-tests:sink')
 MODE = os.environ.get('BEAT_TEST_MODE', 'interval')

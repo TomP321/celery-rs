@@ -35,9 +35,9 @@ ROOT = HERE.parent
 REF_VENV = ROOT / '.venv-ref'
 REF_PYTHON = REF_VENV / 'bin' / 'python'
 
-AMQP = 'amqp://guest:guest@127.0.0.1:5673//'
-REDIS = 'redis://127.0.0.1:6390/0'
-REDIS_BACKEND = 'redis://127.0.0.1:6390/1'
+AMQP = os.environ.get('CELERY_RS_AMQP_URL', 'amqp://guest:guest@127.0.0.1:5673//')
+REDIS = os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390') + '/0'
+REDIS_BACKEND = os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390') + '/1'
 
 
 def unique(prefix):
@@ -136,7 +136,7 @@ def delete_rabbit_queue(queue):
     authenticator = 'Basic ' + base64.b64encode(b'guest:guest').decode()
     path = '/api/queues/%2F/' + urllib.parse.quote(queue, safe='')
     request = urllib.request.Request(
-        'http://127.0.0.1:15673' + path, method='DELETE',
+        os.environ.get('CELERY_RS_RABBIT_API', 'http://127.0.0.1:15673/api').removesuffix('/api') + path, method='DELETE',
         headers={'Authorization': authenticator})
     try:
         with urllib.request.urlopen(request, timeout=5):
@@ -150,9 +150,9 @@ def redis_clean():
         import redis
     except ImportError:  # pragma: no cover - solo con backend redis
         return
-    client = redis.Redis.from_url('redis://127.0.0.1:6390/1')
+    client = redis.Redis.from_url(os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390') + '/1')
     client.flushdb()
-    redis.Redis.from_url('redis://127.0.0.1:6390/0').flushdb()
+    redis.Redis.from_url(os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390') + '/0').flushdb()
 
 
 def benchmark(venv, args):

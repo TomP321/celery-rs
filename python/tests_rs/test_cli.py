@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import os
+from urllib.parse import urlsplit
 import re
 import shutil
 import signal
@@ -36,7 +37,7 @@ RS_VENV = ROOT / '.venv-rs'
 REF_PYTHON = REF_VENV / 'bin' / 'python'
 RS_PYTHON = RS_VENV / 'bin' / 'python'
 
-REDIS_HOST, REDIS_PORT = '127.0.0.1', 6390
+REDIS_HOST, REDIS_PORT = urlsplit(os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390')).hostname, urlsplit(os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390')).port
 #: Database dedicati (gli altri test usano 7-15): broker 3, backend 4.
 BROKER = f'redis://{REDIS_HOST}:{REDIS_PORT}/3'
 BACKEND = f'redis://{REDIS_HOST}:{REDIS_PORT}/4'

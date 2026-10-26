@@ -27,7 +27,7 @@ import _celery_rs as rs
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "tools" / "compat"))
 from celery_compat.wire import Normalizer, RedisCapture  # noqa: E402
 
-REDIS_URL = os.environ.get("CELERY_RS_TEST_REDIS", "redis://127.0.0.1:6390")
+REDIS_URL = os.environ.get('CELERY_RS_REDIS_URL', os.environ.get("CELERY_RS_TEST_REDIS", 'redis://127.0.0.1:6390'))
 UUID_RE = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 TS_RE = re.compile(r"(?<![\d.])1[5-9]\d{8}\.\d+")
 
@@ -967,6 +967,6 @@ def test_url_and_transport_options():
     connection.close()
 
     with pytest.raises(ValueError):
-        rs.Connection("redis://127.0.0.1:6390/not-a-db")
+        rs.Connection("redis://127.0.0.1:6387/not-a-db")
     with pytest.raises(ValueError):
         rs.Connection(REDIS_URL, transport_options={"priority_steps": "0,3,6,9"})

@@ -10,6 +10,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+from urllib.parse import urlsplit
 import signal
 import socket
 import subprocess
@@ -33,10 +34,8 @@ from celery.exceptions import TimeoutError
 TESTS_DIR = Path(__file__).resolve().parent
 ROOT = TESTS_DIR.parents[1]
 REF_PYTHON = ROOT / '.venv-ref' / 'bin' / 'python'
-AMQP_URL = os.environ.get(
-    'CELERY_RS_TEST_AMQP', 'amqp://guest:guest@127.0.0.1:5673//')
-RABBIT_API = os.environ.get(
-    'CELERY_RS_TEST_RABBIT_API', 'http://127.0.0.1:15673/api')
+AMQP_URL = os.environ.get('CELERY_RS_AMQP_URL', os.environ.get('CELERY_RS_TEST_AMQP', 'amqp://guest:guest@127.0.0.1:5673//'))
+RABBIT_API = os.environ.get('CELERY_RS_RABBIT_API', os.environ.get('CELERY_RS_TEST_RABBIT_API', 'http://127.0.0.1:15673/api'))
 
 
 def unique(prefix):
@@ -92,7 +91,7 @@ def delete_queue(queue):
 
 @pytest.fixture(scope='module', autouse=True)
 def broker():
-    for host, port in (('127.0.0.1', 5673), ('127.0.0.1', 15673)):
+    for host, port in ((urlsplit(os.environ.get('CELERY_RS_AMQP_URL', 'amqp://guest:guest@127.0.0.1:5673//')).hostname, urlsplit(os.environ.get('CELERY_RS_AMQP_URL', 'amqp://guest:guest@127.0.0.1:5673//')).port), (urlsplit(os.environ.get('CELERY_RS_RABBIT_API', 'http://127.0.0.1:15673/api')).hostname, urlsplit(os.environ.get('CELERY_RS_RABBIT_API', 'http://127.0.0.1:15673/api')).port)):
         sock = socket.socket()
         sock.settimeout(1)
         try:

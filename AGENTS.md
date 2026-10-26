@@ -14,6 +14,15 @@ Stai lavorando a celery-rs: Celery riscritto con core in Rust, API Python identi
 
 ## Ambiente
 - Venv: `.venv-ref` (Celery originale), `.venv-rs` (celery-rs). Python 3.13.
+- Corsie di test: `tools/dev/lanes up|down|status`, numero configurabile con
+  `CELERY_RS_LANES` (default 4). `tools/dev/with-brokers comando ...` assegna una corsia
+  esclusiva, rientrante, e ripulisce processi e connessioni alla fine. Esporta
+  `CELERY_RS_LANE`, `CELERY_RS_REDIS_URL` (senza db), `CELERY_RS_AMQP_URL`,
+  `CELERY_RS_RABBIT_API` (con `/api`). Senza override gli indirizzi restano quelli
+  della corsia 0. Le corsie successive incrementano tutte le porte di 1.
+  `tools/dev/gates` esegue i gate; `--only tests_rs` seleziona tutti i gruppi Python,
+  gli altri nomi corrispondono alla tabella finale. Log in `target/gates/<nome>.log`
+  e copie permanenti in una sottodirectory per invocazione.
 - Broker di test: Redis `127.0.0.1:6390`, RabbitMQ `127.0.0.1:5673` (guest/guest).
   Avvio: `docker compose -f infra/docker-compose.yml up -d`.
   I broker sono condivisi con altri agenti in parallelo: esegui i test che usano Redis/RabbitMQ

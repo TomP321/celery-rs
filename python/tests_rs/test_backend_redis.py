@@ -35,7 +35,7 @@ from celery.result import denied_join_result
 
 ROOT = Path(__file__).resolve().parents[2]
 REFERENCE_PYTHON = ROOT / '.venv-ref' / 'bin' / 'python'
-REDIS_URL = os.environ.get('CELERY_RS_TEST_REDIS', 'redis://127.0.0.1:6390')
+REDIS_URL = os.environ.get('CELERY_RS_REDIS_URL', os.environ.get('CELERY_RS_TEST_REDIS', 'redis://127.0.0.1:6390'))
 
 # Database dedicati: gli altri test/agenti usano 0/1 e non vanno disturbati.
 def _with_db(url, db):

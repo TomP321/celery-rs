@@ -1,0 +1,32 @@
+#!/usr/bin/env python3
+"""Gestione dei broker isolati; CELERY_RS_LANES determina il numero di corsie."""
+import os
+from pathlib import Path
+import subprocess
+import sys
+
+ROOT = Path(__file__).resolve().parents[2]
+
+
+def environment(lane):
+    return dict(os.environ, CELERY_RS_LANE=str(lane),
+                CELERY_RS_REDIS_PORT=str(6390 + lane),
+                CELERY_RS_AMQP_PORT=str(5673 + lane),
+                CELERY_RS_API_PORT=str(15673 + lane),
+                CELERY_RS_REDIS_URL=f'redis://127.0.0.1:{6390 + lane}',
+                CELERY_RS_AMQP_URL=f'amqp://guest:guest@127.0.0.1:{5673 + lane}//',
+                CELERY_RS_RABBIT_API=f'http://127.0.0.1:{15673 + lane}/api')
+
+
+if __name__ == '__main__':
+    if len(sys.argv) != 2 or sys.argv[1] not in ('up', 'down', 'status'):
+        sys.exit('uso: tools/dev/lanes up|down|status')
+    count = int(os.environ.get('CELERY_RS_LANES', '4'))
+    if count < 1:
+        sys.exit('CELERY_RS_LANES deve essere positivo')
+    for lane in range(count):
+        project = 'celery-rs' if lane == 0 else f'celery-rs-lane-{lane}'
+        action = {'up': ['up', '-d', '--wait', '--wait-timeout', '120'],
+                  'down': ['down'], 'status': ['ps']}[sys.argv[1]]
+        subprocess.run(['docker', 'compose', '-f', str(ROOT / 'infra/docker-compose.yml'),
+                        '-p', project, *action], env=environment(lane), check=True)

@@ -25,9 +25,9 @@ ROOT = TESTS_DIR.parents[1]
 REF_PYTHON = ROOT / '.venv-ref' / 'bin' / 'python'
 RS_PYTHON = ROOT / '.venv-rs' / 'bin' / 'python'
 
-REDIS_URL = 'redis://127.0.0.1:6390/7'
-AMQP_URL = 'amqp://guest:guest@127.0.0.1:5673//'
-BACKEND_URL = 'redis://127.0.0.1:6390/8'
+REDIS_URL = os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390') + '/7'
+AMQP_URL = os.environ.get('CELERY_RS_AMQP_URL', 'amqp://guest:guest@127.0.0.1:5673//')
+BACKEND_URL = os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390') + '/8'
 
 #: Gli oggetti veri di kombu impongono amqp/billiard e il registry completo
 #: dei serializer; i client dei broker e le dipendenze di CLI, greenlet e

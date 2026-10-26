@@ -2,12 +2,23 @@
 name: celery-rs
 services:
   redis:
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 60
     image: redis:7.4-alpine
     command: ["redis-server", "--save", "", "--appendonly", "no"]
-    ports: ["127.0.0.1:6390:6379"]
+    ports: ["127.0.0.1:${CELERY_RS_REDIS_PORT:-6390}:6379"]
   rabbitmq:
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
+      interval: 5s
+      timeout: 10s
+      retries: 24
     image: rabbitmq:4.1-management-alpine
-    ports: ["127.0.0.1:5673:5672", "127.0.0.1:15673:15672"]
+    ports: ["127.0.0.1:${CELERY_RS_AMQP_PORT:-5673}:5672", "127.0.0.1:${CELERY_RS_API_PORT:-15673}:15672"]
     environment:
+      RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: "+S 2:2"
       RABBITMQ_DEFAULT_USER: guest
       RABBITMQ_DEFAULT_PASS: guest

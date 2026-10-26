@@ -853,7 +853,9 @@ mod tests {
     // ------------------------------------------------------------------
 
     fn test_url() -> String {
-        std::env::var("CELERY_RS_TEST_REDIS").unwrap_or_else(|_| "redis://127.0.0.1:6390".into())
+        std::env::var("CELERY_RS_REDIS_URL")
+            .or_else(|_| std::env::var("CELERY_RS_TEST_REDIS"))
+            .unwrap_or_else(|_| "redis://127.0.0.1:6390".into())
     }
 
     fn test_config(db: i64) -> Config {

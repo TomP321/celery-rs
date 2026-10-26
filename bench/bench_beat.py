@@ -31,8 +31,8 @@ ROOT = HERE.parent
 RESULTS = HERE / 'results'
 
 BROKERS = {
-    'redis': 'redis://127.0.0.1:6390/5',
-    'amqp': 'amqp://guest:guest@127.0.0.1:5673//',
+    'redis': os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390') + '/5',
+    'amqp': os.environ.get('CELERY_RS_AMQP_URL', 'amqp://guest:guest@127.0.0.1:5673//'),
 }
 
 MICROBENCH = r'''

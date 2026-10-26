@@ -14,7 +14,7 @@ from celery import Celery, signals
 
 BROKER = os.environ['CELERY_RS_TEST_WORKER_BROKER']
 BACKEND = os.environ.get(
-    'CELERY_RS_TEST_WORKER_BACKEND', 'redis://127.0.0.1:6390/5')
+    'CELERY_RS_TEST_WORKER_BACKEND', os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390') + '/5')
 QUEUE = os.environ.get('CELERY_RS_TEST_WORKER_QUEUE', 'rs-worker-tests')
 
 

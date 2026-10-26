@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+from urllib.parse import urlsplit
 import statistics
 import subprocess
 import sys
@@ -30,9 +31,10 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 sys.path.insert(0, str(HERE))
 
-REDIS_PORT = os.environ.get('BENCH_REDIS_PORT', '6390')
-BROKER = os.environ.get('BENCH_BROKER', f'redis://127.0.0.1:{REDIS_PORT}/6')
-BACKEND = os.environ.get('BENCH_BACKEND', f'redis://127.0.0.1:{REDIS_PORT}/7')
+REDIS_ADDRESS = urlsplit(os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390'))
+REDIS_PORT = os.environ.get('BENCH_REDIS_PORT', str(REDIS_ADDRESS.port))
+BROKER = os.environ.get('BENCH_BROKER', f'redis://{REDIS_ADDRESS.hostname}:{REDIS_PORT}/6')
+BACKEND = os.environ.get('BENCH_BACKEND', f'redis://{REDIS_ADDRESS.hostname}:{REDIS_PORT}/7')
 QUEUE = os.environ.get('BENCH_QUEUE', f'bench-result-{uuid.uuid4().hex[:8]}')
 
 # `benchapp` legge queste variabili all'import: il client deve usare gli stessi

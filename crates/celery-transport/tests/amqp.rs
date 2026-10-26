@@ -18,7 +18,8 @@ use compact_str::CompactString;
 const WAIT: Duration = Duration::from_secs(8);
 
 fn broker_url() -> String {
-    std::env::var("CELERY_RS_TEST_AMQP")
+    std::env::var("CELERY_RS_AMQP_URL")
+        .or_else(|_| std::env::var("CELERY_RS_TEST_AMQP"))
         .unwrap_or_else(|_| "amqp://guest:guest@127.0.0.1:5673//".to_string())
 }
 

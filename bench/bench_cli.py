@@ -35,10 +35,10 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 REF_VENV = ROOT / '.venv-ref'
 RS_VENV = ROOT / '.venv-rs'
-REDIS = 'redis://127.0.0.1:6390'
+REDIS = os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390')
 BACKEND = f'{REDIS}/15'
-RABBIT_API = 'http://127.0.0.1:15673/api'
-RABBIT = 'amqp://guest:guest@127.0.0.1:5673'
+RABBIT_API = os.environ.get('CELERY_RS_RABBIT_API', 'http://127.0.0.1:15673/api')
+RABBIT = os.environ.get('CELERY_RS_AMQP_URL', 'amqp://guest:guest@127.0.0.1:5673//')
 
 #: Obiettivi di RSS per caso (rapporto rs/ref): `--help` non deve peggiorare,
 #: gli altri devono essere almeno il 10% sotto il riferimento.
@@ -91,7 +91,7 @@ def broker_config(name):
     rabbit_api('PUT', f'/vhosts/{quoted}', {'description': 'bench cli'})
     rabbit_api('PUT', f'/permissions/{quoted}/guest',
                {'configure': '.*', 'write': '.*', 'read': '.*'})
-    return f'{RABBIT}/{quoted}', quoted
+    return f"{RABBIT.rstrip('/')}/{quoted}", quoted
 
 
 def drop_vhost(quoted):
