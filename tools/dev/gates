@@ -137,7 +137,8 @@ def main():
                              key=lambda item: weights.get('gate:' + item[0],
                                                           estimates.get(item[0], 60)),
                              reverse=True)
-            futures = [pool.submit(run, name, cmd) for name, cmd in ordered
+            # `integration` prende da sé una corsia per broker: niente lock esterno
+            futures = [pool.submit(run, name, cmd, name != 'integration') for name, cmd in ordered
                        if name in selected or ('tests_rs' in selected and name.startswith('tests_rs-'))]
             rows.extend(f.result() for f in futures)
     print('nome | esito | durata | sintesi')

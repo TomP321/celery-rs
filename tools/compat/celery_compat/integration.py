@@ -40,12 +40,27 @@ def regressions(reference, candidate):
 
 
 def cmd_integration(args):
-    from .cli import OUT, ROOT, REF_SRC, py, run_group
+    from .cli import OUT, ROOT
     if os.environ.get('CELERY_RS_BROKER_LOCKED') != '1':
-        return subprocess.call([str(ROOT / 'tools/dev/with-brokers'), str(ROOT / 'compat'),
-                                'integration', *args.forward])
+        # un processo per broker, ognuno sulla propria corsia: i giri sono indipendenti
+        base = ['--ref', str(args.ref), '--rs', str(args.rs)] + (['-k', args.k] if args.k else [])
+        tail = ['--', *args.paths] if args.paths else []
+        procs = [subprocess.Popen([str(ROOT / 'tools/dev/with-brokers'), str(ROOT / 'compat'),
+                                   'integration', *base, '--broker', broker, *tail])
+                 for broker in args.broker]
+        codes = [proc.wait() for proc in procs]
+        if any(code not in (0, 1) for code in codes):
+            return 2
+        return write_report(OUT, args.broker)
+    for broker in args.broker:
+        run_broker(args, broker)
+    return write_report(OUT, args.broker) if len(args.broker) == 1 else 0
+
+
+def run_broker(args, broker):
+    from .cli import OUT, REF_SRC, py, run_group
     OUT.mkdir(parents=True, exist_ok=True)
-    source = OUT / 'integration-src'
+    source = OUT / f'integration-src-{broker}'
     shutil.rmtree(source, ignore_errors=True)
     shutil.copytree(REF_SRC / 't', source / 't', ignore=shutil.ignore_patterns('__pycache__'))
     for name in ('pyproject.toml', 'setup.cfg'):
@@ -55,7 +70,7 @@ def cmd_integration(args):
     address = urlsplit(redis)
     report = {}
     infrastructure = []
-    for broker in args.broker:
+    for broker in [broker]:
         env = {**os.environ, 'TEST_BROKER': redis + '/0' if broker == 'redis' else
                os.environ['CELERY_RS_AMQP_URL'].replace('amqp://', 'pyamqp://', 1),
                'TEST_BACKEND': redis + '/1', 'REDIS_HOST': address.hostname,
@@ -117,6 +132,20 @@ def cmd_integration(args):
         report[broker] = {**runs, 'regressions': differences, 'missing': missing}
         print(f'integration {broker}: ref {runs["ref"]["counts"]}; '
               f'rs {runs["rs"]["counts"]}; {len(differences)} regressioni', flush=True)
+    (OUT / f'integration-{broker}.json').write_text(json.dumps(
+        {'configurations': report, 'infrastructure': infrastructure}, indent=2))
+
+
+def write_report(OUT, brokers):
+    report, infrastructure = {}, []
+    for broker in brokers:
+        path = OUT / f'integration-{broker}.json'
+        if not path.exists():
+            infrastructure.append(f'{broker}: risultato assente')
+            continue
+        part = json.loads(path.read_text())
+        report.update(part['configurations'])
+        infrastructure += part['infrastructure']
     (OUT / 'integration-report.json').write_text(json.dumps(
         {'configurations': report, 'infrastructure': infrastructure}, indent=2))
     lines = ['# Integration', '', '| Broker | Venv | Passed | Failed | Skipped | Error | Regressions |',
