@@ -4,9 +4,13 @@ from __future__ import annotations
 import os
 import socket
 from functools import partial
+from typing import TYPE_CHECKING
 
 from .functional import memoize
 from .text import simple_format
+
+if TYPE_CHECKING:
+    from kombu.entity import Queue
 
 #: Nome dell'exchange delle worker direct queues (l'oggetto `kombu.Exchange`
 #: si crea al primo uso: importare `kombu.entity` caricherebbe anche
