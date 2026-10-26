@@ -533,6 +533,22 @@ pub trait Transport: Send + Sync {
         self.consume(queues, prefetch)
     }
 
+    /// Risposte temporanee pidbox: niente ack né QoS, cancellate prima del ritorno.
+    /// Il trasporto può riusare il canale delle dichiarazioni senza alterare
+    /// l'isolamento dei consumatori ordinari.
+    fn consume_control_reply<'a>(
+        &'a self,
+        queue: &'a CompactString,
+    ) -> BoxFuture<'a, Result<Consumer>> {
+        self.consume_no_ack(std::slice::from_ref(queue), 0)
+    }
+
+    /// Pulizia della risposta temporanea nei trasporti virtuali.
+    /// AMQP lascia al broker l'auto-delete, come il canale di kombu.
+    fn after_reply_message_received<'a>(&'a self, queue: &'a str) -> BoxFuture<'a, Result<()>> {
+        self.delete_queue(queue)
+    }
+
     /// `basic_get`: un messaggio dalla coda, senza passare dal consumatore.
     /// Con `no_ack=false` entra nell'insieme in volo del trasporto e va
     /// confermato con [`Transport::ack`]/[`Transport::reject`].

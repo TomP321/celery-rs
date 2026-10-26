@@ -1,5 +1,6 @@
 """App Celery usata dal benchmark. Lo stesso file gira con Celery di riferimento e con celery-rs."""
 import os
+import time
 from urllib.parse import urlsplit
 
 from celery import Celery
@@ -54,3 +55,13 @@ def noop_pure():
             os.write(fd, b'.')
         finally:
             os.close(fd)
+
+
+if os.environ.get('BENCH_TOPLEVEL') == '1':
+    import bench_toplevel  # noqa: F401
+
+
+@app.task
+def timed(sent_ns):
+    entered_ns = time.monotonic_ns()
+    return sent_ns, entered_ns, time.monotonic_ns()

@@ -312,13 +312,13 @@ where
 
     let ticket = request.ticket.clone().unwrap_or_default();
     let consumer = transport
-        .consume_no_ack(std::slice::from_ref(&reply.name), 0)
+        .consume_control_reply(&reply.name)
         .await?;
     let outcome =
         collect_replies(consumer.deliveries, &ticket, request.timeout, request.limit).await?;
     // Come `chan.after_reply_message_received(queue.name)` nel `finally`.
     let _ = consumer.control.cancel().await;
-    let _ = transport.delete_queue(&reply.name).await;
+    let _ = transport.after_reply_message_received(&reply.name).await;
     Ok(outcome)
 }
 
