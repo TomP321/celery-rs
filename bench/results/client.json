@@ -2,21 +2,21 @@
  "ref-redis": [
   {
    "step": "start",
-   "Pss": 5679,
+   "Pss": 5709,
    "Pss_Anon": 4808,
    "modules": 79,
    "watch": []
   },
   {
    "step": "import celery",
-   "Pss": 6323,
-   "Pss_Anon": 5392,
+   "Pss": 6357,
+   "Pss_Anon": 5396,
    "modules": 87,
    "watch": []
   },
   {
    "step": "app + task",
-   "Pss": 24254,
+   "Pss": 24215,
    "Pss_Anon": 20136,
    "modules": 353,
    "watch": [
@@ -40,8 +40,8 @@
   },
   {
    "step": "delay",
-   "Pss": 35496,
-   "Pss_Anon": 31016,
+   "Pss": 35444,
+   "Pss_Anon": 31004,
    "modules": 522,
    "watch": [
     "kombu.connection",
@@ -65,8 +65,8 @@
   },
   {
    "step": "get",
-   "Pss": 35500,
-   "Pss_Anon": 31020,
+   "Pss": 35448,
+   "Pss_Anon": 31008,
    "modules": 522,
    "watch": [
     "kombu.connection",
@@ -92,21 +92,21 @@
  "rs-redis": [
   {
    "step": "start",
-   "Pss": 4912,
-   "Pss_Anon": 4068,
+   "Pss": 4938,
+   "Pss_Anon": 4072,
    "modules": 61,
    "watch": []
   },
   {
    "step": "import celery",
-   "Pss": 5672,
-   "Pss_Anon": 4772,
+   "Pss": 5699,
+   "Pss_Anon": 4776,
    "modules": 72,
    "watch": []
   },
   {
    "step": "app + task",
-   "Pss": 18274,
+   "Pss": 18253,
    "Pss_Anon": 15188,
    "modules": 262,
    "watch": [
@@ -122,8 +122,8 @@
   },
   {
    "step": "delay",
-   "Pss": 27791,
-   "Pss_Anon": 19888,
+   "Pss": 27766,
+   "Pss_Anon": 19884,
    "modules": 333,
    "watch": [
     "kombu.connection",
@@ -143,8 +143,8 @@
   },
   {
    "step": "get",
-   "Pss": 27879,
-   "Pss_Anon": 19912,
+   "Pss": 27854,
+   "Pss_Anon": 19908,
    "modules": 333,
    "watch": [
     "kombu.connection",
@@ -166,21 +166,21 @@
  "ref-amqp": [
   {
    "step": "start",
-   "Pss": 5680,
+   "Pss": 5690,
    "Pss_Anon": 4808,
    "modules": 79,
    "watch": []
   },
   {
    "step": "import celery",
-   "Pss": 6310,
-   "Pss_Anon": 5392,
+   "Pss": 6325,
+   "Pss_Anon": 5396,
    "modules": 87,
    "watch": []
   },
   {
    "step": "app + task",
-   "Pss": 24202,
+   "Pss": 24227,
    "Pss_Anon": 20136,
    "modules": 353,
    "watch": [
@@ -204,7 +204,7 @@
   },
   {
    "step": "delay",
-   "Pss": 35336,
+   "Pss": 35360,
    "Pss_Anon": 30908,
    "modules": 524,
    "watch": [
@@ -229,7 +229,7 @@
   },
   {
    "step": "get",
-   "Pss": 35344,
+   "Pss": 35368,
    "Pss_Anon": 30916,
    "modules": 524,
    "watch": [
@@ -256,22 +256,22 @@
  "rs-amqp": [
   {
    "step": "start",
-   "Pss": 4924,
-   "Pss_Anon": 4072,
+   "Pss": 4926,
+   "Pss_Anon": 4068,
    "modules": 61,
    "watch": []
   },
   {
    "step": "import celery",
-   "Pss": 5671,
-   "Pss_Anon": 4776,
+   "Pss": 5673,
+   "Pss_Anon": 4772,
    "modules": 72,
    "watch": []
   },
   {
    "step": "app + task",
-   "Pss": 18219,
-   "Pss_Anon": 15188,
+   "Pss": 18248,
+   "Pss_Anon": 15184,
    "modules": 262,
    "watch": [
     "amqp",
@@ -286,8 +286,8 @@
   },
   {
    "step": "delay",
-   "Pss": 28008,
-   "Pss_Anon": 19968,
+   "Pss": 28057,
+   "Pss_Anon": 19960,
    "modules": 333,
    "watch": [
     "kombu.connection",
@@ -307,8 +307,8 @@
   },
   {
    "step": "get",
-   "Pss": 28088,
-   "Pss_Anon": 19984,
+   "Pss": 28137,
+   "Pss_Anon": 19976,
    "modules": 333,
    "watch": [
     "kombu.connection",

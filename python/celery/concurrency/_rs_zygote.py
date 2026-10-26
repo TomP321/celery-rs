@@ -128,8 +128,13 @@ def _main(control, app, hostname):
     # figlio) li rende condivisi in copy-on-write con lo zygote.
     for module in (
             'celery.app.task', 'celery.canvas', 'celery.result',
-            'celery.backends', 'celery.backends.base', 'celery.app.trace',
-            'celery.app._rs_producer', 'celery.app.amqp'):
+            'celery.backends', 'celery.backends.base',
+            'celery.backends.asynchronous', 'celery.backends.redis',
+            'celery.app.trace', 'celery.app._rs_producer', 'celery.app.amqp',
+            # `billiard.util.set_pdeathsig` compila un wrapper cffi all'avvio
+            # di ogni figlio (`cffi.FFI()` → cparser/pycparser): qui le pagine
+            # restano condivise con tutti i figli.
+            'billiard.util', 'cffi.cparser'):
         try:
             __import__(module)
         except Exception:  # pragma: no cover - dipendenze opzionali
