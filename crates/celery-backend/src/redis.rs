@@ -143,6 +143,7 @@ pub enum Command {
     Delete { keys: Vec<Bytes> },
     Incr { key: Bytes, amount: Option<i64> },
     Expire { key: Bytes, seconds: i64 },
+    Ttl { key: Bytes },
     Publish { channel: Bytes, message: Bytes },
     ZAdd { key: Bytes, pairs: Vec<(Bytes, Bytes)> },
     ZCount { key: Bytes, min: Bytes, max: Bytes },
@@ -211,6 +212,9 @@ impl Command {
             }
             Command::Expire { key, seconds } => {
                 pipe.cmd("EXPIRE").arg(key.as_ref()).arg(*seconds);
+            }
+            Command::Ttl { key } => {
+                pipe.cmd("TTL").arg(key.as_ref());
             }
             Command::Publish { channel, message } => {
                 pipe.cmd("PUBLISH").arg(channel.as_ref()).arg(message.as_ref());
@@ -570,14 +574,14 @@ impl PubSubConnection {
         poll_send(sink.subscribe(channels))
     }
 
-    /// Come `subscribe`: redis-py non attende la conferma di UNSUBSCRIBE.
-    pub fn unsubscribe(&self, channels: &[String]) -> Result<(), Error> {
+    /// La conferma garantisce che il runtime abbia inviato il comando prima di close.
+    pub async fn unsubscribe(&self, channels: &[String]) -> Result<(), Error> {
         self.ensure_open()?;
         if channels.is_empty() {
             return Ok(());
         }
-        let mut sink = lock(&self.sink);
-        poll_send(sink.unsubscribe(channels))
+        let mut sink = lock(&self.sink).clone();
+        sink.unsubscribe(channels).await.map_err(Error::from_redis)
     }
 
     /// Chiude la connessione: come `PubSub.close()` di redis-py non invia
@@ -798,6 +802,9 @@ mod tests {
 
     #[test]
     fn reply_types_follow_redis_py() {
+        for ttl in [-2, -1, 60] {
+            assert_eq!(Command::Ttl { key: Bytes::from_static(b"k") }.decode(Value::Int(ttl)), Reply::Int(ttl));
+        }
         assert_eq!(
             Command::Set {
                 key: Bytes::from_static(b"k"),
@@ -1090,6 +1097,17 @@ mod tests {
             .expect("messaggio");
         assert_eq!(message.payload, Bytes::from_static(b"payload"));
         assert_eq!(message.channel.as_bytes(), channel.as_ref());
+        subscriber
+            .unsubscribe(&[String::from_utf8_lossy(&channel).into_owned()])
+            .await
+            .expect("unsubscribe");
+        assert_eq!(
+            client.execute(Command::Publish {
+                channel,
+                message: Bytes::from_static(b"after unsubscribe"),
+            }).await.expect("PUBLISH"),
+            Reply::Int(0),
+        );
         subscriber.close();
         assert!(subscriber
             .get_message(Some(Duration::from_millis(1)))

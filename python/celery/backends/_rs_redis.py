@@ -259,6 +259,10 @@ class RsRedis:
         _STATS['commands'] += 1
         return self._rs.expire(_encode(name), int(time))
 
+    def ttl(self, name):
+        _STATS['commands'] += 1
+        return self._rs.ttl(_encode(name))
+
     def publish(self, channel, message):
         _STATS['commands'] += 1
         return self._rs.publish(_encode(channel), _encode(message))

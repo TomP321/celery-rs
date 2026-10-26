@@ -1,0 +1,41 @@
+{
+ "micro": {
+  "remaining_estimate_simple_ns": 3748.9737005671486,
+  "is_due_simple_ns": 8323.51545104757,
+  "remaining_estimate_mixed_ns": 3685.9376006759703,
+  "is_due_mixed_ns": 8425.91774999164
+ },
+ "brokers": {
+  "redis": {
+   "pss_3_kb": 28944,
+   "pss_1000_kb": 33710,
+   "tick": {
+    "tick_us": 1044.4693889999999,
+    "tick_wall_us": 1044.512811495224,
+    "entries": 1000
+   },
+   "sends": {
+    "sends": 1853,
+    "seconds": 3.00082840496907,
+    "sends_s": 617.4961543724454,
+    "cpu_sends_s": 713.7817975986105
+   }
+  },
+  "amqp": {
+   "pss_3_kb": 28914,
+   "pss_1000_kb": 34062,
+   "tick": {
+    "tick_us": 989.9843310000001,
+    "tick_wall_us": 989.9944240169135,
+    "entries": 1000
+   },
+   "sends": {
+    "sends": 2172,
+    "seconds": 3.001504217972979,
+    "sends_s": 723.6371639906699,
+    "cpu_sends_s": 729.9621365615061
+   }
+  }
+ },
+ "label": "09a-control-before"
+}
