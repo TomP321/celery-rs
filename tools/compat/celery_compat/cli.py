@@ -607,7 +607,7 @@ def run_cli_cases(venv, ref_venv, broker, cases):
     venv = Path(venv).resolve()
     celery = str(venv / 'bin' / 'celery')
     # messaggi rimasti da esecuzioni precedenti cambierebbero `inspect stats` del worker
-    subprocess.run([py(ref_venv), "-P", "-m", "celery", "-A", "worker_app", "purge", "-f"],
+    subprocess.run([py(ref_venv), '-P', '-m', 'celery', '-A', 'worker_app', 'purge', '-f'],
                    cwd=tmp, env=env, capture_output=True, timeout=60)
     try:
         for case in cases:
