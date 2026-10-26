@@ -109,7 +109,7 @@ def child_main(fd, app, hostname, maxtasks=0, max_memory_per_child=0):
             kind, job = _META.unpack_from(body)
             if kind != TASK:
                 continue
-            target, args, kwargs = pickle.loads(bytes(memoryview(body)[_META.size:]))
+            target, args, kwargs = pickle.loads(memoryview(body)[_META.size:])
             _write_frame(sock, ACK, job,
                          struct.pack('>d', time.monotonic()))
             try:

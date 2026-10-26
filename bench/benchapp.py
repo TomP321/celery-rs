@@ -5,7 +5,7 @@ from celery import Celery
 
 BROKER = os.environ.get('BENCH_BROKER', 'redis://127.0.0.1:6390/0')
 BACKEND = os.environ.get('BENCH_BACKEND', 'redis://127.0.0.1:6390/1')
-COUNTER = 'bench:done'
+COUNTER = os.environ.get('BENCH_COUNTER', 'bench:done')
 
 app = Celery('bench', broker=BROKER, backend=BACKEND)
 app.conf.update(

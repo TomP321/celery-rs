@@ -35,20 +35,36 @@ def tree(pid):
     return pids
 
 
-def pss_kb(pid):
-    total, per = 0, []
-    for p in tree(pid):
+def memory_snapshot(pid):
+    records = []
+    pids = tree(pid)
+    parents = {}
+    for process in pids:
         try:
-            with open(f'/proc/{p}/smaps_rollup') as fh:
-                for line in fh:
-                    if line.startswith('Pss:'):
-                        kb = int(line.split()[1])
-                        total += kb
-                        per.append(kb)
-                        break
-        except OSError:
-            pass
-    return total, per
+            fields = Path(f'/proc/{process}/status').read_text().splitlines()
+            parent = int(next(line.split()[1] for line in fields
+                              if line.startswith('PPid:')))
+            parents[process] = parent
+            values = {}
+            for line in Path(f'/proc/{process}/smaps_rollup').read_text().splitlines():
+                key, _, value = line.partition(':')
+                if key in ('Pss', 'Private_Dirty'):
+                    values[key] = int(value.split()[0])
+            records.append({'pid': process, 'ppid': parent,
+                            'pss_kb': values['Pss'],
+                            'private_dirty_kb': values['Private_Dirty']})
+        except (OSError, StopIteration, KeyError):
+            continue
+    for record in records:
+        process = record['pid']
+        record['role'] = ('master' if process == pid else
+                          'zygote' if process in parents.values() else 'child')
+    return records
+
+
+def pss_kb(pid):
+    per = [record['pss_kb'] for record in memory_snapshot(pid)]
+    return sum(per), per
 
 
 def venv_python(venv):
@@ -134,12 +150,15 @@ def main():
     ap.add_argument('--n', type=int, default=20000)
     ap.add_argument('--latency-n', type=int, default=500)
     ap.add_argument('--task', default='bench', choices=('bench', 'pure'))
+    ap.add_argument('--profile-master', type=Path)
+    ap.add_argument('--include', help='moduli applicativi da precaricare nel worker')
     ARGS = args = ap.parse_args()
     label = args.label or Path(args.venv).name.lstrip('.').removeprefix('venv-')
     pure_done = None
     ENV = env = {**{k: v for k, v in os.environ.items() if not k.startswith('PYTHON')},
                  'PYTHONPATH': str(HERE), 'PYTHONHASHSEED': '0',
-                 'BENCH_QUEUE': f'bench-08b-{os.getpid()}'}
+                 'BENCH_QUEUE': f'bench-08d-{os.getpid()}',
+                 'BENCH_COUNTER': f'bench:08d:done:{os.getpid()}'}
     if args.task == 'pure':
         pure_done = HERE / 'results' / f'.pure-done-{os.getpid()}'
         try:
@@ -149,17 +168,25 @@ def main():
         env['BENCH_PURE_DONE'] = str(pure_done)
 
     import redis
-    r = redis.Redis(*REDIS)
-    r.flushall()
+    r = redis.Redis(*REDIS, db=2)
+    r.delete(env['BENCH_COUNTER'])
 
+    worker_command = [venv_python(args.venv)]
+    if args.profile_master:
+        worker_command += ['-m', 'cProfile', '-o', str(args.profile_master.resolve())]
+    worker_command += ['-m', 'celery', '-A', 'benchapp', 'worker', '-P', args.pool,
+                       '-c', str(args.concurrency), '-l', 'warning', '--without-gossip']
+    if args.include:
+        worker_command += ['--include', args.include]
     worker = subprocess.Popen(
-        [venv_python(args.venv), '-m', 'celery', '-A', 'benchapp', 'worker', '-P', args.pool,
-         '-c', str(args.concurrency), '-l', 'warning', '--without-gossip'],
-        cwd=HERE, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, start_new_session=True)
+        worker_command, cwd=HERE, env=env, stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE, start_new_session=True)
     try:
         wait_ready(worker)
         time.sleep(3)
-        idle_total, idle_per = pss_kb(worker.pid)
+        idle_processes = memory_snapshot(worker.pid)
+        idle_per = [record['pss_kb'] for record in idle_processes]
+        idle_total = sum(idle_per)
 
         import threading
         peak = [0]
@@ -184,7 +211,7 @@ def main():
                 except OSError:
                     done = 0
             else:
-                done = int(cnt.get('bench:done') or 0)
+                done = int(cnt.get(env['BENCH_COUNTER']) or 0)
             if done >= args.n:
                 break
             if time.perf_counter() - t0 > 600:
@@ -195,8 +222,11 @@ def main():
         drain_s = time.perf_counter() - t0
         total_s = time.time() - pub['wall_start']
 
+        throughput_processes = memory_snapshot(worker.pid)
         lat = client(args.venv, LATENCY.format(n=args.latency_n), env)
-        after_total, after_per = pss_kb(worker.pid)
+        after_processes = memory_snapshot(worker.pid)
+        after_per = [record['pss_kb'] for record in after_processes]
+        after_total = sum(after_per)
         sampling.set()
         sampler.join()
         # Anche delay/get della sonda di latenza fa parte del carico misurato.
@@ -207,11 +237,16 @@ def main():
             worker.wait(30)
         except subprocess.TimeoutExpired:
             os.killpg(worker.pid, signal.SIGKILL)
+            worker.wait()
+        r.delete(env['BENCH_COUNTER'])
 
     lat_ms = sorted(x * 1000 for x in lat)
     res = {
         'label': label, 'venv': args.venv, 'pool': args.pool, 'concurrency': args.concurrency,
         'n': args.n,
+        'broker': env.get('BENCH_BROKER', 'redis://127.0.0.1:6390/0'),
+        'idle_processes': idle_processes, 'after_processes': after_processes,
+        'throughput_processes': throughput_processes,
         'pss_idle_kb': idle_total, 'pss_idle_per_process_kb': idle_per,
         'pss_peak_kb': peak, 'pss_after_kb': after_total, 'pss_after_per_process_kb': after_per,
         'client_publish_per_s': args.n / pub['publish_s'],
@@ -224,6 +259,7 @@ def main():
         'python': sys.version.split()[0],
     }
     res['task'] = args.task
+    res['include'] = args.include
     if pure_done is not None:
         try:
             pure_done.unlink()

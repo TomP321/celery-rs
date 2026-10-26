@@ -1,0 +1,10 @@
+{
+  "bytes": {
+    "seconds": 0.18532766198040918,
+    "peak_bytes": 16779256
+  },
+  "memoryview": {
+    "seconds": 0.08236267801839858,
+    "peak_bytes": 8392033
+  }
+}

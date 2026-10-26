@@ -127,6 +127,17 @@ def _reply(control, status, pid=0, message=b''):
     control.sendall(_REPLY_LEN.pack(len(body)) + body)
 
 
+def _warm_cffi():
+    # Billiard usa cdef per prctl in ogni initializer: il solo import non
+    # crea il parser globale di pycparser, che va condiviso prima del fork.
+    try:
+        from cffi import FFI
+    except ImportError:  # pragma: no cover - billiard può usare ctypes
+        return
+    ffi = FFI()
+    ffi.cdef('int prctl (int __option, ...);')
+
+
 def _main(control, app, hostname):
     control.setblocking(True)
     # Importa presto: dopo `gc.freeze()` queste pagine restano condivise.
@@ -156,6 +167,7 @@ def _main(control, app, hostname):
         except Exception:  # pragma: no cover - dipendenze opzionali
             traceback.print_exc()
 
+    _warm_cffi()
     _close_inherited_fds({control.fileno()})
     # `gc.freeze()` (non `collect`): nel figlio di un master multi-thread i
     # finalizer di oggetti ereditati possono toccare stato non valido dopo il
