@@ -52,3 +52,9 @@ Stai lavorando a celery-rs: Celery riscritto con core in Rust, API Python identi
 3. I comandi di verifica elencati nella spec passano.
 4. Nel messaggio finale: cosa hai fatto, file toccati, comandi eseguiti con il loro esito reale,
    cosa resta aperto. Non dichiarare test passati che non hai eseguito.
+
+## Fallimenti noti (non indagarli, riportali soltanto)
+- `t/unit/contrib/test_pytest.py::test_pytest_celery_marker_registration` (`./compat upstream`):
+  fallisce anche con il Celery di riferimento; dipende dall'ambiente pytest, non dal codice.
+- `python/tests_rs/test_worker_pool.py::test_worker_process_signals[prefork]`: segfault dei figli
+  billiard durante il GC, solo nella suite completa; presente in `main` dalla fase 08a (fase 9).
