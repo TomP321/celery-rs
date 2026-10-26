@@ -75,8 +75,11 @@ def cmd_integration(args):
         for label, venv in [('ref', args.ref), ('rs', args.rs)]:
             clean_brokers()
             prefix = OUT / f'integration-{broker}-{label}'
+            # niente rerun interni (`@flaky` della suite: 5 tentativi × timeout per test): le
+            # riprove dei soli falliti le fa questo runner, uguali per ref e rs
             command = [py(venv), '-P', '-m', 'pytest', '-q', '-p', 'no:cacheprovider',
-                       '--timeout=300', '--continue-on-collection-errors', '-o', 'addopts=']
+                       '-p', 'no:rerunfailures', '--timeout=120',
+                       '--continue-on-collection-errors', '-o', 'addopts=']
             if args.k:
                 command += ['-k', args.k]
             xml = prefix.with_suffix('.xml')
