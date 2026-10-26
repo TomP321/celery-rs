@@ -1,10 +1,177 @@
-#!/usr/bin/env bash
-# Esegue un comando con l'uso esclusivo dei broker di test condivisi (Redis/RabbitMQ).
-#   tools/dev/with-brokers cargo test
-# Rientrante: dentro un comando già sotto lock non lo riprende (niente deadlock).
-set -euo pipefail
-if [[ "${CELERY_RS_BROKER_LOCKED:-}" == 1 ]]; then exec "$@"; fi
-exec 9>/tmp/celery-rs-broker.lock
-flock 9
-export CELERY_RS_BROKER_LOCKED=1
-"$@"
+#!/usr/bin/env python3
+"""Assegna una corsia esclusiva e termina tutti i processi discendenti all'uscita."""
+import base64
+import ctypes
+import fcntl
+import json
+import os
+from pathlib import Path
+import runpy
+import signal
+import subprocess
+import sys
+import time
+import threading
+import urllib.error
+import urllib.parse
+import urllib.request
+
+lane_environment = runpy.run_path(str(Path(__file__).with_name('lanes')))['environment']
+
+
+def clean(env):
+    api = env['CELERY_RS_RABBIT_API']
+    headers = {'Authorization': 'Basic ' + base64.b64encode(b'guest:guest').decode()}
+
+    def request(path, method='GET'):
+        try:
+            with urllib.request.urlopen(urllib.request.Request(api + path, method=method,
+                                                               headers=headers), timeout=10) as r:
+                data = r.read()
+                return json.loads(data) if data else []
+        except urllib.error.HTTPError as exc:
+            if method == 'DELETE' and exc.code == 404:
+                return []
+            raise
+
+    deadline = time.monotonic() + 15
+    closed = set()
+    while True:
+        connections = request('/connections')
+        for conn in connections:
+            request('/connections/' + urllib.parse.quote(conn['name'], safe=''), 'DELETE')
+            if conn['name'] not in closed:
+                print(f"corsia {env['CELERY_RS_LANE']}: chiudo connessione residua {conn['name']}", flush=True)
+                closed.add(conn['name'])
+        pending = False
+        for queue in request('/queues'):
+            if not queue.get('exclusive'):
+                continue
+            try:
+                request('/queues/' + urllib.parse.quote(queue['vhost'], safe='') + '/' +
+                        urllib.parse.quote(queue['name'], safe=''), 'DELETE')
+            except urllib.error.HTTPError as exc:
+                # Il management può mostrare la coda prima della connessione proprietaria.
+                if exc.code != 400:
+                    raise
+                pending = True
+            else:
+                print(f"corsia {env['CELERY_RS_LANE']}: elimino coda esclusiva {queue['name']}", flush=True)
+        if not connections and not pending:
+            return
+        if time.monotonic() >= deadline:
+            raise RuntimeError(f"corsia {env['CELERY_RS_LANE']}: residui AMQP dopo 15 secondi")
+        time.sleep(.2)
+
+
+def children():
+    # Il subreaper raccoglie anche worker che hanno creato una sessione propria.
+    result = set()
+    todo = [os.getpid()]
+    while todo:
+        pid = todo.pop()
+        try:
+            for task in Path(f'/proc/{pid}/task').iterdir():
+                for item in (task / 'children').read_text().split():
+                    child = int(item)
+                    if child not in result:
+                        result.add(child)
+                        todo.append(child)
+        except (FileNotFoundError, ProcessLookupError):
+            pass
+    return result
+
+
+def main():
+    if len(sys.argv) < 2:
+        sys.exit('uso: tools/dev/with-brokers comando ...')
+    if os.environ.get('CELERY_RS_BROKER_LOCKED') == '1':
+        os.execvp(sys.argv[1], sys.argv[1:])
+    count = int(os.environ.get('CELERY_RS_LANES', '4'))
+    if count < 1:
+        sys.exit('CELERY_RS_LANES deve essere positivo')
+    lock = None
+    while lock is None:
+        for lane in range(count):
+            candidate = open(f'/tmp/celery-rs-broker-lane-{lane}.lock', 'a')
+            try:
+                fcntl.flock(candidate, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                candidate.close()
+                continue
+            lock = candidate
+            break
+        if lock is None:
+            time.sleep(.2)
+    env = lane_environment(lane)
+    env['CELERY_RS_BROKER_LOCKED'] = '1'
+    # Compatibilità con i test e i benchmark che espongono già questi override.
+    for old, new in [('CELERY_RS_TEST_REDIS', 'CELERY_RS_REDIS_URL'),
+                     ('CELERY_RS_TEST_AMQP', 'CELERY_RS_AMQP_URL'),
+                     ('CELERY_RS_TEST_RABBIT_API', 'CELERY_RS_RABBIT_API')]:
+        env[old] = env[new]
+    print(f"corsia {lane}: {' '.join(sys.argv[1:])}", flush=True)
+    clean(env)
+    if ctypes.CDLL(None, use_errno=True).prctl(36, 1, 0, 0, 0) != 0:
+        raise OSError(ctypes.get_errno(), 'prctl subreaper')
+    proc = None
+    stop_reaper = threading.Event()
+    reaper = None
+
+    def reap_orphans():
+        while not stop_reaper.wait(.05):
+            for pid in children():
+                if proc is not None and pid == proc.pid:
+                    continue
+                try:
+                    os.waitpid(pid, os.WNOHANG)
+                except ChildProcessError:
+                    pass
+
+    def interrupted(signum, frame):
+        raise SystemExit(128 + signum)
+
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        signal.signal(sig, interrupted)
+    try:
+        proc = subprocess.Popen(sys.argv[1:], env=env, start_new_session=True)
+        reaper = threading.Thread(target=reap_orphans, daemon=True)
+        reaper.start()
+        return proc.wait()
+    finally:
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            signal.signal(sig, signal.SIG_IGN)
+        stop_reaper.set()
+        if reaper is not None:
+            reaper.join()
+        if proc is not None:
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        while descendants := children():
+            for pid in descendants:
+                try:
+                    os.kill(pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+            try:
+                while True:
+                    os.waitpid(-1, os.WNOHANG)
+                    # I figli terminati sono rimossi da /proc; attendi i rimanenti.
+                    if not children():
+                        break
+                    time.sleep(.02)
+                    for pid in children():
+                        try:
+                            os.kill(pid, signal.SIGKILL)
+                        except ProcessLookupError:
+                            pass
+            except ChildProcessError:
+                break
+        clean(env)
+        lock.close()
+
+
+if __name__ == '__main__':
+    sys.exit(main())

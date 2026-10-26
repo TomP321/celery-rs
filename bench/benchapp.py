@@ -1,10 +1,11 @@
 """App Celery usata dal benchmark. Lo stesso file gira con Celery di riferimento e con celery-rs."""
 import os
+from urllib.parse import urlsplit
 
 from celery import Celery
 
-BROKER = os.environ.get('BENCH_BROKER', 'redis://127.0.0.1:6390/0')
-BACKEND = os.environ.get('BENCH_BACKEND', 'redis://127.0.0.1:6390/1')
+BROKER = os.environ.get('BENCH_BROKER', os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390') + '/0')
+BACKEND = os.environ.get('BENCH_BACKEND', os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390') + '/1')
 COUNTER = os.environ.get('BENCH_COUNTER', 'bench:done')
 
 app = Celery('bench', broker=BROKER, backend=BACKEND)
@@ -25,7 +26,7 @@ def counter():
         # PSS) e la misura della memoria del worker non era più quella del
         # solo worker (spec 08a: il master non deve importare redis-py).
         import redis
-        _counter = redis.Redis(host='127.0.0.1', port=6390, db=2)
+        _counter = redis.Redis(host=urlsplit(os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390')).hostname, port=urlsplit(os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390')).port, db=2)
     return _counter
 
 

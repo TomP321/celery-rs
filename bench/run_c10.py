@@ -23,8 +23,8 @@ def main():
     for repeat in range(1, args.repeats + 1):
         for broker in ('redis', 'amqp'):
             env = dict(os.environ)
-            env['BENCH_BROKER'] = ('redis://127.0.0.1:6390/0' if broker == 'redis'
-                                   else 'amqp://guest:guest@127.0.0.1:5673//')
+            env['BENCH_BROKER'] = (os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390') + '/0' if broker == 'redis'
+                                   else os.environ.get('CELERY_RS_AMQP_URL', 'amqp://guest:guest@127.0.0.1:5673//'))
             for task in ('bench', 'pure'):
                 # Alternare l'ordine limita gli effetti di riscaldamento.
                 implementations = ('ref', 'rs') if repeat % 2 else ('rs', 'ref')

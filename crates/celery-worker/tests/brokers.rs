@@ -12,11 +12,14 @@ use celery_transport::{PublishRequest, QueueDecl, Transport, connect};
 use celery_worker::{Waker, WorkerConsumer};
 
 fn redis_url() -> String {
-    std::env::var("CELERY_RS_TEST_REDIS").unwrap_or_else(|_| "redis://127.0.0.1:6390/0".into())
+    std::env::var("CELERY_RS_REDIS_URL")
+        .or_else(|_| std::env::var("CELERY_RS_TEST_REDIS"))
+        .unwrap_or_else(|_| "redis://127.0.0.1:6390/0".into())
 }
 
 fn amqp_url() -> String {
-    std::env::var("CELERY_RS_TEST_AMQP")
+    std::env::var("CELERY_RS_AMQP_URL")
+        .or_else(|_| std::env::var("CELERY_RS_TEST_AMQP"))
         .unwrap_or_else(|_| "amqp://guest:guest@127.0.0.1:5673//".into())
 }
 

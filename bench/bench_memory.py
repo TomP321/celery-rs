@@ -21,7 +21,7 @@ APP = r'''
 import os
 from celery import Celery, signals
 app = Celery('memory_probe', broker=os.environ['BENCH_BROKER'],
-             backend='redis://127.0.0.1:6390/1')
+             backend=os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390') + '/1')
 app.conf.worker_hijack_root_logger = False
 
 @signals.worker_ready.connect(weak=False)
@@ -87,7 +87,7 @@ def main():
                 if args.native:
                     pythonpath = os.pathsep.join((str(Path(args.native).resolve()), directory))
                 env.update(PYTHONPATH=pythonpath, MEMORY_REPORT=str(report),
-                           BENCH_BROKER='redis://127.0.0.1:6390/0')
+                           BENCH_BROKER=os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390') + '/0')
                 command = [str(ROOT / args.venv / 'bin/python')]
                 if traced:
                     command += ['-X', 'tracemalloc']

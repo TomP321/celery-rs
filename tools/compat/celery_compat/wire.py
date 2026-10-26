@@ -7,6 +7,9 @@ RabbitMQ: firehose tracer (`amq.rabbitmq.trace`, `publish.#`) letto dall'API di 
 I messaggi vengono decodificati (envelope kombu, base64, compressione) e normalizzati
 (id, timestamp, hostname, pid) prima del confronto.
 """
+import os
+from urllib.parse import urlsplit
+
 import base64
 import bz2
 import json
@@ -18,8 +21,8 @@ import time
 import urllib.request
 import zlib
 
-REDIS = ('127.0.0.1', 6390)
-RABBIT_API = 'http://127.0.0.1:15673/api'
+REDIS = (urlsplit(os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390')).hostname, urlsplit(os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390')).port)
+RABBIT_API = os.environ.get('CELERY_RS_RABBIT_API', 'http://127.0.0.1:15673/api')
 RABBIT_AUTH = 'Basic ' + base64.b64encode(b'guest:guest').decode()
 TRACE_QUEUE = 'compat.trace'
 
@@ -249,5 +252,5 @@ def capture(kind):
 
 def enable_rabbit_trace():
     import subprocess
-    subprocess.run(['docker', 'exec', 'celery-rs-rabbitmq-1', 'rabbitmqctl', 'trace_on'],
+    subprocess.run(['docker', 'exec', ('celery-rs-rabbitmq-1' if os.environ.get('CELERY_RS_LANE', '0') == '0' else f"celery-rs-lane-{os.environ['CELERY_RS_LANE']}-rabbitmq-1"), 'rabbitmqctl', 'trace_on'],
                    check=True, capture_output=True)

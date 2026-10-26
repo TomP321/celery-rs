@@ -9,6 +9,7 @@ conta correttamente le pagine condivise copy-on-write tra master e figli.
 import argparse
 import json
 import os
+from urllib.parse import urlsplit
 import signal
 import statistics
 import subprocess
@@ -18,7 +19,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
-REDIS = ('127.0.0.1', 6390)
+REDIS = (urlsplit(os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390')).hostname, urlsplit(os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390')).port)
 
 
 def tree(pid):
@@ -244,7 +245,7 @@ def main():
     res = {
         'label': label, 'venv': args.venv, 'pool': args.pool, 'concurrency': args.concurrency,
         'n': args.n,
-        'broker': env.get('BENCH_BROKER', 'redis://127.0.0.1:6390/0'),
+        'broker': env.get('BENCH_BROKER', os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390') + '/0'),
         'idle_processes': idle_processes, 'after_processes': after_processes,
         'throughput_processes': throughput_processes,
         'pss_idle_kb': idle_total, 'pss_idle_per_process_kb': idle_per,

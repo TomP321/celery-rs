@@ -30,10 +30,10 @@ from kombu.exceptions import ChannelError
 import _celery_rs as rs
 
 AMQP_URL = os.environ.get(
-    "CELERY_RS_TEST_AMQP", "amqp://guest:guest@127.0.0.1:5673//"
+    "CELERY_RS_TEST_AMQP", os.environ.get('CELERY_RS_AMQP_URL', 'amqp://guest:guest@127.0.0.1:5673//')
 )
 RABBIT_API = os.environ.get(
-    "CELERY_RS_TEST_RABBIT_API", "http://127.0.0.1:15673/api"
+    "CELERY_RS_TEST_RABBIT_API", os.environ.get('CELERY_RS_RABBIT_API', 'http://127.0.0.1:15673/api')
 )
 RABBIT_AUTH = "Basic " + base64.b64encode(b"guest:guest").decode()
 

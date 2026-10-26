@@ -14,6 +14,7 @@ Non modificare questo file per farlo passare.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -95,10 +96,10 @@ EXPRESSIONS = {
 }
 
 RUNTIME_PROBE = r'''
-import json, sys
+import json, os, sys
 from celery import Celery
 broker = sys.argv[1]
-app = Celery('proj', broker=broker, backend='redis://127.0.0.1:6390/9')
+app = Celery('proj', broker=broker, backend=os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390') + '/9')
 from kombu import Exchange, Queue
 app2 = Celery('proj2', broker=broker)
 app2.conf.task_queues = [Queue('extra', Exchange('extra', type='direct'), routing_key='extra')]
@@ -116,10 +117,10 @@ print(json.dumps(out))
 '''
 
 CHECK_PROBE = r'''
-import importlib, json, sys
+import importlib, json, os, sys
 from celery import Celery
 broker = sys.argv[1]
-app = Celery('proj', broker=broker, backend='redis://127.0.0.1:6390/9')
+app = Celery('proj', broker=broker, backend=os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390') + '/9')
 from kombu import Exchange, Queue
 app2 = Celery('proj2', broker=broker)
 app2.conf.task_queues = [Queue('extra', Exchange('extra', type='direct'), routing_key='extra')]
@@ -153,7 +154,7 @@ print(json.dumps(problems))
 '''
 
 
-@pytest.mark.parametrize('broker', ['redis://127.0.0.1:6390/7', 'amqp://guest:guest@127.0.0.1:5673//'])
+@pytest.mark.parametrize('broker', [os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390') + '/7', os.environ.get('CELERY_RS_AMQP_URL', 'amqp://guest:guest@127.0.0.1:5673//')])
 def test_runtime_objects_are_kombu_objects(broker):
     exprs = json.dumps(EXPRESSIONS)
     ref = subprocess.run([str(REF_PY), '-c', RUNTIME_PROBE, broker, exprs], capture_output=True,

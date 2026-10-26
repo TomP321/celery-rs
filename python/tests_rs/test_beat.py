@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+from urllib.parse import urlsplit
 import re
 import signal
 import socket
@@ -28,10 +29,10 @@ RS_VENV = ROOT / '.venv-rs'
 REF_PYTHON = REF_VENV / 'bin' / 'python'
 RS_PYTHON = RS_VENV / 'bin' / 'python'
 
-REDIS_HOST, REDIS_PORT = '127.0.0.1', 6390
+REDIS_HOST, REDIS_PORT = urlsplit(os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390')).hostname, urlsplit(os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390')).port
 REDIS_DB = 6
 REDIS_URL = f'redis://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}'
-AMQP_URL = 'amqp://guest:guest@127.0.0.1:5673//'
+AMQP_URL = os.environ.get('CELERY_RS_AMQP_URL', 'amqp://guest:guest@127.0.0.1:5673//')
 
 TIMEOUT = 30
 CRON_TIMEOUT = 75

@@ -36,7 +36,7 @@ def unwrap(exc):
     return getattr(exc, 'exc', exc)
 
 ROOT = Path(__file__).resolve().parents[2]
-REDIS_URL = os.environ.get('CELERY_RS_TEST_REDIS', 'redis://127.0.0.1:6390')
+REDIS_URL = os.environ.get('CELERY_RS_REDIS_URL', os.environ.get('CELERY_RS_TEST_REDIS', 'redis://127.0.0.1:6390'))
 # Database dedicato: non interferire con gli altri test (0/1/8/9).
 BACKEND_URL = REDIS_URL.rsplit('/', 1)[0] + '/11' if REDIS_URL.rsplit('/', 1)[-1].isdigit() \
     else REDIS_URL.rstrip('/') + '/11'

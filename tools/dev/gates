@@ -1,0 +1,167 @@
+#!/usr/bin/env python3
+"""Gate bloccanti con log separati e assegnazione automatica delle corsie."""
+import argparse
+from concurrent.futures import ThreadPoolExecutor
+import json
+import os
+from pathlib import Path
+import re
+import signal
+import subprocess
+import sys
+import time
+
+ROOT = Path(__file__).resolve().parents[2]
+OUT = ROOT / 'target/gates'
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--only', help='nomi separati da virgola; tests_rs seleziona tutti i gruppi')
+    args = parser.parse_args()
+    os.chdir(ROOT)
+    OUT.mkdir(parents=True, exist_ok=True)
+    # Ogni invocazione conserva i propri log anche con due runner simultanei.
+    run_dir = OUT / f'{time.strftime("%Y%m%d-%H%M%S")}-{os.getpid()}'
+    run_dir.mkdir()
+    history = OUT / 'durations.json'
+    try:
+        weights = json.loads(history.read_text())
+    except (FileNotFoundError, ValueError):
+        weights = {}
+    defaults = {'test_worker_pool.py': 240, 'test_worker_consumer.py': 220,
+                'test_worker_control.py': 200, 'test_cli.py': 180,
+                'test_beat.py': 140, 'test_backend_rpc.py': 120,
+                'test_worker_prefork.py': 120, 'test_backend_redis.py': 100}
+    files = list(Path('python/tests_rs').glob('test_*.py'))
+    count = int(os.environ.get('CELERY_RS_LANES', '4'))
+    if count < 1:
+        parser.error('CELERY_RS_LANES deve essere positivo')
+    groups = [[] for _ in range(count)]
+    costs = [0.] * len(groups)
+    for file in sorted(files, key=lambda p: weights.get(p.name, defaults.get(p.name, 40)), reverse=True):
+        index = min(range(len(groups)), key=lambda i: costs[i])
+        groups[index].append(str(file))
+        costs[index] += weights.get(file.name, defaults.get(file.name, 40))
+    prep = {'build': ['cargo', 'build', '--release'],
+            'clippy': ['cargo', 'clippy', '--all-targets', '--', '-D', 'warnings'],
+            'build-package': ['tools/dev/build-package'],
+            'build-native': ['tools/dev/build-native']}
+    jobs = {'cargo-test': ['cargo', 'test'],
+            'native-tests': ['.venv-ref/bin/python', '-m', 'pytest', 'crates/celery-py/tests', '-q'],
+            **{f'tests_rs-{i + 1}': ['tools/dev/test-group', str(run_dir), *group]
+               for i, group in enumerate(groups) if group},
+            'api': ['./compat', 'api'], 'wire': ['./compat', 'wire'],
+            'upstream': ['./compat', 'upstream', '--venv', '.venv-rs'],
+            'wire-worker-solo': ['./compat', 'wire-worker', '--pool', 'solo'],
+            'wire-worker-prefork': ['./compat', 'wire-worker', '--pool', 'prefork'],
+            'wire-beat': ['./compat', 'wire-beat'], 'cli': ['./compat', 'cli']}
+    selected = set(args.only.split(',')) if args.only else set(prep) | set(jobs)
+    unknown = selected - set(prep) - set(jobs) - {'tests_rs'}
+    if unknown:
+        parser.error(f'nomi sconosciuti: {", ".join(sorted(unknown))}')
+    rows = []
+    processes = set()
+    interrupted = False
+
+    def stop(signum, frame):
+        nonlocal interrupted
+        interrupted = True
+        for proc in list(processes):
+            try:
+                proc.send_signal(signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+
+    signal.signal(signal.SIGINT, stop)
+    signal.signal(signal.SIGTERM, stop)
+
+    def run(name, cmd, broker=True):
+        if interrupted:
+            return name, 130, 0., 'interrotto'
+        start = time.monotonic()
+        logfile = run_dir / f'{name}.log'
+        # Il link stabile è utile per il singolo giro; la directory conserva tutti i giri.
+        link = OUT / f'{name}.log'
+        temp_link = OUT / f'.{name}.{os.getpid()}'
+        temp_link.symlink_to(logfile.relative_to(OUT))
+        temp_link.replace(link)
+        with logfile.open('w') as log:
+            command = ['tools/dev/with-brokers', *cmd] if broker else cmd
+            proc = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT,
+                                    start_new_session=True)
+            processes.add(proc)
+            if interrupted:
+                proc.terminate()
+            try:
+                code = proc.wait()
+            finally:
+                try:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                processes.discard(proc)
+        lines = logfile.read_text(errors='replace').splitlines()
+        summaries = [line for line in lines if re.search(r'passed|failed|differen|regression|ERROR|error:|Finished', line, re.I)]
+        summary = ' | '.join(summaries[-3:])[-500:] if summaries else (lines[-1] if lines else '')
+        if name == 'cargo-test':
+            counts = re.findall(r'test result: .*? (\d+) passed; (\d+) failed', '\n'.join(lines))
+            summary = f'{sum(int(p) for p, _ in counts)} passed; {sum(int(f) for _, f in counts)} failed'
+        elif name.startswith('tests_rs-') or name == 'native-tests':
+            results = [line for line in lines if re.search(r'in \d+\.\d+s', line)
+                       and re.search(r'\d+ (?:passed|failed)', line)]
+            passed = sum(int(n) for line in results for n in re.findall(r'(\d+) passed', line))
+            failed = sum(int(n) for line in results for n in re.findall(r'(\d+) failed', line))
+            summary = f'{passed} passed; {failed} failed' if results else summary
+        elif name in ('api', 'wire', 'upstream', 'wire-worker-solo', 'wire-worker-prefork', 'wire-beat', 'cli'):
+            totals = [line for line in lines if re.match(r'(?:api:|wire:|upstream |wire-worker:|wire-beat:|cli:)', line)]
+            if totals:
+                summary = totals[-1]
+
+        return name, code, time.monotonic() - start, summary
+
+    start = time.monotonic()
+    for name, cmd in prep.items():
+        if name in selected:
+            row = run(name, cmd, False)
+            rows.append(row)
+            if row[1]:
+                break
+    if not any(row[1] for row in rows) and not interrupted:
+        with ThreadPoolExecutor(max_workers=count) as pool:
+            estimates = {'upstream': 500, 'wire-worker-prefork': 400,
+                         'wire-worker-solo': 350, **{f'tests_rs-{i + 1}': cost
+                                                   for i, cost in enumerate(costs)}}
+            ordered = sorted(jobs.items(),
+                             key=lambda item: weights.get('gate:' + item[0],
+                                                          estimates.get(item[0], 60)),
+                             reverse=True)
+            futures = [pool.submit(run, name, cmd) for name, cmd in ordered
+                       if name in selected or ('tests_rs' in selected and name.startswith('tests_rs-'))]
+            rows.extend(f.result() for f in futures)
+    print('nome | esito | durata | sintesi')
+    for name, code, seconds, summary in rows:
+        print(f'{name} | {"OK" if code == 0 else f"FAIL ({code})"} | {seconds:.1f}s | {summary}')
+    print(f'Totale: {time.monotonic() - start:.1f}s; log: {run_dir}')
+    (run_dir / 'results.json').write_text(json.dumps(rows, indent=2))
+    # Le durate reali dei file alimentano il bilanciamento dei giri successivi.
+    import xml.etree.ElementTree as ET
+    for report in run_dir.glob('*.xml'):
+        sums = {}
+        try:
+            cases = list(ET.parse(report).iter('testcase'))
+        except ET.ParseError:
+            continue
+        for case in cases:
+            name = case.get('classname', '').split('.')[-1] + '.py'
+            sums[name] = sums.get(name, 0) + float(case.get('time', 0))
+        weights.update(sums)
+    weights.update({'gate:' + name: seconds for name, code, seconds, _ in rows if code == 0})
+    tmp = history.with_name(f'durations.{os.getpid()}.tmp')
+    tmp.write_text(json.dumps(weights, indent=2))
+    tmp.replace(history)
+    return 1 if interrupted or any(row[1] for row in rows) else 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

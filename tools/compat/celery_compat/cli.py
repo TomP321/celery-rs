@@ -195,8 +195,8 @@ def cmd_api(args):
 # -------------------------------------------------------------------------- wire
 
 BROKERS = {
-    'redis': ('redis://127.0.0.1:6390/0', 'redis://127.0.0.1:6390/1'),
-    'amqp': ('amqp://guest:guest@127.0.0.1:5673//', 'rpc://'),
+    'redis': (os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390') + '/0', os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390') + '/1'),
+    'amqp': (os.environ.get('CELERY_RS_AMQP_URL', 'amqp://guest:guest@127.0.0.1:5673//'), 'rpc://'),
 }
 
 
@@ -382,7 +382,7 @@ def _stop_workers(workers):
 def run_worker_scenario(venv, ref_venv, broker, name, pool):
     from . import wire
     url, _ = BROKERS[broker]
-    backend = 'redis://127.0.0.1:6390/1'
+    backend = os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390') + '/1'
     env = venv_env()
     env.update(COMPAT_BROKER=url, COMPAT_BACKEND=backend, PYTHONPATH=str(HERE))
     norm = wire.Normalizer()
@@ -560,7 +560,7 @@ def cmd_wire_beat(args):
 # ---------------------------------------------------------------------------- cli
 
 #: broker senza worker (vhost/db dedicati): `status` e `inspect` devono non ricevere risposte
-EMPTY_BROKERS = {'redis': 'redis://127.0.0.1:6390/3', 'amqp': 'amqp://guest:guest@127.0.0.1:5673//'}
+EMPTY_BROKERS = {'redis': os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390') + '/3', 'amqp': os.environ.get('CELERY_RS_AMQP_URL', 'amqp://guest:guest@127.0.0.1:5673//')}
 NUMBER_RE = __import__('re').compile(r'(?<![\w<])-?\d+(?:\.\d+)?(?![\w>])')
 
 
@@ -618,7 +618,7 @@ def run_cli_cases(venv, ref_venv, broker, cases):
     import socket
     url, _ = BROKERS[broker]
     # `celery result` da un altro processo richiede un backend persistente (rpc:// no)
-    backend = 'redis://127.0.0.1:6390/1'
+    backend = os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390') + '/1'
     tmp = OUT / 'cli-tmp'
     shutil.rmtree(tmp, ignore_errors=True)
     tmp.mkdir(parents=True)

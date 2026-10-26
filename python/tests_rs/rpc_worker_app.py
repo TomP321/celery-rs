@@ -8,8 +8,7 @@ import time
 
 from celery import Celery
 
-BROKER = os.environ.get(
-    'CELERY_RS_TEST_AMQP', 'amqp://guest:guest@127.0.0.1:5673//')
+BROKER = os.environ.get('CELERY_RS_AMQP_URL', os.environ.get('CELERY_RS_TEST_AMQP', 'amqp://guest:guest@127.0.0.1:5673//'))
 QUEUE = os.environ.get('CELERY_RS_TEST_RPC_QUEUE', 'celery-rs-rpc-tests')
 
 app = Celery('rpc_worker_app', broker=BROKER, backend='rpc://')

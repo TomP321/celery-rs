@@ -3,7 +3,7 @@ import os
 
 from celery import Celery
 
-BROKER = os.environ.get('BENCH_BROKER', 'amqp://guest:guest@127.0.0.1:5673//')
+BROKER = os.environ.get('BENCH_BROKER', os.environ.get('CELERY_RS_AMQP_URL', 'amqp://guest:guest@127.0.0.1:5673//'))
 BACKEND = os.environ.get('BENCH_RESULT_BACKEND', 'rpc://')
 QUEUE = os.environ.get('BENCH_QUEUE', 'bench-result')
 

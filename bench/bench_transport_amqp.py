@@ -143,7 +143,7 @@ def main():
     parser.add_argument(
         "--url",
         default=os.environ.get(
-            "CELERY_RS_TEST_AMQP", "amqp://guest:guest@127.0.0.1:5673//"
+            "CELERY_RS_TEST_AMQP", os.environ.get('CELERY_RS_AMQP_URL', 'amqp://guest:guest@127.0.0.1:5673//')
         ),
     )
     parser.add_argument("--n", type=int, default=5000)

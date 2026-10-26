@@ -7,8 +7,8 @@ import os
 
 from celery import Celery
 
-BROKER = os.environ.get('BENCH_CLI_BROKER', 'redis://127.0.0.1:6390/0')
-BACKEND = os.environ.get('BENCH_CLI_BACKEND', 'redis://127.0.0.1:6390/1')
+BROKER = os.environ.get('BENCH_CLI_BROKER', os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390') + '/0')
+BACKEND = os.environ.get('BENCH_CLI_BACKEND', os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390') + '/1')
 QUEUE = os.environ.get('BENCH_CLI_QUEUE', 'bench-cli')
 
 app = Celery('bench_cli', broker=BROKER, backend=BACKEND)

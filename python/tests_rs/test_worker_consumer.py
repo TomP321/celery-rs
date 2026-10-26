@@ -12,6 +12,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+from urllib.parse import urlsplit
 import re
 import signal
 import socket
@@ -34,10 +35,9 @@ REF_VENV = ROOT / '.venv-ref'
 RS_VENV = ROOT / '.venv-rs'
 REF_PYTHON = REF_VENV / 'bin' / 'python'
 
-RABBIT_API = os.environ.get(
-    'CELERY_RS_TEST_RABBIT_API', 'http://127.0.0.1:15673/api')
+RABBIT_API = os.environ.get('CELERY_RS_RABBIT_API', os.environ.get('CELERY_RS_TEST_RABBIT_API', 'http://127.0.0.1:15673/api'))
 
-REDIS_HOST, REDIS_PORT = '127.0.0.1', 6390
+REDIS_HOST, REDIS_PORT = urlsplit(os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390')).hostname, urlsplit(os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390')).port
 
 BROKERS = {
     'redis': {
@@ -47,10 +47,10 @@ BROKERS = {
         'check': (REDIS_HOST, REDIS_PORT),
     },
     'amqp': {
-        'url': 'amqp://guest:guest@127.0.0.1:5673//',
+        'url': os.environ.get('CELERY_RS_AMQP_URL', 'amqp://guest:guest@127.0.0.1:5673//'),
         'backend': f'redis://{REDIS_HOST}:{REDIS_PORT}/9',
-        'port': ('127.0.0.1', 5673),
-        'check': ('127.0.0.1', 15673),
+        'port': (urlsplit(os.environ.get('CELERY_RS_AMQP_URL', 'amqp://guest:guest@127.0.0.1:5673//')).hostname, urlsplit(os.environ.get('CELERY_RS_AMQP_URL', 'amqp://guest:guest@127.0.0.1:5673//')).port),
+        'check': (urlsplit(os.environ.get('CELERY_RS_RABBIT_API', 'http://127.0.0.1:15673/api')).hostname, urlsplit(os.environ.get('CELERY_RS_RABBIT_API', 'http://127.0.0.1:15673/api')).port),
     },
 }
 
@@ -155,7 +155,7 @@ def rabbit_queue_ready(name):
     """Messaggi pronti letti da rabbitmqctl (l'API management aggiorna a 5s)."""
     try:
         result = subprocess.run(
-            ['docker', 'exec', 'celery-rs-rabbitmq-1', 'rabbitmqctl',
+            ['docker', 'exec', ('celery-rs-rabbitmq-1' if os.environ.get('CELERY_RS_LANE', '0') == '0' else f"celery-rs-lane-{os.environ['CELERY_RS_LANE']}-rabbitmq-1"), 'rabbitmqctl',
              'list_queues', 'name', 'messages_ready', '--formatter', 'json'],
             capture_output=True, text=True, timeout=30)
         for row in json.loads(result.stdout):

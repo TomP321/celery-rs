@@ -9,9 +9,9 @@ import os
 from celery import Celery
 
 BROKER = os.environ.get(
-    'CELERY_RS_CLI_BROKER', 'redis://127.0.0.1:6390/10')
+    'CELERY_RS_CLI_BROKER', os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390') + '/10')
 BACKEND = os.environ.get(
-    'CELERY_RS_CLI_BACKEND', 'redis://127.0.0.1:6390/11')
+    'CELERY_RS_CLI_BACKEND', os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390') + '/11')
 QUEUE = os.environ.get('CELERY_RS_CLI_QUEUE', 'cli-tests')
 
 
