@@ -406,7 +406,9 @@ class BaseResultConsumer:
                     result.on_ready, timeout=timeout,
                     on_interval=on_interval):
                 yield
-                sleep(0)
+                # La risposta finale è già disponibile: non serve cedere ancora la CPU.
+                if not result.on_ready.ready:
+                    sleep(0)
         except socket.timeout:
             raise TimeoutError('The operation timed out.')
         finally:

@@ -5,6 +5,8 @@
 Avvia il worker del venv indicato, misura e salva bench/results/<label>.json.
 La memoria è PSS (/proc/<pid>/smaps_rollup) sommata sull'intero albero di processi del worker:
 conta correttamente le pagine condivise copy-on-write tra master e figli.
+Con --prefill il gruppo del worker già pronto viene sospeso durante il publish:
+la misura dalla ripresa esclude sia il client sia l'avvio del pool.
 """
 import argparse
 import json
@@ -80,10 +82,10 @@ def client(venv, code, env):
 
 
 PUBLISH = '''
-import json, resource, time
+import json, os, resource, time
 from benchapp import noop, counter, COUNTER
-counter().delete(COUNTER)
-noop.delay()  # warm-up della connessione
+if os.environ.get("BENCH_TOPLEVEL") == "1":
+    from bench_toplevel import noop_toplevel as noop
 counter().delete(COUNTER)
 rss0 = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
 wall0 = time.time()
@@ -100,7 +102,6 @@ print(json.dumps({{"publish_s": dt, "wall_start": wall0, "maxrss_kb": resource.g
 PUBLISH_PURE = '''
 import json, resource, time
 from benchapp import noop_pure
-noop_pure.delay()  # warm-up della connessione
 rss0 = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
 wall0 = time.time()
 t0 = time.perf_counter()
@@ -150,16 +151,22 @@ def main():
     ap.add_argument('--pool', default='prefork')
     ap.add_argument('--n', type=int, default=20000)
     ap.add_argument('--latency-n', type=int, default=500)
-    ap.add_argument('--task', default='bench', choices=('bench', 'pure'))
+    ap.add_argument('--task', default='bench', choices=('bench', 'pure', 'bench-toplevel'))
+    ap.add_argument('--prefill', action='store_true',
+                    help='riempie la coda con il worker sospeso; misura dalla ripresa')
     ap.add_argument('--profile-master', type=Path)
     ap.add_argument('--include', help='moduli applicativi da precaricare nel worker')
     ARGS = args = ap.parse_args()
+    if args.n < 1 or args.latency_n < 1:
+        ap.error('--n e --latency-n devono essere positivi')
+    (HERE / 'results').mkdir(exist_ok=True)
     label = args.label or Path(args.venv).name.lstrip('.').removeprefix('venv-')
     pure_done = None
     ENV = env = {**{k: v for k, v in os.environ.items() if not k.startswith('PYTHON')},
                  'PYTHONPATH': str(HERE), 'PYTHONHASHSEED': '0',
                  'BENCH_QUEUE': f'bench-08d-{os.getpid()}',
                  'BENCH_COUNTER': f'bench:08d:done:{os.getpid()}'}
+    env['BENCH_TOPLEVEL'] = '1' if args.task == 'bench-toplevel' else '0'
     if args.task == 'pure':
         pure_done = HERE / 'results' / f'.pure-done-{os.getpid()}'
         try:
@@ -200,11 +207,20 @@ def main():
         sampler = threading.Thread(target=sample, daemon=True)
         sampler.start()
 
+        if args.prefill:
+            # Il gruppo comprende master, zygote e figli: nessuno consuma durante il publish.
+            os.killpg(worker.pid, signal.SIGSTOP)
         pub = client(args.venv,
                      (PUBLISH_PURE if args.task == 'pure' else PUBLISH).format(n=args.n),
                      env)
         cnt = redis.Redis(*REDIS, db=2)
+        completed_before_resume = (pure_done.stat().st_size if pure_done is not None and pure_done.exists()
+                                   else int(cnt.get(env['BENCH_COUNTER']) or 0))
+        if args.prefill and completed_before_resume:
+            raise RuntimeError('il worker ha consumato durante il prefill')
         t0 = time.perf_counter()
+        if args.prefill:
+            os.killpg(worker.pid, signal.SIGCONT)
         while True:
             if pure_done is not None:
                 try:
@@ -218,10 +234,9 @@ def main():
             if time.perf_counter() - t0 > 600:
                 raise SystemExit('timeout in attesa del completamento')
             time.sleep(0.02)
-        # end-to-end: dal primo publish all'ultimo task eseguito (il worker consuma già durante
-        # la pubblicazione); drain = la coda rimasta dopo che il client ha finito
+        # In prefill il tempo parte dalla ripresa, altrimenti dal primo publish.
         drain_s = time.perf_counter() - t0
-        total_s = time.time() - pub['wall_start']
+        total_s = drain_s if args.prefill else time.time() - pub['wall_start']
 
         throughput_processes = memory_snapshot(worker.pid)
         lat = client(args.venv, LATENCY.format(n=args.latency_n), env)
@@ -233,7 +248,11 @@ def main():
         # Anche delay/get della sonda di latenza fa parte del carico misurato.
         peak = max(peak[0], idle_total, after_total)
     finally:
-        os.killpg(worker.pid, signal.SIGTERM)
+        try:
+            os.killpg(worker.pid, signal.SIGCONT)
+            os.killpg(worker.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
         try:
             worker.wait(30)
         except subprocess.TimeoutExpired:
@@ -244,7 +263,9 @@ def main():
     lat_ms = sorted(x * 1000 for x in lat)
     res = {
         'label': label, 'venv': args.venv, 'pool': args.pool, 'concurrency': args.concurrency,
-        'n': args.n,
+        'n': args.n, 'prefill': args.prefill,
+        'completed_tasks': done, 'completed_before_resume': completed_before_resume,
+        'worker_tasks_per_s': args.n / drain_s if args.prefill else None,
         'broker': env.get('BENCH_BROKER', os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390') + '/0'),
         'idle_processes': idle_processes, 'after_processes': after_processes,
         'throughput_processes': throughput_processes,
@@ -267,7 +288,7 @@ def main():
         except OSError:
             pass
     out = HERE / 'results' / f'{label}.json'
-    out.parent.mkdir(exist_ok=True)
+    out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(res, indent=1))
     print(json.dumps(res, indent=1))
 

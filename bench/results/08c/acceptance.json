@@ -1,0 +1,86 @@
+{
+  "ref/rpc_ms/p50": {
+    "rs": 2.802594506647438,
+    "ref": 3.519789010169916,
+    "passed": true
+  },
+  "ref/rpc_ms/p99": {
+    "rs": 3.7978740001562983,
+    "ref": 4.587734001688659,
+    "passed": true
+  },
+  "ref/ping_ms/p50": {
+    "rs": 8.682108993525617,
+    "ref": 8.928130002459511,
+    "passed": true
+  },
+  "ref/ping_ms/p99": {
+    "rs": 10.186521976720542,
+    "ref": 10.776798008009791,
+    "passed": true
+  },
+  "ref/client/pss": {
+    "delta_kb": 12,
+    "passed": true
+  },
+  "ref/worker/pss": {
+    "delta_kb": 272,
+    "passed": true
+  },
+  "rs/rpc_ms/p50": {
+    "rs": 3.0442580027738586,
+    "ref": 3.3481315040262416,
+    "passed": true
+  },
+  "rs/rpc_ms/p99": {
+    "rs": 3.913039981853217,
+    "ref": 4.637617006665096,
+    "passed": true
+  },
+  "rs/ping_ms/p50": {
+    "rs": 8.48650251282379,
+    "ref": 8.923821485950612,
+    "passed": true
+  },
+  "rs/ping_ms/p99": {
+    "rs": 11.105583980679512,
+    "ref": 24.326781014679,
+    "passed": true
+  },
+  "rs/client/pss": {
+    "delta_kb": 143,
+    "passed": true
+  },
+  "rs/worker/pss": {
+    "delta_kb": 110,
+    "passed": true
+  },
+  "redis/beat/pss": {
+    "delta_kb": -62,
+    "passed": true
+  },
+  "amqp/beat/pss": {
+    "delta_kb": 31,
+    "passed": true
+  },
+  "solo/ref/ping/p50": {
+    "rs": 8.381076506339014,
+    "ref": 8.982043000287376,
+    "passed": true
+  },
+  "solo/ref/ping/p99": {
+    "rs": 10.019025998190045,
+    "ref": 10.725741012720391,
+    "passed": true
+  },
+  "solo/rs/ping/p50": {
+    "rs": 8.167966996552423,
+    "ref": 9.321408986579627,
+    "passed": true
+  },
+  "solo/rs/ping/p99": {
+    "rs": 11.0936290002428,
+    "ref": 11.331095010973513,
+    "passed": true
+  }
+}

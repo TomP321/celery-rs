@@ -502,3 +502,51 @@ def test_env_disables_rust_consumer(app, monkeypatch):
     assert type(consumer) is ResultConsumer
     assert not isinstance(consumer, RsResultConsumer)
     assert rpc_module.ResultConsumer is ResultConsumer
+
+
+def test_repeated_ping_keeps_rpc_consumer_usable(app, worker):
+    for index in range(20):
+        result = submit(app, 'rs_rpc.add', (index, 1))
+        replies = app.control.inspect(destination=[worker.nodename], timeout=5).ping()
+        assert replies == {worker.nodename: {'ok': 'pong'}}
+        assert result.get(timeout=15) == index + 1
+    # La cancellazione del consumer temporaneo non chiude i canali ordinari.
+    assert submit(app, 'rs_rpc.add', (40, 2)).get(timeout=15) == 42
+
+
+def test_ping_preserves_durable_reply_queue_like_reference(app, worker):
+    from kombu import Connection
+
+    app.conf.update(control_queue_durable=True, control_queue_exclusive=False)
+    mailbox = app.control.mailbox
+    queue = mailbox.get_reply_queue().name
+    try:
+        assert app.control.inspect(destination=[worker.nodename], timeout=5).ping()
+        with Connection(AMQP_URL) as connection:
+            # Il riferimento cancella il consumer, non una coda senza auto-delete.
+            declared = connection.default_channel.queue_declare(queue=queue, passive=True)
+            observed = declared.consumer_count
+        code = """
+import json, sys
+from celery import Celery
+from kombu import Connection
+app = Celery('durable-control-ref', broker=sys.argv[1])
+app.conf.update(control_queue_durable=True, control_queue_exclusive=False)
+with app.connection_for_write() as connection:
+    # La broadcast del riferimento usa una copia del mailbox, con un altro oid.
+    mailbox = app.control.mailbox(connection)
+    queue = mailbox.get_reply_queue().name
+    try:
+        assert mailbox._broadcast('ping', destination=[sys.argv[2]], reply=True, timeout=5)
+        declared = connection.default_channel.queue_declare(queue=queue, passive=True)
+        print(json.dumps(declared.consumer_count))
+    finally:
+        connection.default_channel.queue_delete(queue=queue)
+
+"""
+        expected = subprocess.check_output(
+            [str(REF_PYTHON), '-c', code, AMQP_URL, worker.nodename],
+            cwd=TESTS_DIR, text=True)
+        assert observed == json.loads(expected) == 0
+    finally:
+        delete_queue(queue)

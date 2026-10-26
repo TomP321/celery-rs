@@ -1,0 +1,43 @@
+Mon Oct 26 18:09:30 2026    bench/results/08c/master-before.prof
+
+         2590309 function calls (2584734 primitive calls) in 15.948 seconds
+
+   Ordered by: internal time
+   List reduced from 3129 to 35 due to restriction <35>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+      813    9.511    0.012    9.514    0.012 {method 'poll' of 'select.epoll' objects}
+    10101    2.355    0.000    2.355    0.000 {method 'ack' of '_celery_rs.WorkerConsumer' objects}
+        1    1.005    1.005    1.005    1.005 {method 'control_request' of '_celery_rs.Connection' objects}
+    10101    0.180    0.000    0.180    0.000 {built-in method _pickle.dumps}
+    10101    0.125    0.000    0.584    0.000 strategy.py:132(task_message_handler)
+   357633    0.102    0.000    0.102    0.000 {method 'get' of 'dict' objects}
+        2    0.100    0.050    0.100    0.050 {method 'wait' of '_celery_rs.Waker' objects}
+     1626    0.091    0.000    0.091    0.000 {method 'drain' of '_celery_rs.WorkerConsumer' objects}
+    10101    0.079    0.000    0.135    0.000 request.py:96(__init__)
+    10101    0.079    0.000    0.411    0.000 rs_prefork.py:327(on_apply)
+    10101    0.065    0.000    0.581    0.000 request.py:926(execute_using_pool)
+    20202    0.064    0.000    1.499    0.000 rs_prefork.py:368(_handle_event)
+        1    0.064    0.064    0.066    0.066 rs_prefork.py:234(on_start)
+    10101    0.064    0.000    0.064    0.000 {method 'submit' of '_celery_rs.Pool' objects}
+     1421    0.059    0.000    1.571    0.001 rs_prefork.py:358(process_events)
+    20202    0.050    0.000    0.096    0.000 request.py:517(send_event)
+    11519    0.049    0.000    2.490    0.000 _rs_consumer.py:721(_run_ready)
+    20234    0.046    0.000    2.581    0.000 promises.py:143(__call__)
+    10101    0.044    0.000    0.454    0.000 base.py:140(apply_async)
+    30340    0.041    0.000    0.054    0.000 promises.py:84(__init__)
+    10101    0.039    0.000    0.656    0.000 consumer.py:829(on_task_received)
+    10102    0.037    0.000    0.037    0.000 {built-in method _celery_rs._celery_rs.json_loads}
+    10101    0.036    0.000    0.351    0.000 request.py:521(on_accepted)
+    40404    0.034    0.000    0.053    0.000 _weakrefset.py:115(discard)
+    10102    0.033    0.000    0.128    0.000 _rs_message.py:74(_decode)
+21089/21085    0.033    0.000    0.093    0.000 objects.py:36(__get__)
+     9102    0.033    0.000    0.102    0.000 collections.py:617(purge)
+    10101    0.032    0.000    0.409    0.000 rs_prefork.py:158(_set)
+        1    0.031    0.031   14.475   14.475 _rs_consumer.py:813(rsloop)
+    10101    0.030    0.000    0.147    0.000 collections.py:561(add)
+      302    0.029    0.000    0.029    0.000 {built-in method marshal.loads}
+    55121    0.029    0.000    0.068    0.000 {built-in method builtins.isinstance}
+    10112    0.029    0.000    0.052    0.000 __init__.py:673(update)
+    30310    0.025    0.000    0.066    0.000 dispatcher.py:186(send)
+    10102    0.024    0.000    0.045    0.000 _rs_message.py:57(__init__)

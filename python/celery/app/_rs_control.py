@@ -34,7 +34,17 @@ _JSON_DEFAULT = JSONEncoder().default
 def fast_connection(app):
     """La ``FastConnection`` del broker, o ``None`` se non è idonea."""
     from . import _rs_producer
-    return _rs_producer.fast_connection(app)
+    if (not _rs_producer._enabled() or _rs_producer._celery_rs is None
+            or not _rs_producer._connection_not_overridden(app)):
+        return None
+    # Come app.pool nel riferimento: il descrittore segue la vita del pool,
+    # senza ricostruire connessione e parametri a ogni comando.
+    pool = app.amqp.producer_pool
+    if isinstance(pool, _rs_producer.FastProducerPool):
+        connection = pool.connections.connection
+        if _rs_producer.use_fast_producer(connection):
+            return connection
+    return None
 
 
 def _native(connection):

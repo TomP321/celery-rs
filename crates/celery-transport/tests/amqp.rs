@@ -1358,3 +1358,52 @@ async fn no_ack_consumer_acks_on_delivery_and_supports_queue_changes() {
             .is_none()
     );
 }
+
+#[tokio::test]
+async fn control_replies_reuse_channel_without_changing_regular_consumers() {
+    let transport = transport().await;
+    let queue = CompactString::from(format!("rs.control.reuse.{}", suffix()));
+    transport
+        .declare_queue(&QueueDecl::new(queue.as_str()))
+        .await
+        .unwrap();
+    let mut channel = None;
+    for _ in 0..3 {
+        let mut consumer = transport.consume_control_reply(&queue).await.unwrap();
+        transport
+            .publish(PublishRequest::new(
+                None::<&str>,
+                queue.as_str(),
+                message("reply"),
+            ))
+            .await
+            .unwrap();
+        let delivery = recv(&mut consumer.deliveries).await;
+        let DeliveryTag::Number(tag) = delivery.delivery_tag else {
+            panic!("tag AMQP")
+        };
+        let current = tag >> 40;
+        if let Some(previous) = channel {
+            assert_eq!(previous, current);
+        }
+        channel = Some(current);
+        consumer.control.cancel().await.unwrap();
+    }
+    let mut regular = transport.consume(std::slice::from_ref(&queue), 1).await.unwrap();
+    transport
+        .publish(PublishRequest::new(
+            None::<&str>,
+            queue.as_str(),
+            message("task"),
+        ))
+        .await
+        .unwrap();
+    let delivery = recv(&mut regular.deliveries).await;
+    let DeliveryTag::Number(tag) = &delivery.delivery_tag else {
+        panic!("tag AMQP")
+    };
+    assert_ne!(channel, Some(tag >> 40));
+    transport.ack(&delivery.delivery_tag).await.unwrap();
+    regular.control.cancel().await.unwrap();
+    transport.delete_queue(&queue).await.unwrap();
+}

@@ -1,0 +1,104 @@
+[
+  [
+    "build",
+    0,
+    53.816413825989,
+    "    Finished `release` profile [optimized] target(s) in 53.76s"
+  ],
+  [
+    "clippy",
+    0,
+    25.059746541985078,
+    "   Compiling thiserror v2.0.21 |    Compiling thiserror-impl v2.0.21 |     Finished `dev` profile [unoptimized + debuginfo] target(s) in 24.97s"
+  ],
+  [
+    "build-package",
+    0,
+    55.18989096299629,
+    "    Finished `release` profile [optimized] target(s) in 54.30s"
+  ],
+  [
+    "build-native",
+    0,
+    1.2543062559852842,
+    "    Finished `release` profile [optimized] target(s) in 0.12s"
+  ],
+  [
+    "upstream",
+    1,
+    66.515060781996,
+    "upstream unit [venv-rs]: 31691 test, 31603 ok al primo passo, 3 instabili, 1 falliti (0 noti anche nel riferimento) \u2192 /home/ubuntu/HDD/celery-rs-wt/08c-latency-capacity/tools/compat/out/upstream-unit-venv-rs.json"
+  ],
+  [
+    "tests_rs-1",
+    0,
+    56.62448777601821,
+    "50 passed; 0 failed"
+  ],
+  [
+    "tests_rs-3",
+    0,
+    323.57436135798343,
+    "82 passed; 0 failed"
+  ],
+  [
+    "tests_rs-4",
+    0,
+    232.54370407402166,
+    "34 passed; 0 failed"
+  ],
+  [
+    "wire-worker-prefork",
+    1,
+    258.0274294539995,
+    "wire-worker: 1 scenari diversi su 22 \u2192 /home/ubuntu/HDD/celery-rs-wt/08c-latency-capacity/tools/compat/out/wire-worker-report.md"
+  ],
+  [
+    "tests_rs-2",
+    1,
+    185.21351633701124,
+    "54 passed; 1 failed"
+  ],
+  [
+    "wire-worker-solo",
+    0,
+    219.29395738599123,
+    "wire-worker: 0 scenari diversi su 22 \u2192 /home/ubuntu/HDD/celery-rs-wt/08c-latency-capacity/tools/compat/out/wire-worker-report.md"
+  ],
+  [
+    "cargo-test",
+    0,
+    47.393028994993074,
+    "235 passed; 0 failed"
+  ],
+  [
+    "native-tests",
+    0,
+    65.8441083089856,
+    "81 passed; 0 failed"
+  ],
+  [
+    "api",
+    0,
+    2.0823350849968847,
+    "api: 0 differenze su 137 moduli + settings/signals/cli \u2192 /home/ubuntu/HDD/celery-rs-wt/08c-latency-capacity/tools/compat/out/api-report.md"
+  ],
+  [
+    "wire",
+    0,
+    56.62306340999203,
+    "wire: 0 scenari diversi su 40 \u2192 /home/ubuntu/HDD/celery-rs-wt/08c-latency-capacity/tools/compat/out/wire-report.md"
+  ],
+  [
+    "wire-beat",
+    0,
+    19.758704557985766,
+    "wire-beat: 0 broker diversi su 2 \u2192 /home/ubuntu/HDD/celery-rs-wt/08c-latency-capacity/tools/compat/out/wire-beat-report.md"
+  ],
+  [
+    "cli",
+    0,
+    286.6392162129923,
+    "cli: 0 comandi diversi su 190 (tempo totale ref 139.7s, rs 108.1s) \u2192 /home/ubuntu/HDD/celery-rs-wt/08c-latency-capacity/tools/compat/out/cli-report.md"
+  ]
+]

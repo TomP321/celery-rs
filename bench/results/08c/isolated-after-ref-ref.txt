@@ -1,0 +1,43 @@
+Mon Oct 26 18:27:31 2026    bench/results/08c/isolated-after-ref-ref.prof
+
+         443932 function calls (441132 primitive calls) in 1.656 seconds
+
+   Ordered by: internal time
+   List reduced from 398 to 35 due to restriction <35>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+     4700    1.044    0.000    1.044    0.000 {method 'recv' of '_socket.socket' objects}
+     1100    0.032    0.000    0.032    0.000 {method 'sendall' of '_socket.socket' objects}
+     1300    0.022    0.000    0.070    0.000 serialization.py:257(dumps)
+     1500    0.021    0.000    0.040    0.000 abstract.py:44(__init__)
+    31400    0.017    0.000    0.018    0.000 {built-in method builtins.getattr}
+    41300    0.013    0.000    0.015    0.000 {built-in method builtins.isinstance}
+     1100    0.013    0.000    0.090    0.000 method_framing.py:124(_write_frame)
+     1700    0.013    0.000    1.176    0.001 connection.py:529(blocking_read)
+     4700    0.013    0.000    1.060    0.000 transport.py:641(_read)
+     1200    0.012    0.000    0.021    0.000 abstract.py:55(as_dict)
+      200    0.012    0.000    0.012    0.000 {built-in method time.sleep}
+    32300    0.012    0.000    0.012    0.000 {method 'get' of 'dict' objects}
+1100/1000    0.011    0.000    0.032    0.000 serialization.py:330(_write_table)
+     1100    0.009    0.000    0.052    0.000 abstract_channel.py:115(dispatch_method)
+     1100    0.008    0.000    0.775    0.001 abstract_channel.py:61(send_method)
+     1700    0.008    0.000    1.070    0.001 transport.py:282(read_frame)
+2800/2600    0.008    0.000    0.015    0.000 serialization.py:362(_write_item)
+2900/2800    0.007    0.000    0.026    0.000 objects.py:36(__get__)
+     1200    0.007    0.000    0.066    0.000 abstract.py:70(__copy__)
+    28000    0.007    0.000    0.007    0.000 {built-in method builtins.len}
+      900    0.007    0.000    0.859    0.001 abstract_channel.py:86(wait)
+     3100    0.007    0.000    0.008    0.000 contextlib.py:108(__init__)
+      900    0.006    0.000    0.012    0.000 serialization.py:150(loads)
+      900    0.006    0.000    0.015    0.000 collections.py:400(__getitem__)
+    12100    0.006    0.000    0.006    0.000 {built-in method _struct.pack}
+      700    0.006    0.000    0.036    0.000 entity.py:576(__init__)
+     6100    0.006    0.000    0.031    0.000 {built-in method builtins.next}
+    19200    0.006    0.000    0.006    0.000 {method 'write' of '_io.BytesIO' objects}
+     1500    0.006    0.000    0.070    0.000 method_framing.py:35(on_frame)
+    13600    0.005    0.000    0.005    0.000 abstract.py:56(f)
+  500/300    0.005    0.000    0.169    0.001 connection.py:622(_ensured)
+     2200    0.005    0.000    0.007    0.000 promises.py:143(__call__)
+      200    0.005    0.000    0.037    0.000 serialization.py:532(_serialize_properties)
+      100    0.005    0.000    0.221    0.002 base.py:1033(send_task)
+      900    0.004    0.000    0.008    0.000 saferepr.py:197(reprstream)

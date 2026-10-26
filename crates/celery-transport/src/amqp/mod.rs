@@ -2,8 +2,8 @@
 //!
 //! Mappa il contratto di [`crate::transport`] sulle primitive AMQP:
 //! un canale dedicato per ogni consumatore (prefetch e delivery tag sono per
-//! canale), un canale per le dichiarazioni, uno per le pubblicazioni e uno per
-//! `basic_get`. Il tag esposto è `(channel_id << 40) | delivery_tag`: il worker
+//! canale), un canale per le dichiarazioni e le risposte temporanee pidbox,
+//! uno per le pubblicazioni e uno per `basic_get`. Il tag esposto è `(channel_id << 40) | delivery_tag`: il worker
 //! vede un `u64` stabile e `ack`/`reject` sanno su quale canale operare.
 //!
 //! I messaggi usano le proprietà native (`content_type`, `headers`,
@@ -435,6 +435,7 @@ impl AmqpTransport {
         queues: &[CompactString],
         prefetch: u16,
         no_ack: bool,
+        control_reply: bool,
     ) -> Result<Consumer> {
         self.shared.ensure_open()?;
         if queues.is_empty() {
@@ -442,12 +443,17 @@ impl AmqpTransport {
                 "consume richiede almeno una coda".to_string(),
             ));
         }
-        let channel = self
-            .shared
-            .connection
-            .create_channel()
-            .await
-            .map_err(map_lapin)?;
+        // Senza ack né QoS il consumer non richiede uno stato di canale isolato.
+        // Riutilizzare quello delle dichiarazioni evita open/close a ogni ping.
+        let channel = if control_reply {
+            self.shared.control_channel().await?
+        } else {
+            self.shared
+                .connection
+                .create_channel()
+                .await
+                .map_err(map_lapin)?
+        };
         if prefetch > 0 {
             channel
                 .basic_qos(
@@ -668,7 +674,7 @@ impl Transport for AmqpTransport {
         queues: &'a [CompactString],
         prefetch: u16,
     ) -> BoxFuture<'a, Result<Consumer>> {
-        Box::pin(async move { self.consume_inner(queues, prefetch, false).await })
+        Box::pin(async move { self.consume_inner(queues, prefetch, false, false).await })
     }
 
     fn consume_no_ack<'a>(
@@ -676,7 +682,21 @@ impl Transport for AmqpTransport {
         queues: &'a [CompactString],
         prefetch: u16,
     ) -> BoxFuture<'a, Result<Consumer>> {
-        Box::pin(async move { self.consume_inner(queues, prefetch, true).await })
+        Box::pin(async move { self.consume_inner(queues, prefetch, true, false).await })
+    }
+
+    fn consume_control_reply<'a>(
+        &'a self,
+        queue: &'a CompactString,
+    ) -> BoxFuture<'a, Result<Consumer>> {
+        Box::pin(async move {
+            self.consume_inner(std::slice::from_ref(queue), 0, true, true)
+                .await
+        })
+    }
+
+    fn after_reply_message_received<'a>(&'a self, _queue: &'a str) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async { Ok(()) })
     }
 
     fn get<'a>(&'a self, queue: &'a str, no_ack: bool) -> BoxFuture<'a, Result<Option<Delivery>>> {
