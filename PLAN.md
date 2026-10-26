@@ -123,8 +123,8 @@ Infrastruttura via docker su porte dedicate: Redis `:6390`, RabbitMQ `:5673`.
 | 5 ✅ | Worker | master Python + core Rust (consumer, rsloop su epoll, zygote+pool), trace, ack late, retry, time limit, revoke, eventi, control, autoscale, shutdown/warm/cold, segnali | matrix completa verde |
 | 6 ✅ | Beat | scheduler, crontab/solar, persistenza | `test_beat` + `t/unit/app/test_schedules` |
 | 7 ✅ | CLI | `celery worker/beat/call/inspect/control/purge/result/events/status/multi` | output e exit code identici |
-| 8 | Ottimizzazione | 8a ✅ pidbox/mingle/gossip sul trasporto Rust (master solo Redis 36 MB, prefork c4 74 MB vs 146 ref); 8b mimalloc + memoria (picco prefork: redis-py nel master al primo task, PSS beat su AMQP); 8c latenze (rpc, ping AMQP in-process e prefork, tick di beat/ScheduleEntry); `get_type_hints(worker_direct)` | target tabella §Ottimizzazioni |
-| 9 | Hardening | beat embedded (-B) avviato dallo zygote invece che in thread, connection recovery, test leak, fuzz del parser messaggi | `t/integration` completa |
+| 8 | Ottimizzazione | **Priorità: RAM di worker (prefork c10) e beat vs originale, poi prestazioni.** 8a ✅ pidbox/mingle/gossip sul trasporto Rust; 8b ✅ dieta della memoria con oggetti kombu veri (client 27 MB vs 35, beat 32 MB vs 43–51, mimalloc scartato); 8d ✅ worker c10 (PSS idle 87 MB vs 309, figlio 6,3 MB vs 29; precarico cffi nello zygote, una copia IPC in meno); 8e infrastruttura test in parallelo (broker per gruppo); 8f RAM di beat (schedule in Rust, `-B`); 8c latenze senza aumentare la RAM (rpc, ping AMQP, tick di beat); `get_type_hints(worker_direct)` | target tabella §Ottimizzazioni |
+| 9 | Hardening | beat embedded (-B) avviato dallo zygote invece che in thread, connection recovery, test leak, fuzz del parser messaggi, segfault dei figli billiard nella suite completa (`test_worker_process_signals[prefork]`, presente anche prima della 08b) | `t/integration` completa |
 
 ## Metodo di lavoro (orchestrazione)
 
