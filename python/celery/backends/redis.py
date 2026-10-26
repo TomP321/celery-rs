@@ -33,6 +33,8 @@ from celery.utils.time import humanize_seconds
 from .asynchronous import AsyncBackendMixin, BaseResultConsumer
 from .base import BaseKeyValueStoreBackend
 
+__all__ = ('RedisBackend', 'SentinelBackend')
+
 
 class LazyErrors:
     """Tupla di errori di connessione risolta al primo errore."""
@@ -176,15 +178,6 @@ class _RedisSSLClass:
 
 
 def __getattr__(name):
-    if name == '__all__':
-        # L'esportazione completa materializza anche gli attributi di classe:
-        # l'introspezione statica deve vedere le classi reali, non descrittori.
-        for backend in (RedisBackend, SentinelBackend):
-            value = vars(backend).get('connection_class_ssl')
-            if isinstance(value, _RedisSSLClass):
-                value.__get__(None, backend)
-        globals()['__all__'] = ('RedisBackend', 'SentinelBackend')
-        return globals()['__all__']
     if name == 'SentinelManagedSSLConnection':
         return _sentinel_ssl_connection_class()
     if name == '_SSLConnection':
@@ -193,7 +186,7 @@ def __getattr__(name):
 
 
 def __dir__():
-    return sorted(set(globals()) | {'SentinelManagedSSLConnection', '_SSLConnection', '__all__'})
+    return sorted(set(globals()) | {'SentinelManagedSSLConnection', '_SSLConnection'})
 
 redis = sys.modules.get('redis') or _lazy_module('redis')
 _sentinel = sys.modules.get('redis.sentinel') or _lazy_module('redis.sentinel')
