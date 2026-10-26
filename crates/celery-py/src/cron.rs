@@ -43,6 +43,24 @@ pub struct PyCronSpec {
 
 #[pymethods]
 impl PyCronSpec {
+    fn fields_equal(&self, other: &Self) -> bool {
+        self.inner.minute() == other.inner.minute()
+            && self.inner.hour() == other.inner.hour()
+            && self.inner.day_of_week() == other.inner.day_of_week()
+            && self.inner.day_of_month() == other.inner.day_of_month()
+            && self.inner.month_of_year() == other.inner.month_of_year()
+    }
+
+    fn fields(&self) -> [Vec<u32>; 5] {
+        [
+            self.inner.minute().to_vec(),
+            self.inner.hour().to_vec(),
+            self.inner.day_of_week().to_vec(),
+            self.inner.day_of_month().to_vec(),
+            self.inner.month_of_year().to_vec(),
+        ]
+    }
+
     #[new]
     fn new(
         minute: Vec<i64>,

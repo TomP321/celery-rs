@@ -19,7 +19,6 @@ from threading import Event, Thread
 from billiard import ensure_multiprocessing
 from billiard.common import reset_signals
 from billiard.context import Process
-from kombu import pidbox
 from kombu.common import ignore_errors
 from kombu.utils.encoding import safe_str
 from kombu.utils.functional import maybe_evaluate, reprcall
@@ -657,8 +656,9 @@ class PersistentScheduler(Scheduler):
             'utc_enabled': utc,
         })
         self.sync()
-        debug('Current schedule:\n' + '\n'.join(
-            repr(entry) for entry in entries.values()))
+        if logger.isEnabledFor(10):
+            debug('Current schedule:\n' + '\n'.join(
+                repr(entry) for entry in entries.values()))
 
     def _create_schedule(self):
         for _ in (1, 2):
@@ -697,7 +697,13 @@ class PersistentScheduler(Scheduler):
 
     def sync(self):
         if self._store is not None:
+            # Shelf.sync svuota la cache writeback: manteniamo le stesse
+            # voci usate dall'heap, senza deserializzarne una seconda copia.
+            entries = (self._store.cache.get('entries')
+                       if isinstance(self._store, shelve.Shelf) else None)
             self._store.sync()
+            if entries is not None:
+                self._store.cache['entries'] = entries
 
     def close(self):
         close_failed = True
@@ -744,31 +750,6 @@ class _PidboxStopping(BaseException):
     """
 
 
-class _BeatNode(pidbox.Node):
-    """Pidbox node that stays silent while the scheduler is stalled.
-
-    The staleness check lives here rather than in the consumer callback
-    because :meth:`kombu.pidbox.Node.handle_message` only reaches
-    :meth:`dispatch` for messages actually addressed to this node.
-    Checking earlier would make beat log about every broadcast aimed at
-    a worker.
-    """
-
-    #: owning :class:`BeatPidbox`, set once it has built this node.
-    beat_pidbox = None
-
-    def dispatch(self, method, arguments=None, reply_to=None,
-                 ticket=None, **kwargs):
-        owner = self.beat_pidbox
-        if owner is not None and owner.is_stale():
-            warning('beat pidbox: not answering %s, the scheduler has '
-                    'not ticked for %.1fs (over the %ss limit).',
-                    method, owner.tick_age(), owner.max_tick_age)
-            return None
-        return super().dispatch(method, arguments, reply_to, ticket,
-                                **kwargs)
-
-
 class BeatPidbox:
     """Remote-control mailbox node for beat.
 
@@ -807,6 +788,7 @@ class BeatPidbox:
         self.app = service.app
         self.hostname = beat_nodename(service.hostname)
         self.state = AttributeDict(app=self.app, service=service)
+        from ._beat_node import _BeatNode
         self.node = _BeatNode(
             safe_str(self.hostname),
             state=self.state,
@@ -1197,3 +1179,18 @@ def EmbeddedService(app, max_interval=None, **kwargs):
         # in reasonable time.
         return _Threaded(app, max_interval=1, **kwargs)
     return _Process(app, max_interval=max_interval, **kwargs)
+
+
+def __getattr__(name):
+    if name == '_BeatNode':
+        from ._beat_node import _BeatNode as value
+    elif name == 'pidbox':
+        from kombu import pidbox as value
+    else:
+        raise AttributeError(f'module {__name__!r} has no attribute {name!r}')
+    globals()[name] = value
+    return value
+
+
+def __dir__():
+    return sorted(set(globals()) | {'_BeatNode', 'pidbox'})

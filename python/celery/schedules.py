@@ -401,6 +401,14 @@ class crontab_parser:
         return i
 
 
+_CRON_FIELDS = ('minute', 'hour', 'day_of_week', 'day_of_month', 'month_of_year')
+_SCHEDULE_DICT = BaseSchedule.__dict__['__dict__']
+
+
+def _cron_dict(value):
+    return _SCHEDULE_DICT.__get__(value)
+
+
 class crontab(BaseSchedule):
     """Crontab schedule.
 
@@ -508,6 +516,53 @@ class crontab(BaseSchedule):
         self._fast_estimate = (
             type(self).remaining_delta is crontab.remaining_delta)
         self._rs_cached = None
+        # I set pubblici servono solo a chi li osserva: il tick usa il core.
+        # Un set passato dall'utente deve conservare identità e mutazioni.
+        if type(self) is crontab and not any(isinstance(v, set) for v in
+                (minute, hour, day_of_week, day_of_month, month_of_year)):
+            data = _cron_dict(self)
+            if all(type(value) is int for field in _CRON_FIELDS for value in data[field]):
+                self._rs_cached = _celery_rs.CronSpec(
+                    list(self.minute), list(self.hour), list(self.day_of_week),
+                    list(self.day_of_month), list(self.month_of_year),
+                    self._orig_day_of_month == '*' and self._orig_month_of_year == '*')
+                for field in _CRON_FIELDS:
+                    del data[field]
+
+    def _materialize_fields(self):
+        data = _cron_dict(self)
+        cached = data.get('_rs_cached')
+        if isinstance(cached, _celery_rs.CronSpec):
+            for name, values in zip(_CRON_FIELDS, cached.fields()):
+                data.setdefault(name, set(values))
+            data['_rs_cached'] = None
+        return data
+
+    @property
+    def __dict__(self):
+        # vars() espone sempre gli stessi set mutabili del riferimento.
+        return self._materialize_fields()
+
+    @__dict__.setter
+    def __dict__(self, value):
+        _SCHEDULE_DICT.__set__(self, value)
+
+    def __getattr__(self, name):
+        if name in _CRON_FIELDS:
+            data = self._materialize_fields()
+            if name in data:
+                return data[name]
+        raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
+
+    def __delattr__(self, name):
+        if name in _CRON_FIELDS:
+            self._materialize_fields()
+        super().__delattr__(name)
+
+    def __setattr__(self, name, value):
+        if name in _CRON_FIELDS or name in ('_orig_day_of_month', '_orig_month_of_year'):
+            self._materialize_fields()
+        super().__setattr__(name, value)
 
     @classmethod
     def from_string(cls, crontab: str) -> crontab:
@@ -592,40 +647,37 @@ class crontab(BaseSchedule):
 
     def _rs_spec(self):
         """CronSpec Rust per i campi correnti, ricostruito se i set cambiano."""
-        cached = self._rs_cached
-        minute = self.minute
-        hour = self.hour
-        day_of_week = self.day_of_week
-        day_of_month = self.day_of_month
-        month_of_year = self.month_of_year
-        all_dom_moy = (self._orig_day_of_month == '*' and
-                       self._orig_month_of_year == '*')
-        if (cached is None or cached[0] is not minute or
-                cached[1] is not hour or cached[2] is not day_of_week or
-                cached[3] is not day_of_month or
-                cached[4] is not month_of_year or
-                cached[5] != all_dom_moy):
-            spec = _celery_rs.CronSpec(
-                list(minute), list(hour), list(day_of_week),
-                list(day_of_month), list(month_of_year), all_dom_moy)
-            cached = (minute, hour, day_of_week, day_of_month, month_of_year,
-                      all_dom_moy, spec)
-            self._rs_cached = cached
-        return cached[6]
+        data = _cron_dict(self)
+        cached = data.get('_rs_cached')
+        if isinstance(cached, _celery_rs.CronSpec):
+            return cached
+        # Dopo l'esposizione i set sono liberamente mutabili, anche in-place.
+        return _celery_rs.CronSpec(
+            list(self.minute), list(self.hour), list(self.day_of_week),
+            list(self.day_of_month), list(self.month_of_year),
+            self._orig_day_of_month == '*' and self._orig_month_of_year == '*')
 
     def _next_ffwd_args(self, last_run_at):
         return self._rs_spec().next_ffwd(
             last_run_at.year, last_run_at.month, last_run_at.day,
             last_run_at.hour, last_run_at.minute)
 
+    def _schedule_tz(self):
+        if type(self) is crontab:
+            data = _cron_dict(self)
+            if 'tz' not in data:
+                data['tz'] = self.app.timezone
+            return data['tz']
+        return self.tz
+
     def _remaining_delta_fast(self, last_run_at, tz=None):
         if tz is None:
             # `CachedProperty` di kombu salva il valore in `__dict__['tz']`;
             # può essere una stringa (es. app.timezone impostato dai test).
-            cached_tz = self.__dict__.get('tz')
+            cached_tz = _cron_dict(self).get('tz')
             schedule_tz: tzinfo = (
                 cached_tz if isinstance(cached_tz, tzinfo)
-                else timezone.get_timezone(cached_tz or self.tz))
+                else timezone.get_timezone(cached_tz or self._schedule_tz()))
         else:
             schedule_tz = timezone.get_timezone(tz)
         current_tz = last_run_at.tzinfo
@@ -678,13 +730,13 @@ class crontab(BaseSchedule):
         # pylint: disable=redefined-outer-name
         # caching global ffwd
         if (ffwd is _GLOBAL_FFWD and self._fast_estimate and
-                'remaining_delta' not in self.__dict__):
+                'remaining_delta' not in _cron_dict(self)):
             # Stesso calcolo di ``remaining(start, ffwd(...), now)`` senza
             # costruire l'oggetto ffwd: è il percorso caldo di beat.
-            cached_tz = self.__dict__.get('tz')
+            cached_tz = _cron_dict(self).get('tz')
             schedule_tz = (
                 cached_tz if isinstance(cached_tz, tzinfo)
-                else timezone.get_timezone(cached_tz or self.tz))
+                else timezone.get_timezone(cached_tz or self._schedule_tz()))
             current_tz = last_run_at.tzinfo
             if current_tz is None or current_tz.utcoffset(last_run_at) is None:
                 last_run_at = self.maybe_make_aware(last_run_at)
@@ -749,6 +801,14 @@ class crontab(BaseSchedule):
 
     def __eq__(self, other: Any) -> bool:
         if isinstance(other, crontab):
+            if (self is other and type(self) is crontab and self.nowfun is None
+                    and isinstance(self._rs_cached, _celery_rs.CronSpec)):
+                return True
+            left = _cron_dict(self).get('_rs_cached')
+            right = _cron_dict(other).get('_rs_cached')
+            if (isinstance(left, _celery_rs.CronSpec) and
+                    isinstance(right, _celery_rs.CronSpec)):
+                return left.fields_equal(right) and super().__eq__(other)
             return (
                 other.month_of_year == self.month_of_year and
                 other.day_of_month == self.day_of_month and
