@@ -123,7 +123,7 @@ Infrastruttura via docker su porte dedicate: Redis `:6390`, RabbitMQ `:5673`.
 | 5 ✅ | Worker | master Python + core Rust (consumer, rsloop su epoll, zygote+pool), trace, ack late, retry, time limit, revoke, eventi, control, autoscale, shutdown/warm/cold, segnali | matrix completa verde |
 | 6 ✅ | Beat | scheduler, crontab/solar, persistenza | `test_beat` + `t/unit/app/test_schedules` |
 | 7 ✅ | CLI | `celery worker/beat/call/inspect/control/purge/result/events/status/multi` | output e exit code identici |
-| 8 | Ottimizzazione | profiling, misure, tuning; pidbox/mingle/gossip fuori da kombu, mimalloc, latenza rpc, import redis-py, PSS beat su AMQP (lapin), tick di beat (ScheduleEntry), latenza ping in-process su AMQP (+1,5 ms) | target tabella §Ottimizzazioni |
+| 8 | Ottimizzazione | 8a ✅ pidbox/mingle/gossip sul trasporto Rust (master solo Redis 36 MB, prefork c4 74 MB vs 146 ref); 8b mimalloc + memoria (picco prefork: redis-py nel master al primo task, PSS beat su AMQP); 8c latenze (rpc, ping AMQP in-process e prefork, tick di beat/ScheduleEntry); `get_type_hints(worker_direct)` | target tabella §Ottimizzazioni |
 | 9 | Hardening | beat embedded (-B) avviato dallo zygote invece che in thread, connection recovery, test leak, fuzz del parser messaggi | `t/integration` completa |
 
 ## Metodo di lavoro (orchestrazione)
