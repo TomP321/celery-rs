@@ -162,7 +162,7 @@ def main():
         total_s = time.time() - pub['wall_start']
 
         lat = client(args.venv, LATENCY.format(n=args.latency_n), env)
-        after_total, _ = pss_kb(worker.pid)
+        after_total, after_per = pss_kb(worker.pid)
     finally:
         os.killpg(worker.pid, signal.SIGTERM)
         try:
@@ -175,7 +175,7 @@ def main():
         'label': label, 'venv': args.venv, 'pool': args.pool, 'concurrency': args.concurrency,
         'n': args.n,
         'pss_idle_kb': idle_total, 'pss_idle_per_process_kb': idle_per,
-        'pss_peak_kb': peak, 'pss_after_kb': after_total,
+        'pss_peak_kb': peak, 'pss_after_kb': after_total, 'pss_after_per_process_kb': after_per,
         'client_publish_per_s': args.n / pub['publish_s'],
         'client_maxrss_kb': pub['maxrss_kb'],
         'end_to_end_s': total_s,
