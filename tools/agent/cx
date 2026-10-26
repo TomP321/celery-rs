@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# Affida una spec a codex (gpt-6.1-sol, effort low) nella cartella corrente del repo/worktree.
+#   tools/agent/cx specs/01-proto.md               nuova sessione
+#   tools/agent/cx specs/01-proto.md "messaggio"   continua la sessione della spec con un messaggio
+# Log in tools/agent/logs/<spec>.log (+ .jsonl); l'id di thread in tools/agent/logs/<spec>.cx-session.
+# Senza sandbox: bubblewrap non funziona su questa macchina (userns ristretti da AppArmor);
+# decisione del proprietario del progetto, come `opencode --auto`.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$(readlink -f "$0")")/../.." && pwd)"
+MODEL="${CX_MODEL:-gpt-6.1-sol}"
+EFFORT="${CX_EFFORT:-low}"
+SPEC="$1"; shift || true
+NAME="$(basename "$SPEC" .md)"
+LOGS="$ROOT/tools/agent/logs"; mkdir -p "$LOGS"
+SESSION_FILE="$LOGS/$NAME.cx-session"
+
+cd "$ROOT"
+COMMON=(-m "$MODEL" -c "model_reasoning_effort=\"$EFFORT\"" --json --skip-git-repo-check
+        --dangerously-bypass-approvals-and-sandbox)
+if [[ $# -gt 0 ]]; then
+  MSG="$*"
+  if [[ -f "$SESSION_FILE" ]]; then
+    CMD=(codex exec resume "${COMMON[@]}" "$(cat "$SESSION_FILE")" "$MSG")
+  else
+    CMD=(codex exec "${COMMON[@]}" -C "$ROOT" "$MSG")
+  fi
+else
+  MSG="Implementa la spec in $SPEC. Segui AGENTS.md. Lavora finché i criteri di accettazione della spec sono soddisfatti e verificati eseguendo i comandi indicati."
+  CMD=(codex exec "${COMMON[@]}" -C "$ROOT" "$MSG")
+fi
+
+{ echo "=== $(date -Is) codex model=$MODEL effort=$EFFORT"; echo ">>> $MSG"; } >> "$LOGS/$NAME.log"
+"${CMD[@]}" < /dev/null 2>> "$LOGS/$NAME.stderr" \
+  | tee -a "$LOGS/$NAME.jsonl" \
+  | python3 -I "$ROOT/tools/agent/cx_filter.py" "$SESSION_FILE" "$LOGS/$NAME.log"
+echo "=== fine $(date -Is)" >> "$LOGS/$NAME.log"
+tail -40 "$LOGS/$NAME.log"
