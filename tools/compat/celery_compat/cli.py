@@ -6,6 +6,7 @@
     python -m celery_compat wire-beat  [--ref VENV] [--rs VENV] [--broker redis amqp]
     python -m celery_compat cli        [--ref VENV] [--rs VENV] [--broker redis amqp] [-s CASO...]
     python -m celery_compat upstream   [--venv VENV] [--suite unit|integration] [-k EXPR] [paths...]
+    python -m celery_compat integration [--ref VENV] [--rs VENV] [--broker redis amqp]
 
 Ogni comando scrive i risultati in tools/compat/out/ ed esce con codice != 0 se il gate fallisce.
 """
@@ -861,6 +862,9 @@ def main(argv=None):
     u.add_argument('--show', type=int, default=50)
     u.add_argument('paths', nargs='*', help='sottoinsieme di test (relativo a celery/)')
     u.set_defaults(fn=cmd_upstream)
+
+    from .integration import register
+    register(sub, VENV_REF, VENV_RS)
 
     args = ap.parse_args(argv)
     sys.exit(args.fn(args))
