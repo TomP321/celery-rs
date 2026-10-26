@@ -225,6 +225,15 @@ impl PyWorkerConsumer {
         py.detach(|| block(self.inner.close()))
     }
 
+    /// Un consumer ausiliario (pidbox/gossip) che condivide questa connessione.
+    fn aux_consumer(&self) -> PyWorkerConsumer {
+        PyWorkerConsumer {
+            inner: self.inner.aux(0),
+            virtual_transport: self.virtual_transport,
+            body_encoding: self.body_encoding.clone(),
+        }
+    }
+
     fn is_closed(&self) -> bool {
         self.inner.is_closed()
     }

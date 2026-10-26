@@ -4,10 +4,10 @@ from collections import namedtuple
 from collections.abc import Mapping
 from weakref import WeakValueDictionary
 
-from kombu import Connection, Consumer, Exchange, Producer, Queue, pools
-from kombu.common import Broadcast
 from kombu.utils.functional import maybe_list
 from kombu.utils.objects import cached_property
+
+from ._lazy_kombu import lazy_class
 
 from celery import signals
 from celery.utils.nodenames import anon_nodename
@@ -31,6 +31,18 @@ def _task_repr(obj, maxsize, maxlevels):
 
 
 __all__ = ('AMQP', 'Queues', 'task_message')
+
+
+def _exchange_cls():
+    """``kombu.Exchange`` solo quando serve davvero."""
+    from kombu import Exchange
+    return Exchange
+
+
+def _queue_cls():
+    """``kombu.Queue`` solo quando serve davvero."""
+    from kombu import Queue
+    return Queue
 
 #: earliest date supported by time.mktime.
 INT_MIN = -2147483648
@@ -85,13 +97,15 @@ class Queues(dict):
         self.create_missing = create_missing
         self.create_missing_queue_type = create_missing_queue_type
         self.create_missing_queue_exchange_type = create_missing_queue_exchange_type
-        self.autoexchange = Exchange if autoexchange is None else autoexchange
+        self.autoexchange = (
+            _exchange_cls() if autoexchange is None else autoexchange)
         self.max_priority = max_priority
         if queues is not None and not isinstance(queues, Mapping):
             queues = {q.name: q for q in queues}
         queues = queues or {}
+        queue_cls = _queue_cls()
         for name, q in queues.items():
-            self.add(q) if isinstance(q, Queue) else self.add_compat(name, **q)
+            self.add(q) if isinstance(q, queue_cls) else self.add_compat(name, **q)
         # The default set of queues to consume from if no -Q option is set.
         self._default_consume_from = {**self}
 
@@ -136,7 +150,7 @@ class Queues(dict):
             **options (Any): Additional declaration options used when
                 queue is a str.
         """
-        if not isinstance(queue, Queue):
+        if not isinstance(queue, _queue_cls()):
             return self.add_compat(queue, **kwargs)
         return self._add(queue)
 
@@ -145,7 +159,7 @@ class Queues(dict):
         options.setdefault('routing_key', options.get('binding_key'))
         if options['routing_key'] is None:
             options['routing_key'] = name
-        return self._add(Queue.from_dict(name, **options))
+        return self._add(_queue_cls().from_dict(name, **options))
 
     def _add(self, queue):
         if self.default_exchange and (queue.exchange is None or queue.exchange.name == ''):
@@ -222,11 +236,11 @@ class Queues(dict):
             queue_arguments = {"x-queue-type": self.create_missing_queue_type}
 
         if self.create_missing_queue_exchange_type:
-            exchange = Exchange(name, self.create_missing_queue_exchange_type)
+            exchange = _exchange_cls()(name, self.create_missing_queue_exchange_type)
         else:
             exchange = self.autoexchange(name)
 
-        return Queue(name, exchange, name, queue_arguments=queue_arguments)
+        return _queue_cls()(name, exchange, name, queue_arguments=queue_arguments)
 
     @property
     def consume_from(self):
@@ -238,9 +252,9 @@ class Queues(dict):
 class AMQP:
     """App AMQP API: app.amqp."""
 
-    Connection = Connection
-    Consumer = Consumer
-    Producer = Producer
+    Connection = lazy_class('kombu.connection', 'Connection')
+    Consumer = lazy_class('kombu.messaging', 'Consumer')
+    Producer = lazy_class('kombu.messaging', 'Producer')
 
     #: compat alias to Connection
     BrokerConnection = Connection
@@ -301,7 +315,7 @@ class AMQP:
             queue_arguments = None
             if conf.task_default_queue_type == 'quorum':
                 queue_arguments = {'x-queue-type': 'quorum'}
-            queues = (Queue(conf.task_default_queue,
+            queues = (_queue_cls()(conf.task_default_queue,
                             exchange=self.default_exchange,
                             routing_key=default_routing_key,
                             queue_arguments=queue_arguments),)
@@ -570,6 +584,7 @@ class AMQP:
                 # not topic exchange, and exchange not undefined
                 exchange = queue.exchange.name or default_exchange
                 routing_key = routing_key or queue.routing_key or default_rkey
+            from kombu.common import Broadcast
             if declare is None and queue and not isinstance(queue, Broadcast):
                 declare = [queue]
 
@@ -619,7 +634,7 @@ class AMQP:
             if sent_event:
                 evd = event_dispatcher or default_evd
                 exname = exchange
-                if isinstance(exname, Exchange):
+                if isinstance(exname, _exchange_cls()):
                     exname = exname.name
                 sent_event.update({
                     'queue': qname,
@@ -670,6 +685,7 @@ class AMQP:
                 self._producer_pool = _rs_producer.FastProducerPool(
                     connection, limit=_rs_producer.pool_limit(self.app))
             else:
+                from kombu import pools
                 self._producer_pool = pools.producers[
                     self.app.connection_for_write()]
                 self._producer_pool.limit = self.app.pool.limit
@@ -678,8 +694,8 @@ class AMQP:
 
     @cached_property
     def default_exchange(self):
-        return Exchange(self.app.conf.task_default_exchange,
-                        self.app.conf.task_default_exchange_type)
+        return _exchange_cls()(self.app.conf.task_default_exchange,
+                               self.app.conf.task_default_exchange_type)
 
     @cached_property
     def utc(self):

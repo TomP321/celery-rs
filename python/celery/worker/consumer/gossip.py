@@ -94,7 +94,10 @@ class Gossip(bootsteps.ConsumerStep):
         """True se il trasporto supporta gossip; senza aprire kombu su Rust."""
         from celery.worker import _rs_consumer
         if _rs_consumer.use_rs_worker(c):
-            return c.conninfo.driver_type in self.compatible_transports
+            # Stesso `driver_type` del trasporto, ma letto dallo schema: nessun
+            # import di redis-py/py-amqp.
+            from celery.app._rs_producer import driver_type_of
+            return driver_type_of(c.conninfo) in self.compatible_transports
         return self.compatible_transport(c.app)
 
     def compatible_transport(self, app):

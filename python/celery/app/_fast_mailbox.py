@@ -113,6 +113,13 @@ class FastMailbox:
         from kombu.utils.functional import maybe_evaluate
         return maybe_evaluate(self._producer_pool)
 
+    @producer_pool.deleter
+    def producer_pool(self):
+        # Come `cached_property` nel mailbox di kombu: dopo il fork il pool va
+        # ricreato. Qui non c'è cache (la `lazy` valuta `app.amqp` a ogni
+        # accesso), quindi non c'è nulla da invalidare.
+        pass
+
     def __call__(self, connection):
         """Mailbox di kombu legato a *connection* (solo sul percorso classico)."""
         bound = self.as_real()

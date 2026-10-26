@@ -905,6 +905,65 @@ impl Shared {
         Ok(())
     }
 
+    /// Refresh/sweep delle binding per il loop del consumatore.
+    ///
+    /// Ogni canale di kombu ha il proprio throttle
+    /// (`_binding_expiry_refreshed_at`/`_bindings_swept_at`): qui lo stato è
+    /// nel [`Conn`] del consumatore, così pidbox e gossip sullo stesso
+    /// trasporto rinnovano ciascuno la propria tabella.
+    async fn refresh_binding_expiry_loop(
+        &self,
+        queues: &[CompactString],
+        maintenance: &mut BindingMaintenance,
+    ) -> Result<()> {
+        let rows = self.binding_rows(queues);
+        if rows.is_empty() {
+            return Ok(());
+        }
+        let refresh_every = rows
+            .iter()
+            .map(|row| row.ttl as f64 / 1000.0 / 3.0)
+            .fold(f64::INFINITY, f64::min);
+        let mut conn = self.command_conn();
+        if maintenance
+            .refreshed_at
+            .is_none_or(|at| at.elapsed().as_secs_f64() >= refresh_every)
+        {
+            maintenance.refreshed_at = Some(Instant::now());
+            let script = ::redis::Script::new(REFRESH_BINDING);
+            let _: Vec<i64> = ::redis::cmd("SCRIPT")
+                .arg("EXISTS")
+                .arg(script.get_hash())
+                .query_async(&mut conn)
+                .await
+                .map_err(transport_error)?;
+            let mut pipe = ::redis::pipe();
+            pipe.atomic();
+            for row in &rows {
+                pipe.cmd("EVALSHA")
+                    .arg(script.get_hash())
+                    .arg(2)
+                    .arg(self.config.binding_key(&row.exchange))
+                    .arg(self.config.deadlines_key())
+                    .arg(&row.member)
+                    .arg(&row.exchange)
+                    .arg(row.ttl)
+                    .ignore();
+            }
+            pipe.query_async::<()>(&mut conn)
+                .await
+                .map_err(transport_error)?;
+        }
+        if maintenance
+            .swept_at
+            .is_none_or(|at| at.elapsed() >= BINDING_SWEEP_INTERVAL)
+        {
+            maintenance.swept_at = Some(Instant::now());
+            self.sweep_bindings(100).await?;
+        }
+        Ok(())
+    }
+
     /// `QoS.restore_visible` come la chiama `maybe_restore_messages`:
     /// mutex, `ZRANGE ... BYSCORE REV WITHSCORES`, ripristino e rilascio.
     ///
@@ -1897,7 +1956,10 @@ impl RedisTransport {
             brpop,
             pubsub: None,
             topics: Vec::new(),
-            last_restore: Instant::now(),
+            last_restore: Instant::now()
+                .checked_sub(RESTORE_INTERVAL)
+                .unwrap_or_else(Instant::now),
+            maintenance: BindingMaintenance::default(),
         })
     }
 }
@@ -1908,6 +1970,8 @@ struct Conn {
     pubsub: Option<PubSub>,
     topics: Vec<String>,
     last_restore: Instant,
+    /// Throttle del refresh/sweep di questo canale (come kombu).
+    maintenance: BindingMaintenance,
 }
 
 impl Conn {
@@ -2124,6 +2188,10 @@ async fn wait_once(mut conn: Conn, shared: Arc<Shared>, id: u64) -> (Conn, Outco
     if let Err(error) = conn.sync_topics(&shared.config, &snapshot.topics).await {
         return (conn, Outcome::Lost(error.to_string()));
     }
+    // `MultiChannelPoller.get`: il refresh/sweep dei binding avviene a ogni
+    // giro, prima di BRPOP/SUBSCRIBE (il primo giro rinfresca subito, come
+    // `_binding_expiry_refreshed_at = -inf` del canale kombu).
+    maybe_maintain_bindings(&shared, &mut conn, id).await;
 
     if snapshot.can_consume && !snapshot.queues.is_empty() {
         let config = &shared.config;
@@ -2175,7 +2243,7 @@ async fn wait_once(mut conn: Conn, shared: Arc<Shared>, id: u64) -> (Conn, Outco
                 (conn, Outcome::Delivery(delivery_from(envelope)))
             }
             Ok(None) => {
-                maybe_restore(&shared, &mut conn).await;
+                maybe_restore(&shared, &mut conn, id).await;
                 (conn, Outcome::Retry)
             }
             Err(error) => (conn, Outcome::Lost(error.to_string())),
@@ -2223,8 +2291,7 @@ async fn wait_once(mut conn: Conn, shared: Arc<Shared>, id: u64) -> (Conn, Outco
             }
         };
         if matches!(outcome, Outcome::Retry) {
-            maybe_restore(&shared, &mut conn).await;
-            maybe_maintain_bindings(&shared, &mut conn, id).await;
+            maybe_restore(&shared, &mut conn, id).await;
         }
         (conn, outcome)
     } else {
@@ -2239,8 +2306,7 @@ async fn wait_once(mut conn: Conn, shared: Arc<Shared>, id: u64) -> (Conn, Outco
             biased;
             _ = notify.notified() => (conn, Outcome::Retry),
             _ = tokio::time::sleep(TICK) => {
-                maybe_restore(&shared, &mut conn).await;
-                maybe_maintain_bindings(&shared, &mut conn, id).await;
+                maybe_restore(&shared, &mut conn, id).await;
                 (conn, Outcome::Retry)
             }
         }
@@ -2252,7 +2318,7 @@ async fn wait_once(mut conn: Conn, shared: Arc<Shared>, id: u64) -> (Conn, Outco
 /// Stessa sequenza di `Channel.maybe_refresh_binding_expiry`, che kombu invoca
 /// a ogni `drain_events`: il primo giro rinfresca (throttle sull'ultimo
 /// refresh) e il sweep ha il suo intervallo.
-async fn maybe_maintain_bindings(shared: &Shared, _conn: &mut Conn, id: u64) {
+async fn maybe_maintain_bindings(shared: &Shared, conn: &mut Conn, id: u64) {
     let queues: Vec<CompactString> = {
         let state = lock(&shared.state);
         state
@@ -2262,11 +2328,27 @@ async fn maybe_maintain_bindings(shared: &Shared, _conn: &mut Conn, id: u64) {
             .unwrap_or_default()
     };
     if !queues.is_empty() {
-        let _ = shared.refresh_binding_expiry_control(&queues).await;
+        let _ = shared
+            .refresh_binding_expiry_loop(&queues, &mut conn.maintenance)
+            .await;
     }
 }
 
-async fn maybe_restore(shared: &Shared, conn: &mut Conn) {
+async fn maybe_restore(shared: &Shared, conn: &mut Conn, id: u64) {
+    // Kombu: `maybe_restore_messages` considera solo i canali con code
+    // regolari (`active_queues`); pidbox/gossip sono solo fanout.
+    let has_regular = {
+        let state = lock(&shared.state);
+        state.consumers.get(&id).is_some_and(|consumer| {
+            consumer
+                .queues
+                .iter()
+                .any(|queue| !state.fanout_queues.contains_key(queue))
+        })
+    };
+    if !has_regular {
+        return;
+    }
     if conn.last_restore.elapsed() < RESTORE_INTERVAL {
         return;
     }

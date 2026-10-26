@@ -140,7 +140,12 @@ def use_rs_worker(consumer):
     # canale kombu: il consumer Rust non lo userebbe, quindi si resta su kombu.
     if consumer.app.conf.worker_disable_prefetch:
         return False
-    return _pool_is_rs(consumer)
+    if not _pool_is_rs(consumer):
+        return False
+    # Trasporto non coperto dal core (es. `memory://` nei test): il consumer
+    # Rust non saprebbe parlare col broker, si resta sul riferimento.
+    conninfo = getattr(consumer, 'conninfo', None)
+    return conninfo is None or transport_is_eligible(conninfo)
 
 
 def use_rs_pool(worker):
@@ -350,7 +355,13 @@ class RsConnection:
     # --------------------------------------------------------- consumer ausiliari
 
     def new_worker(self):
-        """Un ``WorkerConsumer`` Rust sulla stessa connessione (pidbox/gossip)."""
+        """Un consumer ausiliario Rust che condivide la connessione dei task."""
+        if self._worker is None and not self._closed:
+            # Pidbox/gossip possono partire prima del `consume` dei task: la
+            # connessione è la stessa, quindi il consumer ausiliario la crea.
+            self._connect()
+        if self._worker is not None:
+            return self._worker.aux_consumer()
         return _celery_rs.WorkerConsumer(
             self._url, self._waker, self._options,
             retry_policy={'enabled': False})

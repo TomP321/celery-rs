@@ -93,6 +93,9 @@ struct Shared {
     /// `basic.consume(no_ack=true)`: le consegne vanno confermate subito dal
     /// task di lettura (pidbox e gossip non hanno ack dal master).
     no_ack: AtomicBool,
+    /// Il consumer possiede la connessione e la chiude; gli ausiliari
+    /// (pidbox/gossip) la condividono con il consumer dei task.
+    owns_transport: AtomicBool,
     /// Sveglia il task del consumer quando c'è spazio nella coda.
     space: Notify,
     /// Ferma il task del consumer senza chiudere il trasporto.
@@ -142,6 +145,7 @@ impl WorkerConsumer {
                 closed: AtomicBool::new(false),
                 cancelled: AtomicBool::new(false),
                 no_ack: AtomicBool::new(false),
+                owns_transport: AtomicBool::new(true),
                 space: Notify::new(),
                 stop: Notify::new(),
             }),
@@ -151,6 +155,27 @@ impl WorkerConsumer {
     /// Trasporto condiviso (dichiarazioni e ack passano da qui).
     pub fn transport(&self) -> &Arc<dyn Transport> {
         &self.shared.transport
+    }
+
+    /// Consumer ausiliario (pidbox/gossip) sullo stesso trasporto.
+    ///
+    /// Condivide socket e runtime con il consumer dei task: la coda di servizio
+    /// non apre una seconda connessione. `close` dell'ausiliario ferma solo il
+    /// suo stream; la connessione si chiude col consumer principale.
+    pub fn aux(&self, prefetch: u16) -> Self {
+        Self {
+            shared: Arc::new(Shared {
+                transport: Arc::clone(&self.shared.transport),
+                waker: self.shared.waker.clone(),
+                state: Mutex::new(State::new(prefetch)),
+                closed: AtomicBool::new(false),
+                cancelled: AtomicBool::new(false),
+                no_ack: AtomicBool::new(false),
+                owns_transport: AtomicBool::new(false),
+                space: Notify::new(),
+                stop: Notify::new(),
+            }),
+        }
     }
 
     /// Avvia il consumatore sulle code indicate (o su quelle già impostate).
@@ -337,7 +362,8 @@ impl WorkerConsumer {
             result = control.cancel().await;
         }
         self.shared.waker.notify();
-        if let Err(error) = self.shared.transport.close().await
+        if self.shared.owns_transport.load(Ordering::Acquire)
+            && let Err(error) = self.shared.transport.close().await
             && result.is_ok()
         {
             result = Err(error);

@@ -10,6 +10,7 @@ if sys.version_info < (3, 11):  # pragma: no cover
     # Backport of PEP 654 for Python versions < 3.11
     from exceptiongroup import ExceptionGroup
 
+from kombu import Connection, Queue
 from kombu.utils.functional import retry_over_time
 from kombu.utils.url import maybe_sanitize_url
 
@@ -21,6 +22,28 @@ from celery.worker.consumer import Consumer, Tasks
 __all__ = ('DelayedDelivery',)
 
 logger = get_logger(__name__)
+
+
+def declare_native_delayed_delivery_exchanges_and_queues(connection, queue_type):
+    """``kombu.transport.native_delayed_delivery`` importato solo quando serve.
+
+    Il bootstep è nel blueprint di ogni consumer, quindi un import a livello di
+    modulo caricherebbe ``kombu.transport`` anche nel master senza quorum queue.
+    La funzione ha lo stesso nome del riferimento: i test la sostituiscono con
+    ``patch`` sul modulo.
+    """
+    from kombu.transport.native_delayed_delivery import (
+        declare_native_delayed_delivery_exchanges_and_queues as declare,
+    )
+    return declare(connection, queue_type)
+
+
+def bind_queue_to_native_delayed_delivery_exchange(connection, queue):
+    """Come sopra: binding di una coda all'exchange del delayed delivery."""
+    from kombu.transport.native_delayed_delivery import (
+        bind_queue_to_native_delayed_delivery_exchange as bind,
+    )
+    return bind(connection, queue)
 
 
 # Default retry settings
@@ -122,9 +145,6 @@ class DelayedDelivery(bootsteps.StartStopStep):
             Exception: For other unexpected errors during setup
         """
         with c.app.connection_for_write(url=broker_url) as connection:
-            from kombu.transport.native_delayed_delivery import (
-                declare_native_delayed_delivery_exchanges_and_queues,
-            )
             queue_type = c.app.conf.broker_native_delayed_delivery_queue_type
             logger.debug(
                 "Setting up delayed delivery for broker %r with queue type %r",
@@ -152,7 +172,7 @@ class DelayedDelivery(bootsteps.StartStopStep):
                 )
                 raise
 
-    def _bind_queues(self, app: Celery, connection: 'Connection') -> None:
+    def _bind_queues(self, app: Celery, connection: Connection) -> None:
         """Bind all application queues to delayed delivery exchanges.
 
         Args:
@@ -162,15 +182,13 @@ class DelayedDelivery(bootsteps.StartStopStep):
         Raises:
             Exception: If queue binding fails
         """
-        queues = app.amqp.queues.values()
+        queues: ValuesView[Queue] = app.amqp.queues.values()
         if not queues:
             logger.warning("No queues found to bind for delayed delivery")
             return
 
         from kombu.common import Broadcast
-        from kombu.transport.native_delayed_delivery import (
-            bind_queue_to_native_delayed_delivery_exchange,
-        )
+
         exceptions: list[Exception] = []
         for queue in queues:
             if isinstance(queue, Broadcast):

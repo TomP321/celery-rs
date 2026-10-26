@@ -33,7 +33,10 @@ class Mingle(bootsteps.StartStopStep):
         """True se il worker può fare mingle; senza aprire kombu sul percorso Rust."""
         from celery.worker import _rs_consumer
         if _rs_consumer.use_rs_worker(c):
-            return c.conninfo.driver_type in self.compatible_transports
+            # `driver_type` senza istanziare il trasporto: `conninfo` può essere
+            # una `FastConnection` (nessun import di redis-py/py-amqp).
+            from celery.app._rs_producer import driver_type_of
+            return driver_type_of(c.conninfo) in self.compatible_transports
         return self.compatible_transport(c.app)
 
     def compatible_transport(self, app):
