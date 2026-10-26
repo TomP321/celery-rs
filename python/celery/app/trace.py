@@ -10,29 +10,13 @@ import time
 from collections import namedtuple
 from warnings import warn
 
+from billiard.einfo import ExceptionInfo, ExceptionWithTraceback
+from kombu.exceptions import EncodeError
+from kombu.serialization import loads as loads_message
+from kombu.serialization import prepare_accept_content
+from kombu.utils.encoding import safe_repr, safe_str
+
 from celery import current_app, group, signals, states
-from celery._compat import prepare_accept_content, safe_repr, safe_str
-from celery._lazy import lazy_class_attr
-
-#: Caricate solo se servono (il body è decodificato in Rust nel worker).
-ExceptionInfo = lazy_class_attr('billiard.einfo', 'ExceptionInfo')
-ExceptionWithTraceback = lazy_class_attr('billiard.einfo',
-                                        'ExceptionWithTraceback')
-
-
-def loads_message(data, content_type, content_encoding, accept=None, **kwargs):
-    from kombu.serialization import loads
-    return loads(data, content_type, content_encoding, accept=accept,
-                 **kwargs)
-
-
-loads_message.__name__ = 'loads'
-loads_message.__qualname__ = 'loads'
-
-
-def _encode_error():
-    from kombu.exceptions import EncodeError
-    return EncodeError
 from celery._state import _task_stack
 from celery.app.task import Context
 from celery.app.task import Task as BaseTask
@@ -641,7 +625,7 @@ def build_tracer(name, task, loader=None, hostname=None, store_errors=True,
                         task.backend.mark_as_done(
                             uuid, retval, task_request, publish_result,
                         )
-                    except _encode_error() as exc:
+                    except EncodeError as exc:
                         I, R, state, retval = on_error(task_request, exc)
                         # MEMORY LEAK FIX: Clear traceback frames to prevent memory retention (Issue #8882)
                         traceback_clear(exc)

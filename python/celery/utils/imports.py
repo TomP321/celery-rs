@@ -5,12 +5,8 @@ import warnings
 from contextlib import contextmanager
 from functools import lru_cache
 from importlib import import_module, reload
-from typing import TYPE_CHECKING
 
-from celery._lazy import install as _install_lazy
-
-if TYPE_CHECKING:  # nomi risolti da __getattr__, per pyflakes
-    from kombu.utils.imports import symbol_by_name  # noqa: F401
+from kombu.utils.imports import symbol_by_name
 
 #: Billiard sets this when execv is enabled.
 #: We use it to find out the name of the original ``__main__``
@@ -29,44 +25,6 @@ class NotAPackage(Exception):
     """Raised when importing a package, but it's not a package."""
 
 
-def _symbol_by_name(name, aliases=None, imp=None, package=None,
-                   sep='.', default=None, **kwargs):
-    """Copie locale di ``kombu.utils.imports.symbol_by_name``.
-
-    Il nome pubblico ``symbol_by_name`` resta quello di kombu (risolto
-    pigramente), ma il codice interno usa questa copia: importare
-    ``kombu.utils`` nel percorso client costerebbe py-amqp e billiard.
-    """
-    aliases = {} if not aliases else aliases
-    if imp is None:
-        imp = import_module
-
-    if not isinstance(name, str):
-        return name                                 # already a class
-
-    name = aliases.get(name) or name
-    sep = ':' if ':' in name else sep
-    module_name, _, cls_name = name.rpartition(sep)
-    if not module_name:
-        cls_name, module_name = None, package if package else cls_name
-    try:
-        try:
-            module = imp(module_name, package=package, **kwargs)
-        except ValueError as exc:
-            raise ValueError(f"Couldn't import {name!r}: {exc}") from exc
-        return getattr(module, cls_name) if cls_name else module
-    except (ImportError, AttributeError):
-        if default is None:
-            raise
-    return default
-
-
-#: La firma pubblica di `celery.app.utils.find_app` mostra il default; deve
-#: chiamarsi come quello di kombu, che questa funzione sostituisce.
-_symbol_by_name.__name__ = 'symbol_by_name'
-_symbol_by_name.__qualname__ = 'symbol_by_name'
-
-
 def qualname(obj):
     """Return object name."""
     if not hasattr(obj, '__name__') and hasattr(obj, '__class__'):
@@ -83,7 +41,7 @@ def instantiate(name, *args, **kwargs):
     See Also:
         :func:`symbol_by_name`.
     """
-    return _symbol_by_name(name)(*args, **kwargs)
+    return symbol_by_name(name)(*args, **kwargs)
 
 
 @contextmanager
@@ -184,7 +142,8 @@ def gen_task_name(app, name, module_name):
 
 
 def entry_points(**kwargs):
-    # Wrapper testabile: `importlib.metadata` si importa solo se serve.
+    # `importlib.metadata` (e con lui `email`/`zipfile`) si importa solo se
+    # qualcuno cerca davvero plugin esterni; il nome resta sostituibile nei test.
     from importlib.metadata import entry_points as _entry_points
     return _entry_points(**kwargs)
 
@@ -213,11 +172,8 @@ def load_extension_class_names(namespace):
 def load_extension_classes(namespace):
     for name, class_name in load_extension_class_names(namespace):
         try:
-            cls = _symbol_by_name(class_name)
+            cls = symbol_by_name(class_name)
         except (ImportError, SyntaxError) as exc:
             warnings.warn(f'Cannot load {namespace} extension {class_name!r}: {exc!r}', stacklevel=2)
         else:
             yield name, cls
-
-
-_install_lazy(globals(), {'symbol_by_name': ('kombu.utils.imports', 'symbol_by_name')})

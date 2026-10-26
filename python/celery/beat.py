@@ -22,7 +22,7 @@ from billiard.context import Process
 from kombu import pidbox
 from kombu.common import ignore_errors
 from kombu.utils.encoding import safe_str
-from celery._compat import maybe_evaluate, reprcall
+from kombu.utils.functional import maybe_evaluate, reprcall
 from kombu.utils.objects import cached_property
 
 from . import __version__, platforms, signals

@@ -11,6 +11,8 @@ import os
 import threading
 from time import monotonic, sleep
 
+from kombu.asynchronous.semaphore import DummyLock
+
 from celery import bootsteps
 from celery.utils.log import get_logger
 from celery.utils.threads import bgThread
@@ -38,7 +40,6 @@ class WorkerComponent(bootsteps.StartStopStep):
         w.autoscaler = None
 
     def create(self, w):
-        from kombu.asynchronous.semaphore import DummyLock
         scaler = w.autoscaler = self.instantiate(
             w.autoscaler_cls,
             w.pool, w.max_concurrency, w.min_concurrency,

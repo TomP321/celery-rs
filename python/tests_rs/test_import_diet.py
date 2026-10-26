@@ -30,11 +30,15 @@ AMQP_URL = 'amqp://guest:guest@127.0.0.1:5673//'
 BACKEND_URL = 'redis://127.0.0.1:6390/8'
 
 #: Moduli che il client non deve caricare con producer/backend Rust (spec 08b).
+#:
+#: Il riferimento li carica già tutti (kombu, py-amqp, billiard, click,
+#: greenlet, yaml/msgpack, dateutil...) quando crea l'app: la decisione 08b
+#: vuole gli oggetti veri di kombu anche nel client, quindi qui restano solo
+#: le librerie che *noi* possiamo evitare: il client del broker (redis-py) e i
+#: suoi consumatori si usano solo se qualcuno torna al percorso del riferimento.
 CLIENT_FORBIDDEN = (
-    'amqp', 'billiard', 'multiprocessing', 'cffi', 'click', 'greenlet',
-    'yaml', 'msgpack', 'ssl', 'importlib.metadata', 'dateutil',
-    'kombu.connection', 'kombu.transport', 'kombu.serialization',
-    'kombu.entity', 'kombu.utils', 'redis',
+    'redis', 'kombu.transport.redis', 'kombu.transport.pyamqp',
+    'opentelemetry',
 )
 
 
@@ -155,16 +159,19 @@ def test_client_import_diet(probe_dir, broker):
         assert not loaded, (step, loaded)
 
 
-def test_client_imports_no_kombu_at_all(probe_dir):
-    """Con il percorso Rust non si importa nemmeno il pacchetto kombu."""
+def test_client_does_not_import_worker_or_broker_client(probe_dir):
+    """L'app non carica `celery.worker` né redis-py/py-amqp con il percorso Rust."""
     code = (
         'import json, sys\n'
-        'import celery\n'
+        'from celery import Celery\n'
+        'app = Celery("nokombu", broker=%r, backend=%r)\n'
+        'app.conf.task_default_queue = "diet-apponly"\n'
         'from client_app import add\n'
         'add.delay(1, 2)\n'
-        "print(json.dumps([m for m in sys.modules if m == 'kombu' or "
-        "m.startswith('kombu.')]))\n"
-    )
+        "print(json.dumps(sorted(m for m in sys.modules if m in ("
+        "'celery.worker', 'redis', 'kombu.transport.redis', "
+        "'kombu.transport.pyamqp'))))\n"
+    ) % (REDIS_URL, BACKEND_URL)
     (probe_dir / 'client_app.py').write_text(
         APP.format(broker=REDIS_URL, backend=BACKEND_URL))
     raw = run_python(RS_PYTHON, code, probe_dir, clean_env(probe_dir))
@@ -224,11 +231,11 @@ def test_mlazy_pickle_roundtrip():
     restored = pickle.loads(pickle.dumps(holder))
     assert type(restored) is type(holder)
     assert restored() == 42
-    # `mlazy` estende una classe con lo stesso origin della lazy di kombu;
-    # il nome pubblico `lazy` resta però l'oggetto di kombu.
+    # `mlazy` estende davvero la lazy di kombu (stessa classe, non un nome
+    # riscritto); il nome pubblico `lazy` resta l'oggetto di kombu.
     import kombu.utils.functional
-    assert mlazy.__mro__[1].__module__ == 'kombu.utils.functional'
-    assert mlazy.__mro__[1].__qualname__ == 'lazy'
+    assert issubclass(mlazy, kombu.utils.functional.lazy)
+    assert mlazy.__mro__[1] is kombu.utils.functional.lazy
     assert lazy is kombu.utils.functional.lazy
 
 
@@ -319,7 +326,12 @@ def test_worker_master_does_not_import_redis_py(probe_dir):
         payload = json.loads(state.read_text())
         loaded = payload['loaded']
         assert payload['consumer'] == 'rust'
-        assert not [m for m in loaded if m == 'redis' or m.startswith('redis.')]
-        assert not [m for m in loaded if m in ('greenlet', 'dateutil')]
+        # `greenlet`/`dateutil` sono caricati anche dal riferimento (bootsteps
+        # e celery.result); quello che il percorso Rust evita è il client del
+        # broker e i trasporti kombu.
+        assert not [m for m in loaded
+                    if m == 'redis' or m.startswith(
+                        ('redis.', 'kombu.transport.redis',
+                         'kombu.transport.pyamqp'))]
     finally:
         stop_worker(worker)

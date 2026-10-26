@@ -1,0 +1,38 @@
+{
+ "label": "rs-review-prefork-pure",
+ "venv": ".venv-rs",
+ "pool": "prefork",
+ "concurrency": 4,
+ "n": 20000,
+ "pss_idle_kb": 73343,
+ "pss_idle_per_process_kb": [
+  19363,
+  8663,
+  11325,
+  11329,
+  11331,
+  11332
+ ],
+ "pss_peak_kb": 73329,
+ "pss_after_kb": 79963,
+ "pss_after_per_process_kb": [
+  18512,
+  9574,
+  12986,
+  12964,
+  12957,
+  12970
+ ],
+ "client_publish_per_s": 2403.4363948041873,
+ "client_maxrss_kb": 36124,
+ "end_to_end_s": 8.380581140518188,
+ "end_to_end_tasks_per_s": 2386.469346774126,
+ "drain_after_publish_s": 0.01882471499266103,
+ "latency_ms": {
+  "p50": 1.8992169934790581,
+  "p99": 2.5221940013580024,
+  "max": 6.008483003824949
+ },
+ "python": "3.13.9",
+ "task": "pure"
+}

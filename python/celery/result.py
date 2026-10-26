@@ -7,9 +7,8 @@ from collections import deque
 from contextlib import contextmanager
 from weakref import proxy
 
+from kombu.utils.objects import cached_property
 from vine import Thenable, barrier, promise
-
-from celery._compat import cached_property
 
 from . import current_app, states
 from ._state import _set_task_join_will_block, task_join_will_block

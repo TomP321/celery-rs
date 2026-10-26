@@ -17,14 +17,10 @@ import sys
 from datetime import datetime, timezone
 from time import sleep
 
+from billiard import cpu_count
+from kombu.utils.compat import detect_environment
+
 from celery import bootsteps
-from celery._compat import detect_environment
-
-
-def cpu_count():
-    # Wrapper testabile; billiard si importa solo con concurrency='auto'.
-    from billiard import cpu_count as _cpu_count
-    return _cpu_count()
 from celery import concurrency as _concurrency
 from celery import signals
 from celery.bootsteps import RUN, TERMINATE

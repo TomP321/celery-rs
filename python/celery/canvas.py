@@ -18,16 +18,10 @@ from functools import reduce
 from operator import itemgetter
 from types import GeneratorType
 
+from kombu.utils.functional import fxrange, reprcall
+from kombu.utils.objects import cached_property
+from kombu.utils.uuid import uuid
 from vine import barrier
-
-from celery._compat import cached_property, fxrange, reprcall
-
-
-def uuid():
-    # Stesso valore di `kombu.utils.uuid.uuid`, senza importare `kombu.utils`.
-    from uuid import uuid4
-    return str(uuid4())
-
 
 from celery._state import current_app
 from celery.exceptions import CPendingDeprecationWarning
@@ -37,8 +31,7 @@ from celery.utils import abstract
 from celery.utils.collections import ChainMap
 from celery.utils.functional import _regen
 from celery.utils.functional import chunks as _chunks
-from celery._compat import is_list as _is_list, maybe_list as _maybe_list
-from celery.utils.functional import regen, seq_concat_item, seq_concat_seq
+from celery.utils.functional import is_list, maybe_list, regen, seq_concat_item, seq_concat_seq
 from celery.utils.objects import getitem_property
 from celery.utils.text import remove_repeating_from_task, truncate
 
@@ -825,7 +818,7 @@ class Signature(dict):
 
         # Stamp all of the callbacks of this signature
         headers = deepcopy(non_visitor_headers)
-        for link in _maybe_list(self.options.get('link')) or []:
+        for link in maybe_list(self.options.get('link')) or []:
             link = maybe_signature(link, app=self.app)
             visitor_headers = None
             if visitor is not None:
@@ -840,7 +833,7 @@ class Signature(dict):
 
         # Stamp all of the errbacks of this signature
         headers = deepcopy(non_visitor_headers)
-        for link in _maybe_list(self.options.get('link_error')) or []:
+        for link in maybe_list(self.options.get('link_error')) or []:
             link = maybe_signature(link, app=self.app)
             visitor_headers = None
             if visitor is not None:
@@ -883,7 +876,7 @@ class Signature(dict):
         If the value is not a list, it will be converted to one.
         """
         items = self._with_list_option(key)
-        items.extend(_maybe_list(value))
+        items.extend(maybe_list(value))
 
     def link(self, callback):
         """Add callback task to be applied if this task succeeds.
@@ -924,7 +917,7 @@ class Signature(dict):
         return list(itertools.chain.from_iterable(itertools.chain(
             [[self]],
             (link.flatten_links()
-             for link in _maybe_list(self.options.get('link')) or [])
+             for link in maybe_list(self.options.get('link')) or [])
         )))
 
     def __or__(self, other):
@@ -1119,7 +1112,7 @@ class _chain(Signature):
         return cls(tasks, app=app, **d['options'])
 
     def __init__(self, *tasks, **options):
-        tasks = (regen(tasks[0]) if len(tasks) == 1 and _is_list(tasks[0])
+        tasks = (regen(tasks[0]) if len(tasks) == 1 and is_list(tasks[0])
                  else tasks)
         super().__init__('celery.chain', (), {'tasks': tasks}, **options
                          )
@@ -1203,9 +1196,9 @@ class _chain(Signature):
         # Clone chain's tasks assigning signatures from link_error
         # to each task and adding the chain's links to the last task.
         tasks = [t.clone() for t in self.tasks]
-        for sig in _maybe_list(self.options.get('link')) or []:
+        for sig in maybe_list(self.options.get('link')) or []:
             tasks[-1].link(sig)
-        for sig in _maybe_list(self.options.get('link_error')) or []:
+        for sig in maybe_list(self.options.get('link_error')) or []:
             for task in tasks:
                 task.link_error(sig)
         return tasks
@@ -1512,7 +1505,7 @@ class _chain(Signature):
                     prev_res.parent = res
 
             if link_error:
-                for errback in _maybe_list(link_error):
+                for errback in maybe_list(link_error):
                     task.link_error(errback)
                     # Propagate to chord body for chord_error_from_stack.
                     if isinstance(task, chord) and task.body:
@@ -1656,9 +1649,9 @@ class chain(_chain):
     def __new__(cls, *tasks, **kwargs):
         # This forces `chain(X, Y, Z)` to work the same way as `X | Y | Z`
         if not kwargs and tasks:
-            if len(tasks) != 1 or _is_list(tasks[0]):
+            if len(tasks) != 1 or is_list(tasks[0]):
                 tasks = tasks[0] if len(tasks) == 1 else tasks
-                # if _is_list(tasks) and len(tasks) == 1:
+                # if is_list(tasks) and len(tasks) == 1:
                 #     return super(chain, cls).__new__(cls, tasks, **kwargs)
                 new_instance = _fold_chain(tasks)
                 if cls != chain and isinstance(new_instance, _chain) and not isinstance(new_instance, cls):
@@ -2680,7 +2673,7 @@ class _chord(Signature):
         errback = maybe_signature(errback)
 
         if self.app.conf.task_allow_error_cb_on_chord_header:
-            for task in _maybe_list(self.tasks) or []:
+            for task in maybe_list(self.tasks) or []:
                 task.link_error(errback.clone(immutable=True))
         else:
             # Once this warning is removed, the whole method needs to be refactored to:
@@ -2699,7 +2692,7 @@ class _chord(Signature):
             )
 
         # Edge case for nested chords in the header
-        for task in _maybe_list(self.tasks) or []:
+        for task in maybe_list(self.tasks) or []:
             if isinstance(task, chord):
                 # Let the nested chord do the error linking itself on its
                 # header and body where needed, based on the current configuration

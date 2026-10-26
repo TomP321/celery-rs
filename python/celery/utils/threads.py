@@ -5,32 +5,38 @@ import sys
 import threading
 import traceback
 import types
-from typing import TYPE_CHECKING
 from contextlib import contextmanager
 from threading import TIMEOUT_MAX as THREAD_TIMEOUT_MAX
 
-from celery._lazy import install as _install_lazy
-
-if TYPE_CHECKING:  # nomi risolti da __getattr__, per pyflakes
-    from greenlet import getcurrent as get_ident  # noqa: F401
 from celery.local import Proxy
 
-#: Identità del contesto corrente. `get_ident` pubblico resta
-#: `greenlet.getcurrent` quando greenlet è installato (come il riferimento),
-#: ma qui non lo importiamo: eventlet/gevent sono fuori scope v1 e il client
-#: non deve pagare greenlet. Il codice interno usa il thread id.
 try:
     from _thread import get_ident as _get_ident
 except ImportError:  # pragma: no cover
     from dummy_thread import get_ident as _get_ident
 
 
-def _public_get_ident():
+def __getattr__(name):
+    # `get_ident` pubblico è quello del riferimento (`greenlet.getcurrent` se
+    # installato), risolto al primo accesso: il client non paga greenlet.
+    if name != 'get_ident':
+        raise AttributeError(
+            f'module {__name__!r} has no attribute {name!r}')
     try:
-        from greenlet import getcurrent
+        from greenlet import getcurrent as value
     except ImportError:
-        return _get_ident
-    return getcurrent
+        value = _get_ident
+    globals()[name] = value
+    return value
+
+
+def __dir__():
+    return sorted(set(globals()) | {'get_ident'})
+
+
+if False:  # solo per pyflakes: il nome vero arriva da __getattr__
+    from greenlet import getcurrent as get_ident
+    _FOR_PYFLAKES = (get_ident,)
 
 
 __all__ = (
@@ -396,6 +402,3 @@ else:  # pragma: no cover
     # identifiers for the context.  If greenlets aren't available we
     # fall back to the  current thread ident.
     LocalStack = _LocalStack
-
-
-_install_lazy(globals(), {'get_ident': _public_get_ident})

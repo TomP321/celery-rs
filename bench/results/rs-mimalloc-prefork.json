@@ -1,0 +1,38 @@
+{
+ "label": "rs-mimalloc-prefork",
+ "venv": ".venv-rs",
+ "pool": "prefork",
+ "concurrency": 4,
+ "n": 20000,
+ "pss_idle_kb": 79716,
+ "pss_idle_per_process_kb": [
+  22187,
+  9367,
+  12035,
+  12041,
+  12041,
+  12045
+ ],
+ "pss_peak_kb": 132758,
+ "pss_after_kb": 143199,
+ "pss_after_per_process_kb": [
+  24820,
+  11619,
+  26680,
+  26727,
+  26667,
+  26686
+ ],
+ "client_publish_per_s": 2624.5066024088615,
+ "client_maxrss_kb": 51092,
+ "end_to_end_s": 7.774550199508667,
+ "end_to_end_tasks_per_s": 2572.4960913190775,
+ "drain_after_publish_s": 0.06507130301906727,
+ "latency_ms": {
+  "p50": 1.893580993055366,
+  "p99": 2.873572026146576,
+  "max": 4.6510200190823525
+ },
+ "python": "3.13.9",
+ "task": "bench"
+}

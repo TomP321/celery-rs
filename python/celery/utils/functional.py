@@ -5,32 +5,12 @@ import sys
 from collections import UserList
 from functools import partial
 from itertools import islice, tee, zip_longest
-from typing import TYPE_CHECKING, Any, Callable
+from typing import Any, Callable
 
+from kombu.utils.functional import LRUCache, dictfilter, is_list, lazy, maybe_evaluate, maybe_list, memoize
 from vine import promise
 
-from celery._compat import lazy as _lazy
-from celery._compat import maybe_evaluate as _maybe_evaluate
 from celery.utils.log import get_logger
-
-if TYPE_CHECKING:  # nomi risolti da __getattr__, per pyflakes
-    from kombu.utils.functional import (LRUCache, dictfilter, is_list,  # noqa: F401
-                                        lazy, maybe_evaluate, maybe_list,
-                                        memoize)
-    mlazy: type
-
-#: Nomi pubblici che il riferimento riesporta da kombu: stessi oggetti, ma
-#: risolti al primo accesso (importare `kombu.utils` costa py-amqp, billiard,
-#: cffi e importlib.metadata; spec 08b).
-_LAZY_KOMBU = {
-    'LRUCache': ('kombu.utils.functional', 'LRUCache'),
-    'dictfilter': ('kombu.utils.functional', 'dictfilter'),
-    'is_list': ('kombu.utils.functional', 'is_list'),
-    'lazy': ('kombu.utils.functional', 'lazy'),
-    'maybe_evaluate': ('kombu.utils.functional', 'maybe_evaluate'),
-    'maybe_list': ('kombu.utils.functional', 'maybe_list'),
-    'memoize': ('kombu.utils.functional', 'memoize'),
-}
 
 logger = get_logger(__name__)
 
@@ -56,37 +36,22 @@ class DummyContext:
         pass
 
 
-def _make_mlazy():
-    """Crea ``mlazy`` con la base di kombu se è già importata.
+class mlazy(lazy):
+    """Memoized lazy evaluation.
 
-    Nel client (kombu assente) la base è la copia locale; in processi che
-    hanno già importato kombu la classe eredita quella vera, così
-    ``kombu.utils.functional.maybe_evaluate`` continua a riconoscerla.
+    The function is only evaluated once, every subsequent access
+    will return the same value.
     """
-    base = _lazy
-    _kombu_functional = sys.modules.get('kombu.utils.functional')
-    if _kombu_functional is not None:
-        base = _kombu_functional.lazy
 
-    class mlazy(base):
-        """Memoized lazy evaluation.
+    #: Set to :const:`True` after the object has been evaluated.
+    evaluated = False
+    _value = None
 
-        The function is only evaluated once, every subsequent access
-        will return the same value.
-        """
-
-        evaluated = False
-        _value = None
-
-        def evaluate(self):
-            if not self.evaluated:
-                self._value = super().evaluate()
-                self.evaluated = True
-            return self._value
-
-    mlazy.__module__ = __name__
-    mlazy.__qualname__ = 'mlazy'
-    return mlazy
+    def evaluate(self):
+        if not self.evaluated:
+            self._value = super().evaluate()
+            self.evaluated = True
+        return self._value
 
 
 def noop(*args, **kwargs):
@@ -133,7 +98,7 @@ def firstmethod(method, on_call=None):
 
     def _matcher(it, *args, **kwargs):
         for obj in it:
-            obj = _maybe_evaluate(obj)
+            obj = maybe_evaluate(obj)
             try:
                 meth = getattr(obj, method)
             except AttributeError:
@@ -538,9 +503,3 @@ def seq_concat_seq(a, b):
 
 def is_numeric_value(value):
     return isinstance(value, (int, float)) and not isinstance(value, bool)
-
-
-from celery._lazy import install as _install_lazy  # noqa: E402
-
-_LAZY_KOMBU['mlazy'] = _make_mlazy
-_install_lazy(globals(), _LAZY_KOMBU)

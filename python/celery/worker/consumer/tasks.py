@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from kombu.common import QoS, ignore_errors
+
 from celery import bootsteps
 from celery.utils.log import get_logger
 from celery.utils.quorum_queues import detect_quorum_queues
@@ -9,16 +11,6 @@ from celery.utils.quorum_queues import detect_quorum_queues
 from .mingle import Mingle
 
 __all__ = ('Tasks',)
-
-
-def QoS(*args, **kwargs):
-    from kombu.common import QoS as _QoS
-    return _QoS(*args, **kwargs)
-
-
-def ignore_errors(*args, **kwargs):
-    from kombu.common import ignore_errors as _ignore_errors
-    return _ignore_errors(*args, **kwargs)
 
 
 logger = get_logger(__name__)

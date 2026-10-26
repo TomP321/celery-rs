@@ -10,11 +10,14 @@ import types
 import warnings
 from contextlib import contextmanager
 from functools import partial
+from itertools import count
+from ssl import CERT_NONE, CERT_OPTIONAL, CERT_REQUIRED
 from urllib.parse import unquote
 
-from celery._compat import cached_property, maybe_sanitize_url, retry_over_time
-from celery._compat import url_to_parts as _parse_url
-from celery.utils.imports import _symbol_by_name as symbol_by_name
+from kombu.utils import symbol_by_name
+from kombu.utils.functional import fxrange
+from kombu.utils.objects import cached_property
+from kombu.utils.url import _parse_url, maybe_sanitize_url
 
 from celery import states
 from celery._state import task_join_will_block
@@ -22,17 +25,80 @@ from celery.backends.base import _create_chord_error_with_cause
 from celery.canvas import maybe_signature
 from celery.exceptions import BackendStoreError, ChordError, ImproperlyConfigured
 from celery.result import GroupResult, allow_join_result
-from celery._compat import dictfilter
-from celery.utils.functional import _regen
+from celery.utils.functional import _regen, dictfilter
 from celery.utils.log import get_logger
 from celery.utils.time import humanize_seconds
 
 from .asynchronous import AsyncBackendMixin, BaseResultConsumer
 from .base import BaseKeyValueStoreBackend
 
-#: Costanti di `ssl` usate come valori di default: sono interi, quindi non
-#: serve importare `ssl` (e con lui socket/hmac) nel client.
-CERT_NONE, CERT_OPTIONAL, CERT_REQUIRED = 0, 1, 2
+
+class LazyErrors:
+    """Tupla di errori di connessione risolta al primo errore."""
+
+    __slots__ = ('_factory',)
+
+    def __init__(self, factory):
+        self._factory = factory
+
+    def resolve(self):
+        return self._factory()
+
+    def __eq__(self, other):
+        try:
+            return self.resolve() == other
+        except Exception:  # pragma: no cover - risoluzione impossibile
+            return NotImplemented
+
+    def __ne__(self, other):
+        result = self.__eq__(other)
+        return result if result is NotImplemented else not result
+
+
+def retry_over_time(fun, catch, args=None, kwargs=None, errback=None,
+                     max_retries=None, interval_start=2, interval_step=2,
+                     interval_max=30, callback=None, timeout=None,
+                     sleep=time.sleep, now=time.time):
+    """``kombu.utils.functional.retry_over_time`` con ``catch`` pigro.
+
+    Identica semantica (stessi intervalli, stesso errback), ma ``catch`` può
+    essere un :class:`LazyErrors`: la tupla vera si risolve solo quando
+    un'eccezione viene davvero alzata.
+    """
+    kwargs = {} if not kwargs else kwargs
+    args = [] if not args else args
+    interval_range = (
+        min(value, float(interval_max))
+        for value in fxrange(
+            interval_start,
+            interval_max + interval_start,
+            interval_step,
+            repeatlast=True,
+        )
+    )
+    end = now() + timeout if timeout else None
+    for retries in count():
+        try:
+            return fun(*args, **kwargs)
+        except BaseException as exc:
+            errors = catch.resolve() if isinstance(catch, LazyErrors) else catch
+            if not isinstance(exc, errors):
+                raise
+            if max_retries is not None and retries >= max_retries:
+                raise
+            if end and now() > end:
+                raise
+            if callback:
+                callback()
+            tts = float(errback(exc, interval_range, retries) if errback
+                        else next(interval_range))
+            tts = min(tts, float(interval_max))
+            if tts:
+                for _ in range(int(tts)):
+                    if callback:
+                        callback()
+                    sleep(1.0)
+                sleep(abs(int(tts) - tts))
 
 logger = get_logger(__name__)
 
@@ -863,10 +929,8 @@ class RedisBackend(BaseKeyValueStoreBackend, AsyncBackendMixin):
     def ensure(self, fun, args, **policy):
         retry_policy = dict(self.retry_policy, **policy)
         max_retries = retry_policy.get('max_retries')
-        # Le classi di errore di kombu/redis-py servono solo se qualcosa
-        # fallisce: risolverle sempre importerebbe `kombu.transport.redis`
-        # sul percorso client (es. chord), dove l'I/O è in Rust.
-        from celery._compat import LazyErrors
+        # `connection_errors` importa `kombu.transport.redis` (e redis-py): sul
+        # percorso felice, dove il client è quello Rust, non serve.
         return retry_over_time(
             fun, LazyErrors(lambda: self.connection_errors), args, {},
             partial(self.on_connection_error, max_retries),

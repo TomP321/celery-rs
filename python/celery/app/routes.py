@@ -7,17 +7,12 @@ import re
 from collections import OrderedDict
 from collections.abc import Mapping
 
-from celery.app._lazy_kombu import lazy_class
+from kombu import Queue
+
 from celery.exceptions import QueueNotFound
 from celery.utils.collections import lpmerge
-from celery._compat import maybe_evaluate
-from celery.utils.imports import _symbol_by_name as symbol_by_name
-
-
-from celery.app._fast_entities import Queue as _FastQueue
-
-#: ``isinstance(queue, Queue)`` senza importare kombu al caricamento.
-Queue = lazy_class('kombu', 'Queue')
+from celery.utils.functional import maybe_evaluate, mlazy
+from celery.utils.imports import symbol_by_name
 
 try:
     Pattern = re._pattern_type
@@ -90,9 +85,7 @@ class Router:
             queue = route.pop('queue', None)
 
         if queue:
-            if isinstance(queue, _FastQueue):
-                route['queue'] = queue
-            elif type(queue).__module__.startswith('kombu') and isinstance(queue, Queue):
+            if isinstance(queue, Queue):
                 route['queue'] = queue
             else:
                 try:
@@ -133,7 +126,6 @@ def prepare(routes):
         if isinstance(route, (Mapping, list, tuple)):
             return MapRoute(route)
         if isinstance(route, str):
-            from celery.utils.functional import mlazy
             return mlazy(expand_router_string, route)
         return route
 

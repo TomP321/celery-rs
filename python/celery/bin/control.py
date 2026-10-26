@@ -3,6 +3,7 @@ from functools import partial
 from typing import Literal
 
 import click
+from kombu.utils.json import dumps
 
 from celery.bin.base import (COMMA_SEPARATED_LIST, CeleryCommand, CeleryOption, handle_preload_options,
                              handle_remote_command_error)
@@ -142,7 +143,6 @@ def status(ctx, timeout, destination, json, **kwargs):
         )
 
     if json:
-        from celery._compat import json_dumps as dumps
         ctx.obj.echo(dumps(replies))
     nodecount = len(replies)
     if not kwargs.get('quiet', False):
@@ -199,7 +199,6 @@ def inspect(ctx, command, timeout, destination, json, **kwargs):
         )
 
     if json:
-        from celery._compat import json_dumps as dumps
         ctx.obj.echo(dumps(replies))
         return
 
@@ -260,5 +259,4 @@ def control(ctx, command, timeout, destination, json, **kwargs):
         )
 
     if json:
-        from celery._compat import json_dumps as dumps
         ctx.obj.echo(dumps(replies))

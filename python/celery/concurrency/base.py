@@ -5,13 +5,11 @@ import sys
 import time
 from typing import Any, Dict
 
-from celery._compat import safe_repr
-from celery._lazy import lazy_class_attr
-from celery.exceptions import WorkerShutdown, WorkerTerminate, reraise
+from billiard.einfo import ExceptionInfo
+from billiard.exceptions import WorkerLostError
+from kombu.utils.encoding import safe_repr
 
-#: billiard importato solo se il pool deve davvero rimappare un errore.
-ExceptionInfo = lazy_class_attr('billiard.einfo', 'ExceptionInfo')
-WorkerLostError = lazy_class_attr('billiard.exceptions', 'WorkerLostError')
+from celery.exceptions import WorkerShutdown, WorkerTerminate, reraise
 from celery.utils import timer2
 from celery.utils.log import get_logger
 from celery.utils.text import truncate
@@ -40,10 +38,7 @@ def apply_target(target, args=(), kwargs=None, callback=None,
         try:
             reraise(WorkerLostError, WorkerLostError(repr(exc)),
                     sys.exc_info()[2])
-        except BaseException as raised:
-            # `except` non accetta la classe segnaposto: isinstance sì.
-            if not isinstance(raised, WorkerLostError):
-                raise
+        except WorkerLostError:
             callback(ExceptionInfo())
     else:
         callback(ret)

@@ -14,15 +14,38 @@ from datetime import tzinfo
 from types import ModuleType
 from typing import Any, Callable
 
-from celery._compat import cached_property, dictfilter, reprcall
+from kombu.utils.functional import reprcall
+from kombu.utils.objects import cached_property
 
+from .functional import dictfilter
 from .text import pluralize
 
 
-def get_localzone():
-    # Wrapper testabile; tzlocal si importa solo quando serve davvero.
-    from tzlocal import get_localzone as _get_localzone
-    return _get_localzone()
+def __getattr__(name):
+    # Nomi che il riferimento importa da dateutil/tzlocal: restano gli stessi
+    # oggetti, risolti al primo accesso (il client non deve pagarli).
+    if name == 'get_localzone':
+        from tzlocal import get_localzone as value
+    elif name == 'dateutil_tz':
+        from dateutil import tz as value
+    elif name == 'isoparse':
+        from dateutil.parser import isoparse as value
+    else:
+        raise AttributeError(
+            f'module {__name__!r} has no attribute {name!r}')
+    globals()[name] = value
+    return value
+
+
+def __dir__():
+    return sorted(set(globals()) | {'dateutil_tz', 'isoparse', 'get_localzone'})
+
+
+def _get_localzone():
+    if 'get_localzone' not in globals():
+        from tzlocal import get_localzone
+        globals()['get_localzone'] = get_localzone
+    return globals()['get_localzone']()
 
 if sys.version_info >= (3, 9):
     from zoneinfo import ZoneInfo
@@ -170,7 +193,7 @@ class _Zone:
     def local(self) -> tzinfo:
         """Return the local system timezone for the application."""
         try:
-            timezone = get_localzone()
+            timezone = _get_localzone()
         except Exception as ex:
             timezone = None
             logger.warning("Failed to retrieve local timezone (%s): %s", type(ex).__name__, ex)

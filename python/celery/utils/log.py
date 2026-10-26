@@ -6,14 +6,13 @@ import sys
 import threading
 import traceback
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, AnyStr, Sequence  # noqa
+from typing import AnyStr, Sequence  # noqa
 
-from celery._compat import safe_str
+from kombu.log import LOG_LEVELS
+from kombu.log import get_logger as _get_logger
+from kombu.utils.encoding import safe_str
 
 from .term import colored
-
-if TYPE_CHECKING:  # nomi risolti da __getattr__, per pyflakes
-    from kombu.log import LOG_LEVELS  # noqa: F401
 
 __all__ = (
     'ColorFormatter', 'LoggingProxy', 'base_logger',
@@ -34,26 +33,7 @@ RESERVED_LOGGER_NAMES = {'celery', 'celery.task'}
 # Every logger in the celery package inherits from the "celery"
 # logger, and every task logger inherits from the "celery.task"
 # logger.
-def _get_logger(name):
-    """Come ``kombu.log.get_logger``: logger + NullHandler se vuoto."""
-    if isinstance(name, str):
-        name = logging.getLogger(name)
-    if not name.handlers:
-        name.addHandler(logging.NullHandler())
-    return name
-
-
 base_logger = logger = _get_logger('celery')
-
-
-def _log_levels():
-    # Stesso contenuto di `kombu.log.LOG_LEVELS` (che resta il nome pubblico),
-    # ma senza importare kombu: lo usa la CLI per `-l/--loglevel`.
-    levels = dict(logging._nameToLevel)
-    levels.update(logging._levelToName)
-    levels.setdefault('FATAL', logging.FATAL)
-    levels.setdefault(logging.FATAL, 'FATAL')
-    return levels
 
 
 def set_in_sighandler(value):
@@ -136,7 +116,7 @@ def get_task_logger(name):
 def mlevel(level):
     """Convert level name/int to log level."""
     if level and not isinstance(level, numbers.Integral):
-        return _log_levels()[level.upper()]
+        return LOG_LEVELS[level.upper()]
     return level
 
 
@@ -313,8 +293,3 @@ def current_process():
 def current_process_index(base=1):
     index = getattr(current_process(), 'index', None)
     return index + base if index is not None else index
-
-
-from celery._lazy import install as _install_lazy  # noqa: E402
-
-_install_lazy(globals(), {'LOG_LEVELS': ('kombu.log', 'LOG_LEVELS')})

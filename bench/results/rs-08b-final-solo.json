@@ -1,0 +1,28 @@
+{
+ "label": "rs-08b-final-solo",
+ "venv": ".venv-rs",
+ "pool": "solo",
+ "concurrency": 4,
+ "n": 20000,
+ "pss_idle_kb": 36685,
+ "pss_idle_per_process_kb": [
+  36685
+ ],
+ "pss_peak_kb": 45910,
+ "pss_after_kb": 45974,
+ "pss_after_per_process_kb": [
+  45974
+ ],
+ "client_publish_per_s": 2880.7297509372943,
+ "client_maxrss_kb": 40660,
+ "end_to_end_s": 12.423579692840576,
+ "end_to_end_tasks_per_s": 1609.841969422512,
+ "drain_after_publish_s": 5.411317304999102,
+ "latency_ms": {
+  "p50": 1.5959034935804084,
+  "p99": 2.1627800015266985,
+  "max": 2.454917994327843
+ },
+ "python": "3.13.9",
+ "task": "bench"
+}

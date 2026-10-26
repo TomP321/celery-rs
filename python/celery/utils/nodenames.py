@@ -6,7 +6,7 @@ import socket
 from functools import partial
 from typing import TYPE_CHECKING
 
-from celery._compat import memoize
+from .functional import memoize
 from .text import simple_format
 
 if TYPE_CHECKING:

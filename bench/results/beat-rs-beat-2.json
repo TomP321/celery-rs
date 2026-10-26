@@ -1,0 +1,41 @@
+{
+ "micro": {
+  "remaining_estimate_simple_ns": 3747.9279009858146,
+  "is_due_simple_ns": 8284.09535024548,
+  "remaining_estimate_mixed_ns": 3599.7604005387984,
+  "is_due_mixed_ns": 8141.590500599706
+ },
+ "brokers": {
+  "redis": {
+   "pss_3_kb": 33163,
+   "pss_1000_kb": 44092,
+   "tick": {
+    "tick_us": 1182.93629,
+    "tick_wall_us": 1182.9764995054575,
+    "entries": 1000
+   },
+   "sends": {
+    "sends": 1369,
+    "seconds": 3.0015526860079262,
+    "sends_s": 456.09727471443256,
+    "cpu_sends_s": 513.6304101690976
+   }
+  },
+  "amqp": {
+   "pss_3_kb": 33032,
+   "pss_1000_kb": 44502,
+   "tick": {
+    "tick_us": 1172.2353275,
+    "tick_wall_us": 1172.3194420046639,
+    "entries": 1000
+   },
+   "sends": {
+    "sends": 1530,
+    "seconds": 3.001352710998617,
+    "sends_s": 509.77014277370114,
+    "cpu_sends_s": 517.0693590048676
+   }
+  }
+ },
+ "label": "rs-beat-2"
+}

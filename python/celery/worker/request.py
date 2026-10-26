@@ -9,18 +9,10 @@ from datetime import datetime
 from time import monotonic, time
 from weakref import ref
 
-import os
-
-from celery._compat import cached_property, human_status
-from celery._compat import safe_repr, safe_str
-from celery._lazy import lazy_class_attr
-
-#: Le classi di billiard (prefork) si risolvono solo quando servono.
-ExceptionInfo = lazy_class_attr('billiard.einfo', 'ExceptionInfo')
-ExceptionWithTraceback = lazy_class_attr('billiard.einfo', 'ExceptionWithTraceback')
-
-#: Stesso valore di `billiard.common.TERM_SIGNAME`.
-TERM_SIGNAME = os.environ.get('REMAP_SIGTERM') or 'SIGTERM'
+from billiard.common import TERM_SIGNAME, human_status
+from billiard.einfo import ExceptionInfo, ExceptionWithTraceback
+from kombu.utils.encoding import safe_repr, safe_str
+from kombu.utils.objects import cached_property
 
 from celery import current_app, signals, states
 from celery.app.task import Context

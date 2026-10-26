@@ -1,14 +1,11 @@
 """Consumer Broker Connection Bootstep."""
+from kombu.common import ignore_errors
+from kombu.utils.url import maybe_sanitize_url
+
 from celery import bootsteps
-from celery._compat import maybe_sanitize_url
 from celery.utils.log import get_logger
 
 __all__ = ('Connection',)
-
-def _ignore_errors(*args, **kwargs):
-    from kombu.common import ignore_errors
-    return ignore_errors(*args, **kwargs)
-
 
 logger = get_logger(__name__)
 info = logger.info
@@ -34,7 +31,7 @@ class Connection(bootsteps.StartStopStep):
         """
         connection, c.connection = c.connection, None
         if connection:
-            _ignore_errors(connection, connection.close)
+            ignore_errors(connection, connection.close)
 
     def shutdown(self, c):
         # We must set c.connection to None here, so

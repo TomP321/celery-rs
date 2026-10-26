@@ -2,17 +2,14 @@
 
 ``Events`` -> :class:`celery.events.EventDispatcher`.
 """
+from kombu.common import ignore_errors
+
 from celery import bootsteps
 from celery.worker.state import reserved_requests
 
 from .connection import Connection
 
 __all__ = ('Events',)
-
-
-def _ignore_errors(*args, **kwargs):
-    from kombu.common import ignore_errors
-    return ignore_errors(*args, **kwargs)
 
 
 class Events(bootsteps.StartStopStep):
@@ -74,8 +71,8 @@ class Events(bootsteps.StartStopStep):
 
             # close custom connection
             if dispatcher.connection:
-                _ignore_errors(c, dispatcher.connection.close)
-            _ignore_errors(c, dispatcher.disable)
+                ignore_errors(c, dispatcher.connection.close)
+            ignore_errors(c, dispatcher.disable)
             c.event_dispatcher = None
             return dispatcher
 

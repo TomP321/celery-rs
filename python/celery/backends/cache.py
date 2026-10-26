@@ -4,7 +4,7 @@ from kombu.utils.objects import cached_property
 
 from celery.exceptions import ImproperlyConfigured
 from celery.utils import deprecated
-from celery._compat import LRUCache
+from celery.utils.functional import LRUCache
 from celery.utils.log import get_logger
 
 from .base import KeyValueStoreBackend

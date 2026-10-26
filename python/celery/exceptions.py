@@ -55,16 +55,67 @@ Error Hierarchy
 import numbers
 from typing import TYPE_CHECKING
 
-from celery._lazy import install as _install_lazy
 
-if TYPE_CHECKING:  # solo per type checker e pyflakes (nomi risolti da __getattr__)
-    from billiard.exceptions import (SoftTimeLimitExceeded, Terminated,  # noqa: F401
-                                     TimeLimitExceeded, WorkerLostError)
+#: Nomi pubblici che il riferimento importa da billiard/click/kombu: restano
+#: gli stessi oggetti, risolti al primo accesso (importare billiard e click
+#: nel processo client costa multiprocessing, subprocess e zipfile).
+_LAZY_EXPORTS = {
+    'OperationalError': ('kombu.exceptions', 'OperationalError'),
+    'SoftTimeLimitExceeded': ('billiard.exceptions', 'SoftTimeLimitExceeded'),
+    'Terminated': ('billiard.exceptions', 'Terminated'),
+    'TimeLimitExceeded': ('billiard.exceptions', 'TimeLimitExceeded'),
+    'WorkerLostError': ('billiard.exceptions', 'WorkerLostError'),
+}
+
+
+def _celery_command_exception():
+    # Definita davvero (module/qualname corretti), ma solo se qualcuno la usa:
+    # importare `click` nel client costava un pacchetto intero per un'eccezione
+    # della CLI.
     from click import ClickException
-    from kombu.exceptions import OperationalError
+
+    class CeleryCommandException(ClickException):
+        """A general command exception which stores an exit code."""
+
+        def __init__(self, message, exit_code):
+            super().__init__(message=message)
+            self.exit_code = exit_code
+
+    CeleryCommandException.__module__ = __name__
+    CeleryCommandException.__qualname__ = 'CeleryCommandException'
+    return CeleryCommandException
+
+
+if TYPE_CHECKING:  # nomi risolti da __getattr__, per pyflakes
+    from billiard.exceptions import (SoftTimeLimitExceeded,  # noqa: F401
+                                     Terminated, TimeLimitExceeded,
+                                     WorkerLostError)
+    from click import ClickException  # noqa: F401
+    from kombu.exceptions import OperationalError  # noqa: F401
 
     class CeleryCommandException(ClickException):
         exit_code: int
+
+
+def __getattr__(name):
+    if name == 'CeleryCommandException':
+        value = _celery_command_exception()
+        globals()[name] = value
+        return value
+    try:
+        module, attr = _LAZY_EXPORTS[name]
+    except KeyError:
+        raise AttributeError(
+            f'module {__name__!r} has no attribute {name!r}') from None
+    from importlib import import_module
+    value = getattr(import_module(module), attr)
+    globals()[name] = value
+    return value
+
+
+def __dir__():
+    return sorted(set(globals()) | set(_LAZY_EXPORTS) |
+                  {'CeleryCommandException'})
 
 __all__ = (
     'reraise',
@@ -171,7 +222,7 @@ class Retry(TaskPredicate):
 
     def __init__(self, message=None, exc=None, when=None, is_eager=False,
                  sig=None, **kwargs):
-        from celery._compat import safe_repr
+        from kombu.utils.encoding import safe_repr
         self.message = message
         if isinstance(exc, str):
             self.exc, self.excs = None, exc
@@ -318,27 +369,3 @@ class BackendStoreError(BackendError):
         return super().__repr__() + " state:" + self.state + " task_id:" + self.task_id
 
 
-def _celery_command_exception():
-    # Definita solo se qualcuno la usa davvero: importare `click` nel client
-    # costava un pacchetto intero per un'eccezione della CLI.
-    from click import ClickException
-
-    class CeleryCommandException(ClickException):
-        """A general command exception which stores an exit code."""
-
-        def __init__(self, message, exit_code):
-            super().__init__(message=message)
-            self.exit_code = exit_code
-
-    CeleryCommandException.__qualname__ = 'CeleryCommandException'
-    return CeleryCommandException
-
-
-_install_lazy(globals(), {
-    'CeleryCommandException': _celery_command_exception,
-    'OperationalError': ('kombu.exceptions', 'OperationalError'),
-    'SoftTimeLimitExceeded': ('billiard.exceptions', 'SoftTimeLimitExceeded'),
-    'Terminated': ('billiard.exceptions', 'Terminated'),
-    'TimeLimitExceeded': ('billiard.exceptions', 'TimeLimitExceeded'),
-    'WorkerLostError': ('billiard.exceptions', 'WorkerLostError'),
-})

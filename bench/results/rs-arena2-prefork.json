@@ -1,0 +1,38 @@
+{
+ "label": "rs-arena2-prefork",
+ "venv": ".venv-rs",
+ "pool": "prefork",
+ "concurrency": 4,
+ "n": 20000,
+ "pss_idle_kb": 73365,
+ "pss_idle_per_process_kb": [
+  19310,
+  8700,
+  11337,
+  11335,
+  11341,
+  11342
+ ],
+ "pss_peak_kb": 122487,
+ "pss_after_kb": 124167,
+ "pss_after_per_process_kb": [
+  18341,
+  10854,
+  23734,
+  23754,
+  23730,
+  23754
+ ],
+ "client_publish_per_s": 2834.83901964237,
+ "client_maxrss_kb": 44936,
+ "end_to_end_s": 7.1775476932525635,
+ "end_to_end_tasks_per_s": 2786.4670295122537,
+ "drain_after_publish_s": 0.06628070000442676,
+ "latency_ms": {
+  "p50": 1.9670134934131056,
+  "p99": 2.8149910212960094,
+  "max": 4.690604022471234
+ },
+ "python": "3.13.9",
+ "task": "bench"
+}

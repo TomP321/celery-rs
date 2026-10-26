@@ -1,0 +1,38 @@
+{
+ "label": "rs-08b-final-prefork4-pure",
+ "venv": ".venv-rs",
+ "pool": "prefork",
+ "concurrency": 4,
+ "n": 20000,
+ "pss_idle_kb": 74379,
+ "pss_idle_per_process_kb": [
+  19540,
+  8791,
+  11505,
+  11513,
+  11513,
+  11517
+ ],
+ "pss_peak_kb": 75466,
+ "pss_after_kb": 81486,
+ "pss_after_per_process_kb": [
+  18786,
+  9756,
+  13235,
+  13235,
+  13235,
+  13239
+ ],
+ "client_publish_per_s": 2703.301227110222,
+ "client_maxrss_kb": 34000,
+ "end_to_end_s": 7.459262371063232,
+ "end_to_end_tasks_per_s": 2681.230261799898,
+ "drain_after_publish_s": 0.03617037500953302,
+ "latency_ms": {
+  "p50": 1.903740005218424,
+  "p99": 2.6602020079735667,
+  "max": 5.323940014932305
+ },
+ "python": "3.13.9",
+ "task": "pure"
+}

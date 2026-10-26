@@ -12,6 +12,8 @@ import sys
 import warnings
 from logging.handlers import WatchedFileHandler
 
+from kombu.utils.encoding import set_default_encoding_file
+
 from celery import signals
 from celery._state import get_current_task
 from celery.exceptions import CDeprecationWarning, CPendingDeprecationWarning
@@ -25,17 +27,6 @@ from celery.utils.term import colored
 __all__ = ('TaskFormatter', 'Logging')
 
 MP_LOG = os.environ.get('MP_LOG', False)
-
-
-def _set_default_encoding_file(stream):
-    """Come ``kombu.utils.encoding.set_default_encoding_file``.
-
-    Se kombu non è caricato non c'è nessun ``safe_str`` da configurare: evitare
-    l'import tiene il worker master senza py-amqp/billiard (spec 08b).
-    """
-    module = sys.modules.get('kombu.utils.encoding')
-    if module is not None:
-        module.set_default_encoding_file(stream)
 
 
 class TaskFormatter(ColorFormatter):
@@ -153,7 +144,7 @@ class Logging:
         except (AttributeError, IndexError):
             pass
         else:
-            _set_default_encoding_file(stream)
+            set_default_encoding_file(stream)
 
         # This is a hack for multiprocessing's fork+exec, so that
         # logging before Process.run works.

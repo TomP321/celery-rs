@@ -6,7 +6,7 @@ import posixpath
 from math import ceil
 from typing import NamedTuple
 
-from celery._compat import cached_property
+from kombu.utils.objects import cached_property
 
 __all__ = (
     'load_average', 'df',

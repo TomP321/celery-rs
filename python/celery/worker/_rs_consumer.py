@@ -26,7 +26,8 @@ import os
 import time
 from types import SimpleNamespace
 
-from celery._compat import prepare_accept_content
+from kombu.exceptions import OperationalError
+from kombu.serialization import prepare_accept_content
 from celery.utils.queue_arguments import to_rabbitmq_queue_arguments
 
 from celery._rs_message import RsMessage
@@ -307,8 +308,7 @@ class RsConnection:
                 return self
             except OSError as exc:
                 if max_retries is not None and retries >= max_retries:
-                    from celery._compat import operational_error
-                    raise operational_error()(str(exc)) from exc
+                    raise OperationalError(str(exc)) from exc
                 interval = min(interval_start + interval_step * retries,
                                interval_max)
                 if errback is not None:

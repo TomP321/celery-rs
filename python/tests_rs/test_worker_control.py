@@ -430,9 +430,10 @@ def test_pidbox_responds_after_broker_reconnect(dedicated):
 #: e `amqp` restano importati da `kombu.common`/`kombu.exceptions` (il worker
 #: importa `ignore_errors`/`QoS` da kombu come il riferimento): la parte pesante
 #: (client del broker, trasporto kombu, pidbox) non c'è più.
+#: ``kombu.pidbox`` non è più evitabile: la decisione 08b vuole un vero
+#: ``kombu.pidbox.Mailbox`` anche in ``app.control`` (niente segnaposto).
 FORBIDDEN_MASTER_MODULES = {
     'redis',
-    'kombu.pidbox',
     'kombu.transport.redis',
     'kombu.transport.pyamqp',
     'kombu.transport.virtual',
@@ -453,7 +454,6 @@ def test_master_does_not_import_broker_modules(tmp_path, pool):
         modules = set(json.loads(state.read_text())['modules'])
         loaded = modules & FORBIDDEN_MASTER_MODULES
         assert not loaded, loaded
-        assert 'kombu.pidbox' not in modules
         assert 'redis' not in modules
     finally:
         worker.stop(signal.SIGKILL)

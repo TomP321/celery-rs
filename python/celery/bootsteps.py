@@ -1,11 +1,13 @@
 """A directed acyclic graph of reusable components."""
 
 import sys
+
 from collections import deque
 from threading import Event
 
-from celery._compat import bytes_to_str
-from celery.utils.imports import _symbol_by_name as symbol_by_name
+from kombu.common import ignore_errors
+from kombu.utils.encoding import bytes_to_str
+from kombu.utils.imports import symbol_by_name
 
 from .utils.graph import DependencyGraph, GraphFormatter
 from .utils.imports import instantiate, qualname
@@ -23,11 +25,6 @@ def _ignore_errors_exc():
         from greenlet import GreenletExit
         return (GreenletExit,)
     return IGNORE_ERRORS
-
-
-def _ignore_errors(connection, fun, *args):
-    from kombu.common import ignore_errors
-    return ignore_errors(connection, fun, *args)
 
 __all__ = ('Blueprint', 'Step', 'StartStopStep', 'ConsumerStep')
 
@@ -419,8 +416,8 @@ class ConsumerStep(StartStopStep):
         channels = set()
         for consumer in self.consumers or []:
             if cancel_consumers:
-                _ignore_errors(c.connection, consumer.cancel)
+                ignore_errors(c.connection, consumer.cancel)
             if consumer.channel:
                 channels.add(consumer.channel)
         for channel in channels:
-            _ignore_errors(c.connection, channel.close)
+            ignore_errors(c.connection, channel.close)

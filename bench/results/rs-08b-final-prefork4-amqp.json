@@ -1,0 +1,38 @@
+{
+ "label": "rs-08b-final-prefork4-amqp",
+ "venv": ".venv-rs",
+ "pool": "prefork",
+ "concurrency": 4,
+ "n": 20000,
+ "pss_idle_kb": 73568,
+ "pss_idle_per_process_kb": [
+  19139,
+  8704,
+  11422,
+  11433,
+  11430,
+  11440
+ ],
+ "pss_peak_kb": 121451,
+ "pss_after_kb": 125905,
+ "pss_after_per_process_kb": [
+  19856,
+  10894,
+  23760,
+  23781,
+  23801,
+  23813
+ ],
+ "client_publish_per_s": 4294.124947782574,
+ "client_maxrss_kb": 41044,
+ "end_to_end_s": 4.7747743129730225,
+ "end_to_end_tasks_per_s": 4188.6796503994265,
+ "drain_after_publish_s": 0.05101323401322588,
+ "latency_ms": {
+  "p50": 2.425439000944607,
+  "p99": 3.3894790103659034,
+  "max": 6.38355701812543
+ },
+ "python": "3.13.9",
+ "task": "bench"
+}

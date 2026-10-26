@@ -13,21 +13,44 @@ import platform as _platform
 import signal as _signal
 import sys
 import warnings
-from typing import TYPE_CHECKING
 from contextlib import contextmanager
 
-from celery._compat import maybe_fileno, safe_str
-from celery._lazy import install as _install_lazy, lazy_module
+# fileno used to be in this module
+from kombu.utils.compat import maybe_fileno
+from kombu.utils.encoding import safe_str
 
 from .exceptions import SecurityError, SecurityWarning, reraise
 from .local import try_import
 
-if TYPE_CHECKING:  # nomi risolti da __getattr__, per pyflakes
-    from billiard.compat import get_fdmax  # noqa: F401
+_setproctitle = try_import('setproctitle')
+resource = try_import('resource')
+pwd = try_import('pwd')
+grp = try_import('grp')
+
+
+def __getattr__(name):
+    # `get_fdmax` è l'oggetto di billiard (stesso origin nell'API): si risolve
+    # al primo accesso perché billiard trascina multiprocessing/pickle.
+    if name != 'get_fdmax':
+        raise AttributeError(
+            f'module {__name__!r} has no attribute {name!r}')
+    from billiard.compat import get_fdmax as value
+    globals()[name] = value
+    return value
+
+
+def __dir__():
+    return sorted(set(globals()) | {'get_fdmax'})
+
+
+if False:  # solo per pyflakes: il nome vero arriva da __getattr__
+    from billiard.compat import get_fdmax
+    _FOR_PYFLAKES = (get_fdmax,)
 
 
 def _get_fdmax(default=None):
-    """Copie locale di ``billiard.compat.get_fdmax`` (solo resource)."""
+    # Copia locale di `billiard.compat.get_fdmax` per il percorso interno
+    # (nessun import di billiard: lo usa solo fd_by_path come fallback).
     try:
         import resource
     except ImportError:  # pragma: no cover - piattaforme senza resource
@@ -38,16 +61,8 @@ def _get_fdmax(default=None):
     return fdmax
 
 
-
-_setproctitle = try_import('setproctitle')
-resource = try_import('resource')
-pwd = try_import('pwd')
-grp = try_import('grp')
-#: Modulo risolto al primo uso (i test sostituiscono questo nome).
-mputil = lazy_module('multiprocessing.util')
-
-
 def current_process():
+    # Wrapper: billiard si importa al primo uso e i test possono sostituirlo.
     from billiard.process import current_process as _current_process
     return _current_process()
 
@@ -60,6 +75,12 @@ def _set_pdeathsig(signum):
 def _billiard_close_open_fds(keep):
     from billiard.compat import close_open_fds as _close_open_fds
     return _close_open_fds(keep)
+
+
+def _mputil():
+    if 'mputil' not in globals():
+        globals()['mputil'] = try_import('multiprocessing.util')
+    return globals()['mputil']
 
 __all__ = (
     'EX_OK', 'EX_FAILURE', 'EX_UNAVAILABLE', 'EX_USAGE', 'SYSTEM',
@@ -438,11 +459,9 @@ class DaemonContext:
                 close_open_fds(keep)
                 for fd in self.stdfds:
                     self.redirect_to_null(maybe_fileno(fd))
+                mputil = _mputil()
                 if self.after_forkers and mputil is not None:
-                    try:
-                        mputil._run_after_forkers()
-                    except ImportError:  # pragma: no cover
-                        pass
+                    mputil._run_after_forkers()
 
             self._is_open = True
 
@@ -939,6 +958,3 @@ def _warn_or_raise_security_error(egid, euid, gid, uid, pickle_or_serialize):
     )),
         stacklevel=2,
     )
-
-
-_install_lazy(globals(), {'get_fdmax': ('billiard.compat', 'get_fdmax')})
