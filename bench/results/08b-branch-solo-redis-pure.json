@@ -1,0 +1,28 @@
+{
+ "label": "08b-branch-solo-redis-pure",
+ "venv": ".venv-rs",
+ "pool": "solo",
+ "concurrency": 4,
+ "n": 20000,
+ "pss_idle_kb": 27539,
+ "pss_idle_per_process_kb": [
+  27539
+ ],
+ "pss_peak_kb": 27554,
+ "pss_after_kb": 27182,
+ "pss_after_per_process_kb": [
+  27182
+ ],
+ "client_publish_per_s": 1990.5268634996269,
+ "client_maxrss_kb": 35632,
+ "end_to_end_s": 11.03654170036316,
+ "end_to_end_tasks_per_s": 1812.161865826312,
+ "drain_after_publish_s": 0.9459921680099797,
+ "latency_ms": {
+  "p50": 1.7077475058613345,
+  "p99": 5.96456800121814,
+  "max": 6.96378800785169
+ },
+ "python": "3.13.9",
+ "task": "pure"
+}

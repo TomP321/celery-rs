@@ -5,6 +5,8 @@ mod backend_redis;
 mod compress;
 mod cron;
 mod json;
+#[cfg(feature = "memory-probe")]
+mod memory_probe;
 mod saferepr;
 mod task;
 mod transport;
@@ -13,6 +15,8 @@ mod worker;
 
 #[pymodule]
 fn _celery_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    #[cfg(feature = "memory-probe")]
+    m.add_function(wrap_pyfunction!(memory_probe::_allocator_stats, m)?)?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     m.add("CronParseError", m.py().get_type::<cron::CronParseError>())?;
     m.add_function(wrap_pyfunction!(json::json_dumps, m)?)?;

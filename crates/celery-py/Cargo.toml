@@ -9,6 +9,10 @@ rust-version.workspace = true
 name = "_celery_rs"
 crate-type = ["cdylib"]
 
+[features]
+# Solo diagnostica: nessun costo atomico nei percorsi di produzione.
+memory-probe = []
+
 [dependencies]
 bytes.workspace = true
 celery-backend.workspace = true

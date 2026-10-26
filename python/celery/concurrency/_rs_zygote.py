@@ -40,8 +40,22 @@ def create(app, hostname):
     Va chiamata dal master prima di avviare thread propri del pool.
     """
     parent, child = socket.socketpair(socket.AF_UNIX, socket.SOCK_STREAM)
-    pid = os.fork()
+    # I callback after_fork e gli import possono avviare il GC prima che
+    # l'heap ereditato sia congelato; i finalizer dei thread non sono sicuri.
+    gc_enabled = gc.isenabled()
+    gc.disable()
+    try:
+        pid = os.fork()
+    except BaseException:
+        if gc_enabled:
+            gc.enable()
+        parent.close()
+        child.close()
+        raise
     if pid == 0:
+        gc.freeze()
+        if gc_enabled:
+            gc.enable()
         try:
             parent.close()
             _main(child, app, hostname)
@@ -49,6 +63,8 @@ def create(app, hostname):
             traceback.print_exc()
         finally:
             os._exit(0)
+    if gc_enabled:
+        gc.enable()
     child.close()
     return parent, pid
 
@@ -115,7 +131,7 @@ def _main(control, app, hostname):
     control.setblocking(True)
     # Importa presto: dopo `gc.freeze()` queste pagine restano condivise.
     from celery.concurrency import _rs_child
-    from celery.concurrency import prefork  # noqa: F401  (initializer/destructor)
+    __import__('celery.concurrency.prefork')
 
     try:
         app.loader.import_default_modules()

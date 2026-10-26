@@ -53,6 +53,8 @@ Error Hierarchy
 """
 
 import numbers
+import os
+import threading
 from typing import TYPE_CHECKING
 
 
@@ -68,22 +70,38 @@ _LAZY_EXPORTS = {
 }
 
 
+_COMMAND_EXCEPTION_LOCK = threading.RLock()
+
+
+def _command_after_fork():
+    global _COMMAND_EXCEPTION_LOCK
+    # Il thread che possedeva il lock potrebbe non esistere nel figlio.
+    _COMMAND_EXCEPTION_LOCK = threading.RLock()
+
+
+if hasattr(os, 'register_at_fork'):
+    os.register_at_fork(after_in_child=_command_after_fork)
+
+
 def _celery_command_exception():
-    # Definita davvero (module/qualname corretti), ma solo se qualcuno la usa:
-    # importare `click` nel client costava un pacchetto intero per un'eccezione
-    # della CLI.
-    from click import ClickException
+    # Eseguita nel namespace del modulo: nome e pickle restano quelli veri,
+    # senza importare click finché non viene richiesta l'eccezione della CLI.
+    with _COMMAND_EXCEPTION_LOCK:
+        if 'CeleryCommandException' not in globals():
+            exec(compile(_COMMAND_EXCEPTION, __file__, 'exec'), globals())
+        return globals()['CeleryCommandException']
 
-    class CeleryCommandException(ClickException):
-        """A general command exception which stores an exit code."""
 
-        def __init__(self, message, exit_code):
-            super().__init__(message=message)
-            self.exit_code = exit_code
+_COMMAND_EXCEPTION = """
+from click import ClickException
 
-    CeleryCommandException.__module__ = __name__
-    CeleryCommandException.__qualname__ = 'CeleryCommandException'
-    return CeleryCommandException
+class CeleryCommandException(ClickException):
+    '''A general command exception which stores an exit code.'''
+
+    def __init__(self, message, exit_code):
+        super().__init__(message=message)
+        self.exit_code = exit_code
+"""
 
 
 if TYPE_CHECKING:  # nomi risolti da __getattr__, per pyflakes

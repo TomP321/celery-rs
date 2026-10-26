@@ -29,16 +29,13 @@ REDIS_URL = 'redis://127.0.0.1:6390/7'
 AMQP_URL = 'amqp://guest:guest@127.0.0.1:5673//'
 BACKEND_URL = 'redis://127.0.0.1:6390/8'
 
-#: Moduli che il client non deve caricare con producer/backend Rust (spec 08b).
-#:
-#: Il riferimento li carica già tutti (kombu, py-amqp, billiard, click,
-#: greenlet, yaml/msgpack, dateutil...) quando crea l'app: la decisione 08b
-#: vuole gli oggetti veri di kombu anche nel client, quindi qui restano solo
-#: le librerie che *noi* possiamo evitare: il client del broker (redis-py) e i
-#: suoi consumatori si usano solo se qualcuno torna al percorso del riferimento.
+#: Gli oggetti veri di kombu impongono amqp/billiard e il registry completo
+#: dei serializer; i client dei broker e le dipendenze di CLI, greenlet e
+#: fusi orari restano evitabili nel percorso Rust JSON senza date esplicite.
 CLIENT_FORBIDDEN = (
     'redis', 'kombu.transport.redis', 'kombu.transport.pyamqp',
-    'opentelemetry',
+    'kombu.transport.virtual', 'opentelemetry', 'click', 'greenlet',
+    'dateutil', 'tzlocal',
 )
 
 
@@ -307,14 +304,16 @@ def test_backend_disabled_returns_to_redis_py(probe_dir):
 # worker: il master non importa redis-py
 # ---------------------------------------------------------------------------
 
-def test_worker_master_does_not_import_redis_py(probe_dir):
+@pytest.mark.parametrize('pool', ['solo', 'prefork'])
+def test_worker_master_does_not_import_redis_py(probe_dir, pool):
     state = probe_dir / 'worker-state.json'
     (probe_dir / 'client_app.py').write_text(
         APP.format(broker=REDIS_URL, backend=BACKEND_URL))
     env = clean_env(probe_dir, CELERY_RS_WORKER_STATE=str(state))
     worker = subprocess.Popen(
         [str(RS_PYTHON), '-m', 'celery', '-A', 'client_app', 'worker',
-         '-P', 'solo', '-l', 'warning', '--without-gossip', '--without-mingle'],
+         '-P', pool, '-c', '2', '-Q', f'diet-master-{uuid.uuid4().hex}',
+         '-l', 'warning', '--without-gossip', '--without-mingle'],
         cwd=probe_dir, env=env, stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL, start_new_session=True)
     try:
@@ -326,12 +325,64 @@ def test_worker_master_does_not_import_redis_py(probe_dir):
         payload = json.loads(state.read_text())
         loaded = payload['loaded']
         assert payload['consumer'] == 'rust'
-        # `greenlet`/`dateutil` sono caricati anche dal riferimento (bootsteps
-        # e celery.result); quello che il percorso Rust evita è il client del
-        # broker e i trasporti kombu.
         assert not [m for m in loaded
-                    if m == 'redis' or m.startswith(
-                        ('redis.', 'kombu.transport.redis',
-                         'kombu.transport.pyamqp'))]
+                    if m in ('redis', 'pygments', 'greenlet', 'dateutil', 'tzlocal')
+                    or m.startswith(('redis.', 'kombu.transport.redis',
+                                     'kombu.transport.pyamqp', 'pygments.',
+                                     'greenlet.', 'dateutil.', 'tzlocal.'))]
     finally:
         stop_worker(worker)
+
+
+def test_lazy_exception_and_ssl_classes_match_reference(tmp_path):
+    code = r'''
+import json, pickle, sys
+import celery.exceptions as exceptions
+import celery.backends.redis as backend
+before = 'redis' in sys.modules
+from celery.backends.redis import SentinelManagedSSLConnection
+import redis
+from redis.sentinel import SentinelManagedConnection
+cls = exceptions.CeleryCommandException
+try:
+    exc = pickle.loads(pickle.dumps(cls('message', 7)))
+    pickled = [type(exc) is cls, str(exc), exc.exit_code]
+except Exception as exc:
+    pickled = [type(exc).__name__, str(exc)]
+print(json.dumps({
+    'ssl': backend.RedisBackend.connection_class_ssl is redis.SSLConnection,
+    'sentinel': backend.SentinelBackend.connection_class_ssl is SentinelManagedSSLConnection,
+    'bases': SentinelManagedSSLConnection.__bases__ == (SentinelManagedConnection, redis.SSLConnection),
+    'origin': [cls.__module__, cls.__qualname__,
+               SentinelManagedSSLConnection.__module__, SentinelManagedSSLConnection.__qualname__],
+    'pickle': pickled,
+    'before': before,
+}))
+'''
+    env = clean_env(tmp_path)
+    ref = json.loads(run_python(REF_PYTHON, code, tmp_path, env))
+    rs = json.loads(run_python(RS_PYTHON, code, tmp_path, env))
+    assert rs.pop('before') is False
+    ref.pop('before')
+    assert rs == ref
+
+
+def test_cli_highlighting_is_lazy_and_matches_reference(tmp_path):
+    code = r'''
+import json, sys
+from celery.bin import base
+before = 'pygments' in sys.modules
+context = base.CLIContext(None, no_color=False, workdir=None)
+value = context.pretty({'answer': 42})
+import pygments
+print(json.dumps({'before': before, 'value': value,
+                  'identity': base.highlight is pygments.highlight,
+                  'lexer': [base.LEXER.__class__.__module__, base.LEXER.__class__.__name__],
+                  'formatter': [base.FORMATTER.__class__.__module__, base.FORMATTER.__class__.__name__]}))
+'''
+    env = clean_env(tmp_path)
+    ref = json.loads(run_python(REF_PYTHON, code, tmp_path, env))
+    rs = json.loads(run_python(RS_PYTHON, code, tmp_path, env))
+    assert rs.pop('before') is False
+    ref.pop('before')
+    assert rs == ref

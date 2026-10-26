@@ -138,7 +138,8 @@ def main():
     label = args.label or Path(args.venv).name.lstrip('.').removeprefix('venv-')
     pure_done = None
     ENV = env = {**{k: v for k, v in os.environ.items() if not k.startswith('PYTHON')},
-                 'PYTHONPATH': str(HERE), 'PYTHONHASHSEED': '0'}
+                 'PYTHONPATH': str(HERE), 'PYTHONHASHSEED': '0',
+                 'BENCH_QUEUE': f'bench-08b-{os.getpid()}'}
     if args.task == 'pure':
         pure_done = HERE / 'results' / f'.pure-done-{os.getpid()}'
         try:
@@ -189,9 +190,6 @@ def main():
             if time.perf_counter() - t0 > 600:
                 raise SystemExit('timeout in attesa del completamento')
             time.sleep(0.02)
-        sampling.set()
-        sampler.join()
-        peak = peak[0]
         # end-to-end: dal primo publish all'ultimo task eseguito (il worker consuma già durante
         # la pubblicazione); drain = la coda rimasta dopo che il client ha finito
         drain_s = time.perf_counter() - t0
@@ -199,6 +197,10 @@ def main():
 
         lat = client(args.venv, LATENCY.format(n=args.latency_n), env)
         after_total, after_per = pss_kb(worker.pid)
+        sampling.set()
+        sampler.join()
+        # Anche delay/get della sonda di latenza fa parte del carico misurato.
+        peak = max(peak[0], idle_total, after_total)
     finally:
         os.killpg(worker.pid, signal.SIGTERM)
         try:

@@ -10,6 +10,7 @@ COUNTER = 'bench:done'
 app = Celery('bench', broker=BROKER, backend=BACKEND)
 app.conf.update(
     worker_hijack_root_logger=False,
+    task_default_queue=os.environ.get('BENCH_QUEUE', 'celery'),
     broker_connection_retry_on_startup=True,
 )
 

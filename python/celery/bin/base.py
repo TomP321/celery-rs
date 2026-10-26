@@ -20,19 +20,41 @@ from celery.utils import text
 from celery.utils.log import mlevel
 from celery.utils.time import maybe_iso8601
 
-try:
-    from pygments import highlight
-    from pygments.formatters import Terminal256Formatter
-    from pygments.lexers import PythonLexer
-except ImportError:
-    def highlight(s, *args, **kwargs):
-        """Place holder function in case pygments is missing."""
-        return s
-    LEXER = None
-    FORMATTER = None
-else:
-    LEXER = PythonLexer()
-    FORMATTER = Terminal256Formatter()
+_PYGMENTS_NAMES = {'highlight', 'Terminal256Formatter', 'PythonLexer',
+                   'LEXER', 'FORMATTER'}
+
+
+def _plain_highlight(s, *args, **kwargs):
+    return s
+
+
+def _load_pygments():
+    if 'LEXER' in globals():
+        return
+    try:
+        from pygments import highlight
+        from pygments.formatters import Terminal256Formatter
+        from pygments.lexers import PythonLexer
+    except ImportError:
+        globals().update(highlight=_plain_highlight, LEXER=None, FORMATTER=None)
+    else:
+        globals().update(highlight=highlight, Terminal256Formatter=Terminal256Formatter,
+                         PythonLexer=PythonLexer, LEXER=PythonLexer(),
+                         FORMATTER=Terminal256Formatter())
+
+
+def __getattr__(name):
+    if name in _PYGMENTS_NAMES:
+        # Il worker non stampa dizionari evidenziati: lexer e regex servono
+        # soltanto a inspect/control o all'accesso esplicito ai nomi pubblici.
+        _load_pygments()
+        if name in globals():
+            return globals()[name]
+    raise AttributeError(f'module {__name__!r} has no attribute {name!r}')
+
+
+def __dir__():
+    return sorted(set(globals()) | _PYGMENTS_NAMES)
 
 
 class CLIContext:
@@ -90,7 +112,8 @@ class CLIContext:
             else:
                 s = json.dumps(n, sort_keys=True, indent=4)
                 if not self.no_color:
-                    s = highlight(s, LEXER, FORMATTER)
+                    _load_pygments()
+                    s = globals()['highlight'](s, globals()['LEXER'], globals()['FORMATTER'])
                 return self.OK, s
         if isinstance(n, str):
             return self.OK, n
