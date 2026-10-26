@@ -86,7 +86,17 @@ def _write_state():
     path = os.environ.get(ENV_STATE)
     if not path:
         return
-    payload = {'pid': os.getpid(), 'consumer': 'rust'}
+    import sys
+    prefixes = ('kombu', 'amqp', 'billiard', 'click', 'redis', 'yaml',
+                'msgpack', 'greenlet', 'cffi', 'ssl', 'multiprocessing',
+                'importlib.metadata', 'email', 'decimal', 'dateutil',
+                'tzlocal', 'pygments', 'celery.worker', 'celery.events')
+    payload = {
+        'pid': os.getpid(), 'consumer': 'rust', 'modules': len(sys.modules),
+        'loaded': sorted(m for m in sys.modules
+                         if any(m == p or m.startswith(p + '.')
+                                for p in prefixes)),
+    }
     payload.update(_STATS)
     try:
         temporary = f'{path}.{os.getpid()}.tmp'
@@ -161,8 +171,10 @@ def use_rs_pool(worker):
         return False
     if worker.app.conf.worker_disable_prefetch:
         return False
-    from celery.concurrency.prefork import TaskPool as PreforkPool
-    if getattr(worker, 'pool_cls', None) is not PreforkPool:
+    import sys
+    prefork = sys.modules.get('celery.concurrency.prefork')
+    # Un pool già risolto può essere quello prefork solo se il modulo esiste.
+    if prefork is None or getattr(worker, 'pool_cls', None) is not prefork.TaskPool:
         return False
     try:
         from celery.app import _rs_producer

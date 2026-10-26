@@ -1,0 +1,28 @@
+{
+ "label": "rs-arena2-solo",
+ "venv": ".venv-rs",
+ "pool": "solo",
+ "concurrency": 4,
+ "n": 20000,
+ "pss_idle_kb": 35262,
+ "pss_idle_per_process_kb": [
+  35262
+ ],
+ "pss_peak_kb": 44514,
+ "pss_after_kb": 44577,
+ "pss_after_per_process_kb": [
+  44577
+ ],
+ "client_publish_per_s": 2889.897492434284,
+ "client_maxrss_kb": 44748,
+ "end_to_end_s": 12.20451283454895,
+ "end_to_end_tasks_per_s": 1638.7380857499957,
+ "drain_after_publish_s": 5.209628737997264,
+ "latency_ms": {
+  "p50": 1.6216969961533323,
+  "p99": 2.2077450121287256,
+  "max": 2.640986000187695
+ },
+ "python": "3.13.9",
+ "task": "bench"
+}

@@ -1,0 +1,28 @@
+{
+ "label": "rs-08b-final-solo-amqp",
+ "venv": ".venv-rs",
+ "pool": "solo",
+ "concurrency": 4,
+ "n": 20000,
+ "pss_idle_kb": 35317,
+ "pss_idle_per_process_kb": [
+  35317
+ ],
+ "pss_peak_kb": 45962,
+ "pss_after_kb": 46230,
+ "pss_after_per_process_kb": [
+  46230
+ ],
+ "client_publish_per_s": 4365.451617776117,
+ "client_maxrss_kb": 41108,
+ "end_to_end_s": 7.75092625617981,
+ "end_to_end_tasks_per_s": 2580.33676737074,
+ "drain_after_publish_s": 3.1166278009768575,
+ "latency_ms": {
+  "p50": 2.1945810003671795,
+  "p99": 2.9298379959072918,
+  "max": 4.750619002152234
+ },
+ "python": "3.13.9",
+ "task": "bench"
+}

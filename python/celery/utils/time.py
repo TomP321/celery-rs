@@ -14,14 +14,38 @@ from datetime import tzinfo
 from types import ModuleType
 from typing import Any, Callable
 
-from dateutil import tz as dateutil_tz
-from dateutil.parser import isoparse
 from kombu.utils.functional import reprcall
 from kombu.utils.objects import cached_property
-from tzlocal import get_localzone
 
 from .functional import dictfilter
 from .text import pluralize
+
+
+def __getattr__(name):
+    # Nomi che il riferimento importa da dateutil/tzlocal: restano gli stessi
+    # oggetti, risolti al primo accesso (il client non deve pagarli).
+    if name == 'get_localzone':
+        from tzlocal import get_localzone as value
+    elif name == 'dateutil_tz':
+        from dateutil import tz as value
+    elif name == 'isoparse':
+        from dateutil.parser import isoparse as value
+    else:
+        raise AttributeError(
+            f'module {__name__!r} has no attribute {name!r}')
+    globals()[name] = value
+    return value
+
+
+def __dir__():
+    return sorted(set(globals()) | {'dateutil_tz', 'isoparse', 'get_localzone'})
+
+
+def _get_localzone():
+    if 'get_localzone' not in globals():
+        from tzlocal import get_localzone
+        globals()['get_localzone'] = get_localzone
+    return globals()['get_localzone']()
 
 if sys.version_info >= (3, 9):
     from zoneinfo import ZoneInfo
@@ -169,7 +193,7 @@ class _Zone:
     def local(self) -> tzinfo:
         """Return the local system timezone for the application."""
         try:
-            timezone = get_localzone()
+            timezone = _get_localzone()
         except Exception as ex:
             timezone = None
             logger.warning("Failed to retrieve local timezone (%s): %s", type(ex).__name__, ex)
@@ -224,6 +248,7 @@ def _relative_end_dates(dt: datetime, delta: timedelta) -> list[datetime]:
     """Return UTC occurrences of a rounded local deadline."""
     rounded = delta_resolution(dt, delta).replace(microsecond=0)
     dates = []
+    from dateutil import tz as dateutil_tz
     for fold in (0, 1):
         candidate = rounded.replace(fold=fold)
         if _is_imaginary(candidate, candidate.tzinfo):
@@ -381,6 +406,7 @@ def maybe_iso8601(dt: datetime | str | None) -> None | datetime:
         return
     if isinstance(dt, datetime):
         return dt
+    from dateutil.parser import isoparse
     return isoparse(dt)
 
 
@@ -420,7 +446,10 @@ def _is_ambiguous(dt: datetime, tz: tzinfo) -> bool:
     but now we need to specifically check for ambiguity with dateutil, as pytz is deprecated.
     """
 
-    return _can_detect_ambiguous(tz) and dateutil_tz.datetime_ambiguous(dt)
+    if not _can_detect_ambiguous(tz):
+        return False
+    from dateutil import tz as dateutil_tz
+    return dateutil_tz.datetime_ambiguous(dt)
 
 
 def _is_imaginary(dt: datetime, tz: tzinfo) -> bool:
@@ -430,6 +459,7 @@ def _is_imaginary(dt: datetime, tz: tzinfo) -> bool:
         return False
 
     try:
+        from dateutil import tz as dateutil_tz
         return not dateutil_tz.datetime_exists(dt, tz)
     except ValueError:
         return False
@@ -441,6 +471,7 @@ def make_aware(dt: datetime, tz: tzinfo) -> datetime:
     dt = dt.replace(tzinfo=tz)
     if _is_ambiguous(dt, tz):
         if _is_imaginary(dt, tz):
+            from dateutil import tz as dateutil_tz
             dt = dateutil_tz.resolve_imaginary(dt)
         else:
             dt = min(dt.replace(fold=0), dt.replace(fold=1))

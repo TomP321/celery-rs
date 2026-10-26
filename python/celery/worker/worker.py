@@ -175,7 +175,7 @@ class WorkController:
         # Runs after ``worker_init`` so handlers that monkey-patch there do so
         # before the pool module is imported. Only prefork is CPU-bound, so
         # only prefork is capped to the cgroup quota.
-        from celery.concurrency.prefork import TaskPool as PreforkPool
+        prefork = sys.modules.get('celery.concurrency.prefork')
 
         # The CLI hands over a class, so map it back to its alias.
         target = f'{self.pool_cls.__module__}:{self.pool_cls.__qualname__}'
@@ -186,7 +186,8 @@ class WorkController:
         )
         is_cpu_bound = (
             isinstance(self.pool_cls, type)
-            and issubclass(self.pool_cls, PreforkPool)
+            and prefork is not None
+            and issubclass(self.pool_cls, prefork.TaskPool)
         )
         budget = cpu_budget(use_cgroup_quota=is_cpu_bound)
         self.concurrency = budget.count

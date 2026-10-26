@@ -15,7 +15,6 @@ from celery import _state, signals
 from celery.exceptions import FixupWarning, ImproperlyConfigured
 from celery.local import Proxy
 from celery.utils.log import get_logger
-from celery.worker import WorkController
 
 if TYPE_CHECKING:
     from types import ModuleType
@@ -26,6 +25,7 @@ if TYPE_CHECKING:
 
     from celery.app.base import Celery
     from celery.app.task import Task
+    from celery.worker import WorkController  # noqa: F401
 
     class DjangoDBModule(Protocol):
         connections: ConnectionHandler

@@ -1,0 +1,309 @@
+{
+ "label": "08d/before-rs-amqp-bench-2",
+ "venv": ".venv-rs",
+ "pool": "prefork",
+ "concurrency": 10,
+ "n": 30000,
+ "broker": "amqp://guest:guest@127.0.0.1:5673//",
+ "idle_processes": [
+  {
+   "pid": 1920343,
+   "ppid": 1920341,
+   "pss_kb": 18325,
+   "private_dirty_kb": 9076,
+   "role": "master"
+  },
+  {
+   "pid": 1920349,
+   "ppid": 1920343,
+   "pss_kb": 6333,
+   "private_dirty_kb": 3644,
+   "role": "zygote"
+  },
+  {
+   "pid": 1920368,
+   "ppid": 1920349,
+   "pss_kb": 6520,
+   "private_dirty_kb": 4376,
+   "role": "child"
+  },
+  {
+   "pid": 1920366,
+   "ppid": 1920349,
+   "pss_kb": 6524,
+   "private_dirty_kb": 4384,
+   "role": "child"
+  },
+  {
+   "pid": 1920364,
+   "ppid": 1920349,
+   "pss_kb": 6524,
+   "private_dirty_kb": 4384,
+   "role": "child"
+  },
+  {
+   "pid": 1920362,
+   "ppid": 1920349,
+   "pss_kb": 6524,
+   "private_dirty_kb": 4384,
+   "role": "child"
+  },
+  {
+   "pid": 1920360,
+   "ppid": 1920349,
+   "pss_kb": 6524,
+   "private_dirty_kb": 4384,
+   "role": "child"
+  },
+  {
+   "pid": 1920358,
+   "ppid": 1920349,
+   "pss_kb": 6524,
+   "private_dirty_kb": 4384,
+   "role": "child"
+  },
+  {
+   "pid": 1920356,
+   "ppid": 1920349,
+   "pss_kb": 6524,
+   "private_dirty_kb": 4384,
+   "role": "child"
+  },
+  {
+   "pid": 1920354,
+   "ppid": 1920349,
+   "pss_kb": 6524,
+   "private_dirty_kb": 4384,
+   "role": "child"
+  },
+  {
+   "pid": 1920352,
+   "ppid": 1920349,
+   "pss_kb": 6524,
+   "private_dirty_kb": 4384,
+   "role": "child"
+  },
+  {
+   "pid": 1920350,
+   "ppid": 1920349,
+   "pss_kb": 6529,
+   "private_dirty_kb": 4388,
+   "role": "child"
+  }
+ ],
+ "after_processes": [
+  {
+   "pid": 1920343,
+   "ppid": 1920341,
+   "pss_kb": 19023,
+   "private_dirty_kb": 12128,
+   "role": "master"
+  },
+  {
+   "pid": 1920349,
+   "ppid": 1920343,
+   "pss_kb": 10845,
+   "private_dirty_kb": 7792,
+   "role": "zygote"
+  },
+  {
+   "pid": 1920368,
+   "ppid": 1920349,
+   "pss_kb": 20966,
+   "private_dirty_kb": 18872,
+   "role": "child"
+  },
+  {
+   "pid": 1920366,
+   "ppid": 1920349,
+   "pss_kb": 20997,
+   "private_dirty_kb": 18900,
+   "role": "child"
+  },
+  {
+   "pid": 1920364,
+   "ppid": 1920349,
+   "pss_kb": 20990,
+   "private_dirty_kb": 18880,
+   "role": "child"
+  },
+  {
+   "pid": 1920362,
+   "ppid": 1920349,
+   "pss_kb": 20995,
+   "private_dirty_kb": 18900,
+   "role": "child"
+  },
+  {
+   "pid": 1920360,
+   "ppid": 1920349,
+   "pss_kb": 20976,
+   "private_dirty_kb": 18880,
+   "role": "child"
+  },
+  {
+   "pid": 1920358,
+   "ppid": 1920349,
+   "pss_kb": 20995,
+   "private_dirty_kb": 18900,
+   "role": "child"
+  },
+  {
+   "pid": 1920356,
+   "ppid": 1920349,
+   "pss_kb": 20950,
+   "private_dirty_kb": 18880,
+   "role": "child"
+  },
+  {
+   "pid": 1920354,
+   "ppid": 1920349,
+   "pss_kb": 20966,
+   "private_dirty_kb": 18900,
+   "role": "child"
+  },
+  {
+   "pid": 1920352,
+   "ppid": 1920349,
+   "pss_kb": 20978,
+   "private_dirty_kb": 18880,
+   "role": "child"
+  },
+  {
+   "pid": 1920350,
+   "ppid": 1920349,
+   "pss_kb": 21006,
+   "private_dirty_kb": 18908,
+   "role": "child"
+  }
+ ],
+ "throughput_processes": [
+  {
+   "pid": 1920343,
+   "ppid": 1920341,
+   "pss_kb": 21102,
+   "private_dirty_kb": 12112,
+   "role": "master"
+  },
+  {
+   "pid": 1920349,
+   "ppid": 1920343,
+   "pss_kb": 10571,
+   "private_dirty_kb": 7540,
+   "role": "zygote"
+  },
+  {
+   "pid": 1920368,
+   "ppid": 1920349,
+   "pss_kb": 20373,
+   "private_dirty_kb": 18488,
+   "role": "child"
+  },
+  {
+   "pid": 1920366,
+   "ppid": 1920349,
+   "pss_kb": 20411,
+   "private_dirty_kb": 18524,
+   "role": "child"
+  },
+  {
+   "pid": 1920364,
+   "ppid": 1920349,
+   "pss_kb": 20366,
+   "private_dirty_kb": 18496,
+   "role": "child"
+  },
+  {
+   "pid": 1920362,
+   "ppid": 1920349,
+   "pss_kb": 20409,
+   "private_dirty_kb": 18524,
+   "role": "child"
+  },
+  {
+   "pid": 1920360,
+   "ppid": 1920349,
+   "pss_kb": 20384,
+   "private_dirty_kb": 18496,
+   "role": "child"
+  },
+  {
+   "pid": 1920358,
+   "ppid": 1920349,
+   "pss_kb": 20409,
+   "private_dirty_kb": 18524,
+   "role": "child"
+  },
+  {
+   "pid": 1920356,
+   "ppid": 1920349,
+   "pss_kb": 20357,
+   "private_dirty_kb": 18496,
+   "role": "child"
+  },
+  {
+   "pid": 1920354,
+   "ppid": 1920349,
+   "pss_kb": 20378,
+   "private_dirty_kb": 18524,
+   "role": "child"
+  },
+  {
+   "pid": 1920352,
+   "ppid": 1920349,
+   "pss_kb": 20386,
+   "private_dirty_kb": 18496,
+   "role": "child"
+  },
+  {
+   "pid": 1920350,
+   "ppid": 1920349,
+   "pss_kb": 20420,
+   "private_dirty_kb": 18532,
+   "role": "child"
+  }
+ ],
+ "pss_idle_kb": 89899,
+ "pss_idle_per_process_kb": [
+  18325,
+  6333,
+  6520,
+  6524,
+  6524,
+  6524,
+  6524,
+  6524,
+  6524,
+  6524,
+  6524,
+  6529
+ ],
+ "pss_peak_kb": 239687,
+ "pss_after_kb": 239687,
+ "pss_after_per_process_kb": [
+  19023,
+  10845,
+  20966,
+  20997,
+  20990,
+  20995,
+  20976,
+  20995,
+  20950,
+  20966,
+  20978,
+  21006
+ ],
+ "client_publish_per_s": 3732.0854746866803,
+ "client_maxrss_kb": 44568,
+ "end_to_end_s": 8.126716375350952,
+ "end_to_end_tasks_per_s": 3691.527871083658,
+ "drain_after_publish_s": 0.00471033199573867,
+ "latency_ms": {
+  "p50": 2.61118050548248,
+  "p99": 4.39627401647158,
+  "max": 6.819562986493111
+ },
+ "python": "3.13.9",
+ "task": "bench"
+}

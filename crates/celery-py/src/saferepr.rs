@@ -11,7 +11,7 @@ use std::mem;
 use pyo3::exceptions::PyRecursionError;
 use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
-use pyo3::types::{PyBytes, PyIterator, PyRange, PyString, PyTuple};
+use pyo3::types::{PyBytes, PyDict, PyIterator, PyRange, PyString, PyTuple};
 use pyo3::{PyTypeInfo, ffi};
 
 use crate::util::{PyStrData, py_str_data, py_str_from_code_points};
@@ -28,11 +28,23 @@ fn number_type(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
     Ok(v.bind(py).clone())
 }
 
-fn decimal_type(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
-    let v = DECIMAL_TYPE.get_or_try_init(py, || -> PyResult<Py<PyAny>> {
-        Ok(py.import("decimal")?.getattr("Decimal")?.unbind())
-    })?;
-    Ok(v.bind(py).clone())
+/// `decimal.Decimal`, senza importare `decimal` quando non è già caricato.
+///
+/// Importarlo a ogni `saferepr` costava il modulo `decimal` (e le estensioni
+/// C che porta) nel processo client, dove il protocollo è Rust (spec 08b).
+/// Un'istanza di Decimal può esistere solo se qualcuno ha già importato
+/// `decimal`, quindi la classe si prende da `sys.modules`.
+fn decimal_type(py: Python<'_>) -> PyResult<Option<Py<PyAny>>> {
+    if let Some(v) = DECIMAL_TYPE.get(py) {
+        return Ok(Some(v.clone_ref(py)));
+    }
+    let modules = py.import("sys")?.getattr("modules")?;
+    let Some(module) = modules.cast::<PyDict>()?.get_item("decimal")? else {
+        return Ok(None);
+    };
+    let v = module.getattr("Decimal")?.unbind();
+    let _ = DECIMAL_TYPE.set(py, v.clone_ref(py));
+    Ok(Some(v))
 }
 
 /// Limite per le chiavi annidate: il riferimento consuma circa due frame
@@ -378,7 +390,9 @@ impl<'py> Engine<'py> {
         let ptr = obj.as_ptr();
 
         // Decimal prima di Number, come nel riferimento.
-        if obj.is_instance(&decimal_type(py)?)? {
+        if let Some(decimal) = decimal_type(py)?
+            && obj.is_instance(decimal.bind(py))?
+        {
             return Ok(Prepared::Text(text_cps(py, &obj.repr()?)?));
         }
 

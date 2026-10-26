@@ -1,5 +1,7 @@
 """A directed acyclic graph of reusable components."""
 
+import sys
+
 from collections import deque
 from threading import Event
 
@@ -11,12 +13,18 @@ from .utils.graph import DependencyGraph, GraphFormatter
 from .utils.imports import instantiate, qualname
 from .utils.log import get_logger
 
-try:
-    from greenlet import GreenletExit
-except ImportError:
-    IGNORE_ERRORS = ()
-else:
-    IGNORE_ERRORS = (GreenletExit,)
+#: GreenletExit non si importa qui: eventlet/gevent sono fuori scope v1 e il
+#: client non deve pagare greenlet. La tupla si calcola quando serve, così con
+#: eventlet/gevent (greenlet già importato) il comportamento resta quello del
+#: riferimento.
+IGNORE_ERRORS = ()
+
+
+def _ignore_errors_exc():
+    if 'greenlet' in sys.modules:
+        from greenlet import GreenletExit
+        return (GreenletExit,)
+    return IGNORE_ERRORS
 
 __all__ = ('Blueprint', 'Step', 'StartStopStep', 'ConsumerStep')
 
@@ -180,7 +188,7 @@ class Blueprint:
             # Will only get here if running green,
             # makes sure all greenthreads have exited.
             self.shutdown_complete.wait(timeout=timeout)
-        except IGNORE_ERRORS:
+        except _ignore_errors_exc():
             pass
 
     def apply(self, parent, **kwargs):

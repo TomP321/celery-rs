@@ -2,21 +2,21 @@
  "ref-redis": [
   {
    "step": "start",
-   "Pss": 6234,
+   "Pss": 5709,
    "Pss_Anon": 4808,
    "modules": 79,
    "watch": []
   },
   {
    "step": "import celery",
-   "Pss": 6896,
-   "Pss_Anon": 5392,
+   "Pss": 6357,
+   "Pss_Anon": 5396,
    "modules": 87,
    "watch": []
   },
   {
    "step": "app + task",
-   "Pss": 24778,
+   "Pss": 24215,
    "Pss_Anon": 20136,
    "modules": 353,
    "watch": [
@@ -40,8 +40,8 @@
   },
   {
    "step": "delay",
-   "Pss": 36003,
-   "Pss_Anon": 30996,
+   "Pss": 35444,
+   "Pss_Anon": 31004,
    "modules": 522,
    "watch": [
     "kombu.connection",
@@ -65,8 +65,8 @@
   },
   {
    "step": "get",
-   "Pss": 36003,
-   "Pss_Anon": 30996,
+   "Pss": 35448,
+   "Pss_Anon": 31008,
    "modules": 522,
    "watch": [
     "kombu.connection",
@@ -92,86 +92,72 @@
  "rs-redis": [
   {
    "step": "start",
-   "Pss": 5456,
+   "Pss": 4938,
    "Pss_Anon": 4072,
    "modules": 61,
    "watch": []
   },
   {
    "step": "import celery",
-   "Pss": 6242,
+   "Pss": 5699,
    "Pss_Anon": 4776,
    "modules": 72,
    "watch": []
   },
   {
    "step": "app + task",
-   "Pss": 24475,
-   "Pss_Anon": 19856,
-   "modules": 342,
+   "Pss": 18253,
+   "Pss_Anon": 15188,
+   "modules": 262,
    "watch": [
-    "kombu.connection",
-    "kombu.serialization",
-    "kombu.transport",
     "amqp",
     "billiard",
-    "click",
-    "yaml",
-    "msgpack",
-    "greenlet",
     "cffi",
     "ssl",
     "multiprocessing",
     "importlib.metadata",
-    "dateutil",
     "decimal",
     "email"
    ]
   },
   {
    "step": "delay",
-   "Pss": 31254,
-   "Pss_Anon": 22188,
-   "modules": 383,
+   "Pss": 27766,
+   "Pss_Anon": 19884,
+   "modules": 333,
    "watch": [
     "kombu.connection",
     "kombu.serialization",
     "kombu.transport",
     "amqp",
     "billiard",
-    "click",
     "yaml",
     "msgpack",
-    "greenlet",
     "cffi",
     "ssl",
     "multiprocessing",
     "importlib.metadata",
-    "dateutil",
     "decimal",
     "email"
    ]
   },
   {
    "step": "get",
-   "Pss": 31338,
-   "Pss_Anon": 22208,
-   "modules": 383,
+   "Pss": 27854,
+   "Pss_Anon": 19908,
+   "modules": 333,
    "watch": [
     "kombu.connection",
     "kombu.serialization",
     "kombu.transport",
     "amqp",
     "billiard",
-    "click",
     "yaml",
     "msgpack",
-    "greenlet",
     "cffi",
     "ssl",
     "multiprocessing",
     "importlib.metadata",
-    "dateutil",
     "decimal",
     "email"
    ]
@@ -180,22 +166,22 @@
  "ref-amqp": [
   {
    "step": "start",
-   "Pss": 6229,
-   "Pss_Anon": 4800,
+   "Pss": 5690,
+   "Pss_Anon": 4808,
    "modules": 79,
    "watch": []
   },
   {
    "step": "import celery",
-   "Pss": 6869,
-   "Pss_Anon": 5384,
+   "Pss": 6325,
+   "Pss_Anon": 5396,
    "modules": 87,
    "watch": []
   },
   {
    "step": "app + task",
-   "Pss": 24782,
-   "Pss_Anon": 20132,
+   "Pss": 24227,
+   "Pss_Anon": 20136,
    "modules": 353,
    "watch": [
     "kombu.connection",
@@ -218,8 +204,8 @@
   },
   {
    "step": "delay",
-   "Pss": 35902,
-   "Pss_Anon": 30892,
+   "Pss": 35360,
+   "Pss_Anon": 30908,
    "modules": 524,
    "watch": [
     "kombu.connection",
@@ -243,8 +229,8 @@
   },
   {
    "step": "get",
-   "Pss": 35906,
-   "Pss_Anon": 30896,
+   "Pss": 35368,
+   "Pss_Anon": 30916,
    "modules": 524,
    "watch": [
     "kombu.connection",
@@ -270,86 +256,72 @@
  "rs-amqp": [
   {
    "step": "start",
-   "Pss": 5461,
-   "Pss_Anon": 4076,
+   "Pss": 4926,
+   "Pss_Anon": 4068,
    "modules": 61,
    "watch": []
   },
   {
    "step": "import celery",
-   "Pss": 6225,
-   "Pss_Anon": 4780,
+   "Pss": 5673,
+   "Pss_Anon": 4772,
    "modules": 72,
    "watch": []
   },
   {
    "step": "app + task",
-   "Pss": 24416,
-   "Pss_Anon": 19856,
-   "modules": 342,
+   "Pss": 18248,
+   "Pss_Anon": 15184,
+   "modules": 262,
    "watch": [
-    "kombu.connection",
-    "kombu.serialization",
-    "kombu.transport",
     "amqp",
     "billiard",
-    "click",
-    "yaml",
-    "msgpack",
-    "greenlet",
     "cffi",
     "ssl",
     "multiprocessing",
     "importlib.metadata",
-    "dateutil",
     "decimal",
     "email"
    ]
   },
   {
    "step": "delay",
-   "Pss": 31455,
-   "Pss_Anon": 22256,
-   "modules": 383,
+   "Pss": 28057,
+   "Pss_Anon": 19960,
+   "modules": 333,
    "watch": [
     "kombu.connection",
     "kombu.serialization",
     "kombu.transport",
     "amqp",
     "billiard",
-    "click",
     "yaml",
     "msgpack",
-    "greenlet",
     "cffi",
     "ssl",
     "multiprocessing",
     "importlib.metadata",
-    "dateutil",
     "decimal",
     "email"
    ]
   },
   {
    "step": "get",
-   "Pss": 31531,
-   "Pss_Anon": 22268,
-   "modules": 383,
+   "Pss": 28137,
+   "Pss_Anon": 19976,
+   "modules": 333,
    "watch": [
     "kombu.connection",
     "kombu.serialization",
     "kombu.transport",
     "amqp",
     "billiard",
-    "click",
     "yaml",
     "msgpack",
-    "greenlet",
     "cffi",
     "ssl",
     "multiprocessing",
     "importlib.metadata",
-    "dateutil",
     "decimal",
     "email"
    ]

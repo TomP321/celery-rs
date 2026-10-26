@@ -1,0 +1,28 @@
+{
+ "label": "rs-mimalloc-solo",
+ "venv": ".venv-rs",
+ "pool": "solo",
+ "concurrency": 4,
+ "n": 20000,
+ "pss_idle_kb": 41531,
+ "pss_idle_per_process_kb": [
+  41531
+ ],
+ "pss_peak_kb": 52535,
+ "pss_after_kb": 52607,
+ "pss_after_per_process_kb": [
+  52607
+ ],
+ "client_publish_per_s": 2958.2379605398814,
+ "client_maxrss_kb": 51276,
+ "end_to_end_s": 11.709640502929688,
+ "end_to_end_tasks_per_s": 1707.9943654116546,
+ "drain_after_publish_s": 4.87572056800127,
+ "latency_ms": {
+  "p50": 1.3773899991065264,
+  "p99": 1.8871840147767216,
+  "max": 2.322560001630336
+ },
+ "python": "3.13.9",
+ "task": "bench"
+}

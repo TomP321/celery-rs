@@ -7,7 +7,6 @@ from collections import deque
 from contextlib import contextmanager
 from weakref import proxy
 
-from dateutil.parser import isoparse
 from kombu.utils.objects import cached_property
 from vine import Thenable, barrier, promise
 
@@ -565,6 +564,7 @@ class AsyncResult(ResultBase):
         """UTC date and time."""
         date_done = self._get_task_meta().get('date_done')
         if date_done and not isinstance(date_done, datetime.datetime):
+            from dateutil.parser import isoparse
             return isoparse(date_done)
         return date_done
 

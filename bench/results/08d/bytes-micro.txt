@@ -1,0 +1,9 @@
+size=32 mode=0 ns=47.7
+size=32 mode=1 ns=44.0
+size=32 mode=2 ns=28.2
+size=1024 mode=0 ns=99.4
+size=1024 mode=1 ns=81.7
+size=1024 mode=2 ns=61.1
+size=1048576 mode=0 ns=1163485.5
+size=1048576 mode=1 ns=20413.4
+size=1048576 mode=2 ns=19930.6

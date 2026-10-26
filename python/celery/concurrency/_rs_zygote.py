@@ -40,8 +40,22 @@ def create(app, hostname):
     Va chiamata dal master prima di avviare thread propri del pool.
     """
     parent, child = socket.socketpair(socket.AF_UNIX, socket.SOCK_STREAM)
-    pid = os.fork()
+    # I callback after_fork e gli import possono avviare il GC prima che
+    # l'heap ereditato sia congelato; i finalizer dei thread non sono sicuri.
+    gc_enabled = gc.isenabled()
+    gc.disable()
+    try:
+        pid = os.fork()
+    except BaseException:
+        if gc_enabled:
+            gc.enable()
+        parent.close()
+        child.close()
+        raise
     if pid == 0:
+        gc.freeze()
+        if gc_enabled:
+            gc.enable()
         try:
             parent.close()
             _main(child, app, hostname)
@@ -49,6 +63,8 @@ def create(app, hostname):
             traceback.print_exc()
         finally:
             os._exit(0)
+    if gc_enabled:
+        gc.enable()
     child.close()
     return parent, pid
 
@@ -111,11 +127,22 @@ def _reply(control, status, pid=0, message=b''):
     control.sendall(_REPLY_LEN.pack(len(body)) + body)
 
 
+def _warm_cffi():
+    # Billiard usa cdef per prctl in ogni initializer: il solo import non
+    # crea il parser globale di pycparser, che va condiviso prima del fork.
+    try:
+        from cffi import FFI
+    except ImportError:  # pragma: no cover - billiard può usare ctypes
+        return
+    ffi = FFI()
+    ffi.cdef('int prctl (int __option, ...);')
+
+
 def _main(control, app, hostname):
     control.setblocking(True)
     # Importa presto: dopo `gc.freeze()` queste pagine restano condivise.
     from celery.concurrency import _rs_child
-    from celery.concurrency import prefork  # noqa: F401  (initializer/destructor)
+    __import__('celery.concurrency.prefork')
 
     try:
         app.loader.import_default_modules()
@@ -124,6 +151,23 @@ def _main(control, app, hostname):
         # (test/uso diretto) si prosegue con il registry esistente.
         traceback.print_exc()
 
+    # Moduli che ogni figlio usa al primo task: importarli qui (e non nel
+    # figlio) li rende condivisi in copy-on-write con lo zygote.
+    for module in (
+            'celery.app.task', 'celery.canvas', 'celery.result',
+            'celery.backends', 'celery.backends.base',
+            'celery.backends.asynchronous', 'celery.backends.redis',
+            'celery.app.trace', 'celery.app._rs_producer', 'celery.app.amqp',
+            # `billiard.util.set_pdeathsig` compila un wrapper cffi all'avvio
+            # di ogni figlio (`cffi.FFI()` → cparser/pycparser): qui le pagine
+            # restano condivise con tutti i figli.
+            'billiard.util', 'cffi.cparser'):
+        try:
+            __import__(module)
+        except Exception:  # pragma: no cover - dipendenze opzionali
+            traceback.print_exc()
+
+    _warm_cffi()
     _close_inherited_fds({control.fileno()})
     # `gc.freeze()` (non `collect`): nel figlio di un master multi-thread i
     # finalizer di oggetti ereditati possono toccare stato non valido dopo il

@@ -23,14 +23,14 @@ from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 from kombu import Connection as KombuConnection
 from kombu import Producer as KombuProducer
 from kombu import exceptions as kombu_exceptions
+from kombu.connection import ConnectionPool, PooledConnection
 from kombu.connection import is_connection
 from kombu.entity import Exchange, Queue, binding as binding_t
 from kombu.entity import maybe_delivery_mode
 from kombu.exceptions import OperationalError
-from kombu.pools import ProducerPool, connections as connection_pools
-from kombu.pools import set_limit
-from kombu.resource import Resource
+from kombu.pools import ProducerPool
 from kombu.serialization import dumps
+from kombu.pools import set_limit
 from kombu.utils.functional import dictfilter
 from kombu.utils.json import JSONEncoder
 from kombu.utils.url import as_url, parse_url
@@ -907,23 +907,59 @@ class RsProducer(KombuProducer):
     close = release
 
 
+class FastConnectionPool(ConnectionPool):
+    """``ConnectionPool`` che crea :class:`PooledConnection` senza trasporto.
+
+    ``ConnectionPool.new`` chiama ``connection._info()``, che legge
+    ``connection.transport.default_connection_params`` e importerebbe redis-py
+    o py-amqp; i parametri sono già tutti sulla :class:`FastConnection`.
+    """
+
+    def new(self):
+        conn = self.connection
+        return PooledConnection(self, **_pooled_params(conn))
+
+
+def _pooled_params(conn):
+    return {
+        'hostname': conn.hostname,
+        'userid': conn.userid,
+        'password': conn.password,
+        'virtual_host': conn.virtual_host,
+        'port': conn.port,
+        'ssl': conn.ssl,
+        'transport': conn.transport_cls,
+        'connect_timeout': conn.connect_timeout,
+        'transport_options': dict(conn.transport_options or {}),
+        'login_method': conn.login_method,
+        'heartbeat': conn.heartbeat,
+        'failover_strategy': conn._failover_strategy,
+        'alternates': conn.alt,
+        'credential_provider': getattr(conn, 'credential_provider', None),
+    }
+
+
 class FastProducerPool(ProducerPool):
     """``kombu.pools.ProducerPool`` che crea :class:`RsProducer` senza socket kombu."""
 
     Producer = RsProducer
 
     def __init__(self, connection, limit=None, driver_type=None):
-        super().__init__(connection_pools[connection], limit=limit)
+        # Il pool di connessioni è quello vero di kombu: ``producer.connection``
+        # è una ``PooledConnection`` come nel riferimento, ma creata senza
+        # importare il trasporto.
+        super().__init__(
+            FastConnectionPool(connection, limit=limit), limit=limit)
         # Evita l'accesso a `connection.transport.driver_type` in send_task
         # (importerebbe la libreria client) per la decisione su ETA.
         self.driver_type = driver_type or driver_type_of(connection)
 
     def create_producer(self):
-        # La connessione kombu resta solo un descrittore lazy (URL, opzioni);
+        # La connessione acquisita è solo un descrittore (URL, opzioni);
         # l'I/O passa dalla connessione Rust condivisa.
-        return self.Producer(self.connections.connection)
-
-    def release(self, resource):
-        # Non si tocca ``__connection__``: è il descrittore condiviso, non una
-        # PooledConnection acquisita dal pool.
-        Resource.release(self, resource)
+        connection = self._acquire_connection()
+        try:
+            return self.Producer(connection)
+        except BaseException:
+            connection.release()
+            raise

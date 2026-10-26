@@ -1,0 +1,50 @@
+Mon Oct 26 12:53:55 2026    /tmp/08b-beat.prof
+
+         22843942 function calls (22837627 primitive calls) in 7.995 seconds
+
+   Ordered by: cumulative time
+   List reduced from 711 to 40 due to restriction <40>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+     1381    0.010    0.000    7.997    0.006 beat.py:349(tick)
+     1380    0.748    0.001    6.904    0.005 beat.py:407(schedules_equal)
+  1380004    0.349    0.000    5.908    0.000 beat.py:198(__eq__)
+  1380004    2.307    0.000    5.559    0.000 beat.py:192(editable_fields_equal)
+   690000    1.263    0.000    1.563    0.000 schedules.py:750(__eq__)
+ 13825135    1.453    0.000    1.458    0.000 {built-in method builtins.getattr}
+     1381    0.004    0.000    0.869    0.001 bench-sends:28(counting_apply_entry)
+     1381    0.004    0.000    0.863    0.001 beat.py:291(apply_entry)
+     1381    0.008    0.000    0.856    0.001 beat.py:434(apply_async)
+     1381    0.004    0.000    0.831    0.001 beat.py:466(send_task)
+     1381    0.034    0.000    0.827    0.001 base.py:1032(send_task)
+     1381    0.012    0.000    0.553    0.000 amqp.py:544(send_task_message)
+     1381    0.007    0.000    0.539    0.000 _rs_producer.py:845(publish)
+2762/1381    0.006    0.000    0.518    0.000 _rs_producer.py:750(_ensure)
+2762/1381    0.001    0.000    0.511    0.000 _rs_producer.py:738(_call)
+     1381    0.002    0.000    0.510    0.000 _rs_producer.py:895(<lambda>)
+     1381    0.005    0.000    0.508    0.000 _rs_producer.py:801(_publish_native)
+     1381    0.486    0.000    0.486    0.000 {method 'publish' of '_celery_rs.Connection' objects}
+  1435758    0.260    0.000    0.260    0.000 {method 'get' of 'dict' objects}
+   690000    0.172    0.000    0.245    0.000 schedules.py:261(__eq__)
+   690000    0.161    0.000    0.229    0.000 schedules.py:176(__eq__)
+  2099783    0.220    0.000    0.226    0.000 {built-in method builtins.isinstance}
+     2381    0.002    0.000    0.107    0.000 beat.py:167(is_due)
+     9319    0.003    0.000    0.080    0.000 collections.py:107(__getattr__)
+     9517    0.036    0.000    0.078    0.000 collections.py:400(__getitem__)
+27625/26597    0.031    0.000    0.068    0.000 objects.py:36(__get__)
+     1381    0.013    0.000    0.068    0.000 amqp.py:358(as_task_v2)
+     1381    0.001    0.000    0.066    0.000 beat.py:309(is_due)
+     3762    0.011    0.000    0.066    0.000 beat.py:320(_when)
+     1000    0.005    0.000    0.055    0.000 schedules.py:711(is_due)
+        1    0.002    0.002    0.055    0.055 beat.py:330(populate_heap)
+     9524    0.007    0.000    0.052    0.000 schedules.py:142(now)
+     1381    0.005    0.000    0.050    0.000 schedules.py:209(is_due)
+     9524    0.011    0.000    0.044    0.000 base.py:1395(now)
+     5143    0.003    0.000    0.035    0.000 beat.py:136(default_now)
+     1381    0.002    0.000    0.035    0.000 schedules.py:203(remaining_estimate)
+27625/26597    0.014    0.000    0.033    0.000 functools.py:1010(__get__)
+     9517    0.015    0.000    0.033    0.000 collections.py:390(_to_keys)
+     2000    0.008    0.000    0.031    0.000 schedules.py:671(remaining_estimate)
+     4154    0.003    0.000    0.027    0.000 {built-in method builtins.next}
+
+

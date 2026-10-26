@@ -111,6 +111,22 @@ def diff_tree(ref, rs, path, diffs):
         diffs.append(('changed', path, ref, rs))
 
 
+#: Differenze di introspezione statica accettate dal proprietario del progetto, con il motivo.
+#: Il comportamento a runtime resta identico; il dump le riporta a parte senza contarle.
+ACCEPTED_API_DIFFS = {
+    'names.RedisBackend.members.connection_class_ssl':
+        'risolta al primo accesso nella vera classe di redis-py (evita +7,5 MB di redis-py '
+        'in ogni client e master che importa celery.backends.redis); vars(cls) vede il descrittore',
+    'names.SentinelBackend.members.connection_class_ssl':
+        'come RedisBackend.connection_class_ssl (classe Sentinel+TLS creata al primo accesso)',
+}
+
+
+def accepted(path):
+    return next((reason for prefix, reason in ACCEPTED_API_DIFFS.items()
+                 if path == prefix or path.startswith(prefix + '.')), None)
+
+
 def short(v):
     s = json.dumps(v, sort_keys=True, ensure_ascii=False)
     return s if len(s) <= 160 else s[:160] + '…'
@@ -134,6 +150,9 @@ def cmd_api(args):
             diffs.append(('missing', mod, 'module', s['import_error']))
         else:
             diff_tree(r, s, '', diffs)
+        report['accepted'] = report.get('accepted', []) + [
+            (mod, d, accepted(d[1])) for d in diffs if accepted(d[1])]
+        diffs = [d for d in diffs if not accepted(d[1])]
         report['modules'][mod] = diffs
         total += len(diffs)
     for section in ('settings', 'signals', 'cli'):
@@ -159,6 +178,11 @@ def cmd_api(args):
             lines.append(f'- **{kind}** `{p}`: ref={short(a)} rs={short(b)}')
         if len(diffs) > args.max_per_area:
             lines.append(f'- … altre {len(diffs) - args.max_per_area}')
+        lines.append('')
+    if report.get('accepted'):
+        lines.append('## Differenze accettate (non contate)')
+        for mod, (kind, p, a, b), reason in report['accepted']:
+            lines.append(f'- {mod} **{kind}** `{p}`: {reason}')
         lines.append('')
     (OUT / 'api-report.md').write_text('\n'.join(lines))
     (OUT / 'api-diff.json').write_text(json.dumps(report, indent=1, ensure_ascii=False))

@@ -2,8 +2,6 @@
 import sys
 import types
 
-from billiard.einfo import ExceptionInfo, ExceptionWithTraceback
-from kombu import serialization
 from kombu.exceptions import OperationalError
 from kombu.utils.uuid import uuid
 
@@ -719,6 +717,7 @@ class Task:
                     else:
                         serializer = app.conf.task_serializer
                 body = args, kwargs
+                from kombu import serialization
                 content_type, content_encoding, data = serialization.dumps(
                     body, serializer,
                 )
@@ -971,6 +970,7 @@ class Task:
         )
         ret = tracer(task_id, args, kwargs, request)
         retval = ret.retval
+        from billiard.einfo import ExceptionInfo, ExceptionWithTraceback
         if isinstance(retval, ExceptionInfo):
             retval, tb = retval.exception, retval.traceback
             if isinstance(retval, ExceptionWithTraceback):

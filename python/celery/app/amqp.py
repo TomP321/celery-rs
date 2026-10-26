@@ -4,10 +4,10 @@ from collections import namedtuple
 from collections.abc import Mapping
 from weakref import WeakValueDictionary
 
+from kombu import (Connection, Consumer, Exchange, Producer, Queue,
+                   pools)
 from kombu.utils.functional import maybe_list
 from kombu.utils.objects import cached_property
-
-from ._lazy_kombu import lazy_class
 
 from celery import signals
 from celery.utils.nodenames import anon_nodename
@@ -34,14 +34,10 @@ __all__ = ('AMQP', 'Queues', 'task_message')
 
 
 def _exchange_cls():
-    """``kombu.Exchange`` solo quando serve davvero."""
-    from kombu import Exchange
     return Exchange
 
 
 def _queue_cls():
-    """``kombu.Queue`` solo quando serve davvero."""
-    from kombu import Queue
     return Queue
 
 #: earliest date supported by time.mktime.
@@ -252,9 +248,9 @@ class Queues(dict):
 class AMQP:
     """App AMQP API: app.amqp."""
 
-    Connection = lazy_class('kombu.connection', 'Connection')
-    Consumer = lazy_class('kombu.messaging', 'Consumer')
-    Producer = lazy_class('kombu.messaging', 'Producer')
+    Connection = Connection
+    Consumer = Consumer
+    Producer = Producer
 
     #: compat alias to Connection
     BrokerConnection = Connection
@@ -534,7 +530,11 @@ class AMQP:
         send_task_sent = signals.task_sent.send   # XXX compat (remove 6.0)
         sent_receivers = signals.task_sent.receivers   # XXX compat (remove 6.0)
 
-        default_evd = self._event_dispatcher
+        def default_evd():
+            # Solo `task_send_sent_event` usa il dispatcher: crearlo sempre
+            # importa `celery.events` (e kombu.mixins) a ogni publish.
+            return self._event_dispatcher
+
         default_exchange = self.default_exchange
 
         default_rkey = self.app.conf.task_default_routing_key
@@ -632,7 +632,7 @@ class AMQP:
                         eta=body['eta'], taskset=body['taskset'],
                     )
             if sent_event:
-                evd = event_dispatcher or default_evd
+                evd = event_dispatcher or default_evd()
                 exname = exchange
                 if isinstance(exname, _exchange_cls()):
                     exname = exname.name
@@ -685,7 +685,6 @@ class AMQP:
                 self._producer_pool = _rs_producer.FastProducerPool(
                     connection, limit=_rs_producer.pool_limit(self.app))
             else:
-                from kombu import pools
                 self._producer_pool = pools.producers[
                     self.app.connection_for_write()]
                 self._producer_pool.limit = self.app.pool.limit

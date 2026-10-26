@@ -124,7 +124,7 @@ pub fn read_frame(reader: &mut impl Read) -> io::Result<Option<Frame>> {
     Ok(Some(Frame {
         kind,
         job: u64::from_be_bytes(job),
-        payload: Bytes::copy_from_slice(&body[9..]),
+        payload: Bytes::from(body).slice(META_LEN..),
     }))
 }
 
@@ -142,6 +142,21 @@ mod tests {
         assert_eq!(decoded.kind, FrameKind::Task);
         assert_eq!(decoded.job, 42);
         assert_eq!(&decoded.payload[..], b"ciao");
+        assert!(read_frame(&mut cursor).expect("io").is_none());
+    }
+
+    #[test]
+    fn large_payload_survives_following_frames() {
+        let payload = Bytes::from(vec![0xa5; 1024 * 1024]);
+        let mut encoded = Frame::new(FrameKind::Ready, 42, payload.clone()).encode();
+        encoded.extend_from_slice(&Frame::new(FrameKind::Ack, 43, Bytes::new()).encode());
+        let mut cursor = Cursor::new(&encoded[..]);
+        let first = read_frame(&mut cursor).expect("io").expect("frame");
+        let second = read_frame(&mut cursor).expect("io").expect("frame");
+        assert_eq!(first.payload, payload);
+        assert_eq!(first.job, 42);
+        assert_eq!(second.job, 43);
+        assert!(second.payload.is_empty());
         assert!(read_frame(&mut cursor).expect("io").is_none());
     }
 

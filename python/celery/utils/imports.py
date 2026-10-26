@@ -5,7 +5,6 @@ import warnings
 from contextlib import contextmanager
 from functools import lru_cache
 from importlib import import_module, reload
-from importlib.metadata import entry_points
 
 from kombu.utils.imports import symbol_by_name
 
@@ -140,6 +139,13 @@ def gen_task_name(app, name, module_name):
     if module_name == '__main__' and app.main:
         return '.'.join([app.main, name])
     return '.'.join(p for p in (module_name, name) if p)
+
+
+def entry_points(**kwargs):
+    # `importlib.metadata` (e con lui `email`/`zipfile`) si importa solo se
+    # qualcuno cerca davvero plugin esterni; il nome resta sostituibile nei test.
+    from importlib.metadata import entry_points as _entry_points
+    return _entry_points(**kwargs)
 
 
 @lru_cache(maxsize=None)

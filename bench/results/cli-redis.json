@@ -1,76 +1,76 @@
 {
  "broker": "redis",
- "runs": 10,
+ "runs": 5,
  "cases": {
   "status/ref": {
    "time_s": 1.4,
-   "rss_kb": 55368.0
+   "rss_kb": 55372
   },
   "status/rs": {
-   "time_s": 1.23,
-   "rss_kb": 41560.0
+   "time_s": 1.22,
+   "rss_kb": 38892
   },
   "help/ref": {
-   "time_s": 0.28,
-   "rss_kb": 45984.0
+   "time_s": 0.29,
+   "rss_kb": 45992
   },
   "call/ref": {
    "time_s": 0.39,
-   "rss_kb": 55798.0
+   "rss_kb": 55808
   },
   "help/rs": {
-   "time_s": 0.28,
-   "rss_kb": 45978.0
+   "time_s": 0.27,
+   "rss_kb": 43116
   },
   "call/rs": {
-   "time_s": 0.22,
-   "rss_kb": 41756.0
+   "time_s": 0.16,
+   "rss_kb": 30644
   },
   "result/ref": {
    "time_s": 0.38,
-   "rss_kb": 55318.0
+   "rss_kb": 55324
   },
   "purge/ref": {
    "time_s": 0.37,
-   "rss_kb": 55020.0
+   "rss_kb": 55216
   },
   "inspect-ping/ref": {
    "time_s": 1.4,
-   "rss_kb": 55366.0
+   "rss_kb": 55368
   },
   "inspect-ping-0.2/ref": {
-   "time_s": 0.6,
-   "rss_kb": 55370.0
+   "time_s": 0.59,
+   "rss_kb": 55368
   },
   "result/rs": {
-   "time_s": 0.21,
-   "rss_kb": 40120.0
+   "time_s": 0.15,
+   "rss_kb": 29472
   },
   "purge/rs": {
-   "time_s": 0.2,
-   "rss_kb": 38968.0
+   "time_s": 0.14,
+   "rss_kb": 28716
   },
   "inspect-ping/rs": {
-   "time_s": 1.2349999999999999,
-   "rss_kb": 41564.0
+   "time_s": 1.22,
+   "rss_kb": 38900
   },
   "inspect-ping-0.2/rs": {
-   "time_s": 0.43,
-   "rss_kb": 41468.0
+   "time_s": 0.42,
+   "rss_kb": 38900
   }
  },
  "control_probe": {
   "ref": {
    "n": 1000,
-   "p50_ms": 3.493452997645363,
-   "p99_ms": 4.2728830012492836,
-   "rss_kb": 44520
+   "p50_ms": 3.417161002289504,
+   "p99_ms": 4.396575997816399,
+   "rss_kb": 44728
   },
   "rs": {
    "n": 1000,
-   "p50_ms": 1.761109015205875,
-   "p99_ms": 2.659730991581455,
-   "rss_kb": 38524
+   "p50_ms": 1.7836109909694642,
+   "p99_ms": 2.9080979875288904,
+   "rss_kb": 35080
   }
  }
 }

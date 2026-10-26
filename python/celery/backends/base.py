@@ -15,9 +15,6 @@ from uuid import UUID
 from weakref import WeakValueDictionary
 
 from billiard.einfo import ExceptionInfo
-from kombu.compression import compress, decompress
-from kombu.compression import encoders as compression_encoders
-from kombu.compression import get_encoder as get_compression_encoder
 from kombu.serialization import dumps, loads, prepare_accept_content
 from kombu.serialization import registry as serializer_registry
 from kombu.utils.encoding import bytes_to_str, ensure_bytes
@@ -77,6 +74,17 @@ COMPRESSED_PAYLOAD_MAGIC = b'\x00celery-compressed\x00'
 
 logger = get_logger(__name__)
 
+
+def _compression():
+    """Modulo ``kombu.compression`` al primo uso.
+
+    Importarlo carica subito brotli e zstd (due moduli compilati): il backend
+    Rust comprime nel core, quindi servono solo se l'utente chiede davvero una
+    compressione dei risultati.
+    """
+    from kombu import compression
+    return compression
+
 MESSAGE_BUFFER_MAX = 8192
 
 pending_results_t = namedtuple('pending_results_t', (
@@ -125,7 +133,7 @@ def compress_payload(payload, compression):
         compression (str): Name of a method in the Kombu compression
             registry, for example ``'gzip'``.
     """
-    body, content_type = compress(payload, compression)
+    body, content_type = _compression().compress(payload, compression)
     return b''.join([
         COMPRESSED_PAYLOAD_MAGIC, content_type.encode('utf-8'), b'\x00', body,
     ])
@@ -147,7 +155,7 @@ def decompress_payload(payload):
         return payload
     content_type, _, body = payload[
         len(COMPRESSED_PAYLOAD_MAGIC):].partition(b'\x00')
-    return decompress(body, content_type.decode('utf-8'))
+    return _compression().decompress(body, content_type.decode('utf-8'))
 
 
 def unpickle_backend(cls, args, kwargs):
@@ -738,11 +746,11 @@ class Backend:
             )
             return None
         try:
-            get_compression_encoder(compression)
+            _compression().get_encoder(compression)
         except KeyError as e:
             raise ImproperlyConfigured(E_UNKNOWN_COMPRESSION.format(
                 compression,
-                ', '.join(sorted(compression_encoders())))) from e
+                ', '.join(sorted(_compression().encoders())))) from e
         return compression
 
     def prepare_expires(self, value, type=None):

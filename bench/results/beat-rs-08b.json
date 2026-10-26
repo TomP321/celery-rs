@@ -1,0 +1,41 @@
+{
+ "micro": {
+  "remaining_estimate_simple_ns": 3395.2777506783605,
+  "is_due_simple_ns": 7940.306649834384,
+  "remaining_estimate_mixed_ns": 3365.313600806985,
+  "is_due_mixed_ns": 7725.082700198982
+ },
+ "brokers": {
+  "redis": {
+   "pss_3_kb": 33065,
+   "pss_1000_kb": 43722,
+   "tick": {
+    "tick_us": 1140.0043405,
+    "tick_wall_us": 1140.0858459965093,
+    "entries": 1000
+   },
+   "sends": {
+    "sends": 1392,
+    "seconds": 3.0002779779897537,
+    "sends_s": 463.9570100543377,
+    "cpu_sends_s": 532.800863989881
+   }
+  },
+  "amqp": {
+   "pss_3_kb": 33162,
+   "pss_1000_kb": 44100,
+   "tick": {
+    "tick_us": 1155.7358925,
+    "tick_wall_us": 1155.8831820002524,
+    "entries": 1000
+   },
+   "sends": {
+    "sends": 1532,
+    "seconds": 3.0021745459816884,
+    "sends_s": 510.2967787301146,
+    "cpu_sends_s": 515.9578901601105
+   }
+  }
+ },
+ "label": "rs-08b"
+}

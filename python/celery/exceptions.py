@@ -53,10 +53,87 @@ Error Hierarchy
 """
 
 import numbers
+import os
+import threading
+from typing import TYPE_CHECKING
 
-from billiard.exceptions import SoftTimeLimitExceeded, Terminated, TimeLimitExceeded, WorkerLostError
+
+#: Nomi pubblici che il riferimento importa da billiard/click/kombu: restano
+#: gli stessi oggetti, risolti al primo accesso (importare billiard e click
+#: nel processo client costa multiprocessing, subprocess e zipfile).
+_LAZY_EXPORTS = {
+    'OperationalError': ('kombu.exceptions', 'OperationalError'),
+    'SoftTimeLimitExceeded': ('billiard.exceptions', 'SoftTimeLimitExceeded'),
+    'Terminated': ('billiard.exceptions', 'Terminated'),
+    'TimeLimitExceeded': ('billiard.exceptions', 'TimeLimitExceeded'),
+    'WorkerLostError': ('billiard.exceptions', 'WorkerLostError'),
+}
+
+
+_COMMAND_EXCEPTION_LOCK = threading.RLock()
+
+
+def _command_after_fork():
+    global _COMMAND_EXCEPTION_LOCK
+    # Il thread che possedeva il lock potrebbe non esistere nel figlio.
+    _COMMAND_EXCEPTION_LOCK = threading.RLock()
+
+
+if hasattr(os, 'register_at_fork'):
+    os.register_at_fork(after_in_child=_command_after_fork)
+
+
+def _celery_command_exception():
+    # Eseguita nel namespace del modulo: nome e pickle restano quelli veri,
+    # senza importare click finché non viene richiesta l'eccezione della CLI.
+    with _COMMAND_EXCEPTION_LOCK:
+        if 'CeleryCommandException' not in globals():
+            exec(compile(_COMMAND_EXCEPTION, __file__, 'exec'), globals())
+        return globals()['CeleryCommandException']
+
+
+_COMMAND_EXCEPTION = """
 from click import ClickException
-from kombu.exceptions import OperationalError
+
+class CeleryCommandException(ClickException):
+    '''A general command exception which stores an exit code.'''
+
+    def __init__(self, message, exit_code):
+        super().__init__(message=message)
+        self.exit_code = exit_code
+"""
+
+
+if TYPE_CHECKING:  # nomi risolti da __getattr__, per pyflakes
+    from billiard.exceptions import (SoftTimeLimitExceeded,  # noqa: F401
+                                     Terminated, TimeLimitExceeded,
+                                     WorkerLostError)
+    from click import ClickException  # noqa: F401
+    from kombu.exceptions import OperationalError  # noqa: F401
+
+    class CeleryCommandException(ClickException):
+        exit_code: int
+
+
+def __getattr__(name):
+    if name == 'CeleryCommandException':
+        value = _celery_command_exception()
+        globals()[name] = value
+        return value
+    try:
+        module, attr = _LAZY_EXPORTS[name]
+    except KeyError:
+        raise AttributeError(
+            f'module {__name__!r} has no attribute {name!r}') from None
+    from importlib import import_module
+    value = getattr(import_module(module), attr)
+    globals()[name] = value
+    return value
+
+
+def __dir__():
+    return sorted(set(globals()) | set(_LAZY_EXPORTS) |
+                  {'CeleryCommandException'})
 
 __all__ = (
     'reraise',
@@ -310,9 +387,3 @@ class BackendStoreError(BackendError):
         return super().__repr__() + " state:" + self.state + " task_id:" + self.task_id
 
 
-class CeleryCommandException(ClickException):
-    """A general command exception which stores an exit code."""
-
-    def __init__(self, message, exit_code):
-        super().__init__(message=message)
-        self.exit_code = exit_code

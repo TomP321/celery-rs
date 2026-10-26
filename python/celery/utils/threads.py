@@ -11,18 +11,32 @@ from threading import TIMEOUT_MAX as THREAD_TIMEOUT_MAX
 from celery.local import Proxy
 
 try:
-    from greenlet import getcurrent as get_ident
-except ImportError:
+    from _thread import get_ident as _get_ident
+except ImportError:  # pragma: no cover
+    from dummy_thread import get_ident as _get_ident
+
+
+def __getattr__(name):
+    # `get_ident` pubblico è quello del riferimento (`greenlet.getcurrent` se
+    # installato), risolto al primo accesso: il client non paga greenlet.
+    if name != 'get_ident':
+        raise AttributeError(
+            f'module {__name__!r} has no attribute {name!r}')
     try:
-        from _thread import get_ident
+        from greenlet import getcurrent as value
     except ImportError:
-        try:
-            from thread import get_ident
-        except ImportError:
-            try:
-                from _dummy_thread import get_ident
-            except ImportError:
-                from dummy_thread import get_ident
+        value = _get_ident
+    globals()[name] = value
+    return value
+
+
+def __dir__():
+    return sorted(set(globals()) | {'get_ident'})
+
+
+if False:  # solo per pyflakes: il nome vero arriva da __getattr__
+    from greenlet import getcurrent as get_ident
+    _FOR_PYFLAKES = (get_ident,)
 
 
 __all__ = (
@@ -174,7 +188,7 @@ class Local:
 
     def __init__(self):
         object.__setattr__(self, '__storage__', {})
-        object.__setattr__(self, '__ident_func__', get_ident)
+        object.__setattr__(self, '__ident_func__', _get_ident)
 
     def __iter__(self):
         return iter(self.__storage__.items())
@@ -334,7 +348,7 @@ class LocalManager:
             for local in self.locals:
                 object.__setattr__(local, '__ident_func__', ident_func)
         else:
-            self.ident_func = get_ident
+            self.ident_func = _get_ident
 
     def get_ident(self):
         """Return context identifier.

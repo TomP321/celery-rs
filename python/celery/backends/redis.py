@@ -1,6 +1,7 @@
 """Redis result store backend."""
 import importlib
 import importlib.util
+import os
 import select
 import selectors
 import sys
@@ -10,11 +11,12 @@ import types
 import warnings
 from contextlib import contextmanager
 from functools import partial
+from itertools import count
 from ssl import CERT_NONE, CERT_OPTIONAL, CERT_REQUIRED
 from urllib.parse import unquote
 
 from kombu.utils import symbol_by_name
-from kombu.utils.functional import retry_over_time
+from kombu.utils.functional import fxrange
 from kombu.utils.objects import cached_property
 from kombu.utils.url import _parse_url, maybe_sanitize_url
 
@@ -30,6 +32,76 @@ from celery.utils.time import humanize_seconds
 
 from .asynchronous import AsyncBackendMixin, BaseResultConsumer
 from .base import BaseKeyValueStoreBackend
+
+__all__ = ('RedisBackend', 'SentinelBackend')
+
+
+class LazyErrors:
+    """Tupla di errori di connessione risolta al primo errore."""
+
+    __slots__ = ('_factory',)
+
+    def __init__(self, factory):
+        self._factory = factory
+
+    def resolve(self):
+        return self._factory()
+
+    def __eq__(self, other):
+        try:
+            return self.resolve() == other
+        except Exception:  # pragma: no cover - risoluzione impossibile
+            return NotImplemented
+
+    def __ne__(self, other):
+        result = self.__eq__(other)
+        return result if result is NotImplemented else not result
+
+
+def retry_over_time(fun, catch, args=None, kwargs=None, errback=None,
+                     max_retries=None, interval_start=2, interval_step=2,
+                     interval_max=30, callback=None, timeout=None,
+                     sleep=time.sleep, now=time.time):
+    """``kombu.utils.functional.retry_over_time`` con ``catch`` pigro.
+
+    Identica semantica (stessi intervalli, stesso errback), ma ``catch`` può
+    essere un :class:`LazyErrors`: la tupla vera si risolve solo quando
+    un'eccezione viene davvero alzata.
+    """
+    kwargs = {} if not kwargs else kwargs
+    args = [] if not args else args
+    interval_range = (
+        min(value, float(interval_max))
+        for value in fxrange(
+            interval_start,
+            interval_max + interval_start,
+            interval_step,
+            repeatlast=True,
+        )
+    )
+    end = now() + timeout if timeout else None
+    for retries in count():
+        try:
+            return fun(*args, **kwargs)
+        except BaseException as exc:
+            errors = catch.resolve() if isinstance(catch, LazyErrors) else catch
+            if not isinstance(exc, errors):
+                raise
+            if max_retries is not None and retries >= max_retries:
+                raise
+            if end and now() > end:
+                raise
+            if callback:
+                callback()
+            tts = float(errback(exc, interval_range, retries) if errback
+                        else next(interval_range))
+            tts = min(tts, float(interval_max))
+            if tts:
+                for _ in range(int(tts)):
+                    if callback:
+                        callback()
+                    sleep(1.0)
+                sleep(abs(int(tts) - tts))
 
 logger = get_logger(__name__)
 
@@ -50,92 +122,74 @@ def _lazy_module(name):
     return type('module', (types.ModuleType,), {'__getattr__': __getattr__})(name)
 
 
-class _LazyClassMeta(type):
-    """Metaclasse di una classe segnaposto risolta al primo uso."""
-
-    def __new__(mcs, name, bases, namespace, **kwargs):
-        if '_resolver' in namespace:
-            return super().__new__(mcs, name, bases, namespace)
-        # Sottoclasse di un segnaposto (`class X(SentinelManagedSSLConnection)`):
-        # si deriva dalla classe vera, altrimenti `X()` creerebbe la base.
-        bases = tuple(b._resolver() if isinstance(b, _LazyClassMeta) else b
-                      for b in bases)
-        return types.new_class(name, bases, kwargs,
-                               lambda ns: ns.update(namespace))
-
-    def __call__(cls, *args, **kwargs):
-        return cls._resolver()(*args, **kwargs)
-
-    def __instancecheck__(cls, instance):
-        return isinstance(instance, cls._resolver())
-
-    def __subclasscheck__(cls, subclass):
-        return issubclass(subclass, cls._resolver())
-
-    def __getattr__(cls, name):
-        if name.startswith('_'):
-            raise AttributeError(name)
-        return getattr(cls._resolver(), name)
+_SSL_CLASS_LOCK = threading.RLock()
 
 
-def _lazy_class(module, qualname, resolver):
-    """Classe segnaposto con ``__module__``/``__qualname__`` della classe vera."""
-    return _LazyClassMeta(qualname, (), {
-        '__module__': module,
-        '__qualname__': qualname,
-        '_resolver': staticmethod(resolver),
-    })
+def _ssl_after_fork():
+    global _SSL_CLASS_LOCK
+    # Il thread che possedeva il lock potrebbe non esistere nel figlio.
+    _SSL_CLASS_LOCK = threading.RLock()
 
 
-def _ssl_connection_class():
-    import redis
-    return redis.SSLConnection
+if hasattr(os, 'register_at_fork'):
+    os.register_at_fork(after_in_child=_ssl_after_fork)
 
 
 def _sentinel_ssl_connection_class():
-    import redis
-    SentinelManagedConnection = redis.sentinel.SentinelManagedConnection
+    with _SSL_CLASS_LOCK:
+        return _load_sentinel_ssl_connection_class()
 
-    class SentinelManagedSSLConnection(
-            SentinelManagedConnection, redis.SSLConnection):
-        """Connect to a Redis server using Sentinel + TLS.
+
+def _load_sentinel_ssl_connection_class():
+    if 'SentinelManagedSSLConnection' not in globals():
+        # Definizione nel namespace reale, senza classi segnaposto né nomi riscritti.
+        exec(compile(_SENTINEL_SSL_CLASS, __file__, 'exec'), globals())
+    return globals()['SentinelManagedSSLConnection']
+
+
+_SENTINEL_SSL_CLASS = """
+from redis.sentinel import SentinelManagedConnection
+from redis import SSLConnection
+
+class SentinelManagedSSLConnection(SentinelManagedConnection, SSLConnection):
+    '''Connect to a Redis server using Sentinel + TLS.
 
         Use Sentinel to identify which Redis server is the current master
         to connect to and when connecting to the Master server, use an
         SSL Connection.
-        """
-
-    # Definita dentro una funzione: senza questo l'origine sarebbe
-    # ``..._sentinel_ssl_connection_class.<locals>...`` (``compat api``).
-    SentinelManagedSSLConnection.__module__ = __name__
-    SentinelManagedSSLConnection.__qualname__ = 'SentinelManagedSSLConnection'
-    return SentinelManagedSSLConnection
+        '''
+"""
 
 
-#: Moduli e classi del client: se redis-py è già importato (test, app che lo
-#: usa) si usano gli oggetti veri; altrimenti segnaposto risolti al primo uso,
-#: così il percorso Rust non carica redis-py all'avvio.
-if 'redis' in sys.modules:
-    redis = sys.modules['redis']
-    try:
-        _sentinel = redis.sentinel
-    except AttributeError:  # pragma: no cover - redis.sentinel sempre presente
-        _sentinel = _lazy_module('redis.sentinel')
-    _SSLConnection = redis.SSLConnection
-    try:
-        SentinelManagedSSLConnection = _sentinel_ssl_connection_class()
-    except (AttributeError, ImportError):  # pragma: no cover
-        SentinelManagedSSLConnection = _lazy_class(
-            __name__, 'SentinelManagedSSLConnection',
-            _sentinel_ssl_connection_class)
-else:
-    redis = _lazy_module('redis')
-    _sentinel = _lazy_module('redis.sentinel')
-    _SSLConnection = _lazy_class('redis.connection', 'SSLConnection',
-                                 _ssl_connection_class)
-    SentinelManagedSSLConnection = _lazy_class(
-        __name__, 'SentinelManagedSSLConnection',
-        _sentinel_ssl_connection_class)
+class _RedisSSLClass:
+    """Risolve la classe reale soltanto se viene richiesta una connessione TLS."""
+
+    def __init__(self, sentinel=False):
+        self.sentinel = sentinel
+
+    def __get__(self, instance, owner):
+        if self.sentinel:
+            value = _sentinel_ssl_connection_class()
+            owner.connection_class_ssl = value
+            return value
+        value = importlib.import_module('redis').SSLConnection
+        owner.connection_class_ssl = value
+        return value
+
+
+def __getattr__(name):
+    if name == 'SentinelManagedSSLConnection':
+        return _sentinel_ssl_connection_class()
+    if name == '_SSLConnection':
+        return importlib.import_module('redis').SSLConnection
+    raise AttributeError(f'module {__name__!r} has no attribute {name!r}')
+
+
+def __dir__():
+    return sorted(set(globals()) | {'SentinelManagedSSLConnection', '_SSLConnection'})
+
+redis = sys.modules.get('redis') or _lazy_module('redis')
+_sentinel = sys.modules.get('redis.sentinel') or _lazy_module('redis.sentinel')
 
 
 def _redis_installed():
@@ -151,13 +205,11 @@ def _get_redis_error_classes():
 
 
 def _is_ssl_class(cls):
-    """True per ``redis.SSLConnection`` o i segnaposto (senza import)."""
-    return cls in (_SSLConnection, SentinelManagedSSLConnection) or (
-        getattr(cls, '__name__', '') == 'SSLConnection' and
-        str(getattr(cls, '__module__', '')).startswith('redis'))
+    """Controlla le classi reali senza caricare redis-py per backend non TLS."""
+    module = sys.modules.get('redis')
+    return module is not None and issubclass(cls, module.SSLConnection)
 
 
-__all__ = ('RedisBackend', 'SentinelBackend')
 
 E_REDIS_MISSING = """
 You need to install the redis library in order to use \
@@ -515,7 +567,8 @@ class RedisBackend(BaseKeyValueStoreBackend, AsyncBackendMixin):
 
     #: :pypi:`redis` client module (lazy: il client Rust non lo carica).
     redis = redis
-    connection_class_ssl = _SSLConnection
+    connection_class_ssl = (redis.SSLConnection if 'redis' in sys.modules
+                            else _RedisSSLClass())
 
     #: Maximum number of connections in the pool.
     max_connections = None
@@ -860,8 +913,10 @@ class RedisBackend(BaseKeyValueStoreBackend, AsyncBackendMixin):
     def ensure(self, fun, args, **policy):
         retry_policy = dict(self.retry_policy, **policy)
         max_retries = retry_policy.get('max_retries')
+        # `connection_errors` importa `kombu.transport.redis` (e redis-py): sul
+        # percorso felice, dove il client è quello Rust, non serve.
         return retry_over_time(
-            fun, self.connection_errors, args, {},
+            fun, LazyErrors(lambda: self.connection_errors), args, {},
             partial(self.on_connection_error, max_retries),
             **retry_policy)
 
@@ -1103,11 +1158,6 @@ class RedisBackend(BaseKeyValueStoreBackend, AsyncBackendMixin):
             args, dict(kwargs, expires=self.expires, url=self.url))
 
 
-#: ``SentinelManagedSSLConnection`` è un segnaposto (`_lazy_class`) che
-#: definisce le basi vere al primo uso: a import del modulo non serve
-#: caricare redis-py.
-
-
 class SentinelBackend(RedisBackend):
     """Redis sentinel task result store."""
 
@@ -1115,7 +1165,9 @@ class SentinelBackend(RedisBackend):
     _SERVER_URI_SEPARATOR = ";"
 
     sentinel = _sentinel
-    connection_class_ssl = SentinelManagedSSLConnection
+    connection_class_ssl = (_sentinel_ssl_connection_class()
+                            if 'redis' in sys.modules
+                            else _RedisSSLClass(sentinel=True))
 
     def __init__(self, *args, **kwargs):
         if self.sentinel is None:

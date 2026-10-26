@@ -9,6 +9,7 @@ callback ed eccezioni con billiard.
 
 from __future__ import annotations
 
+import gc
 import json
 import os
 import signal
@@ -405,7 +406,8 @@ def test_grow_shrink_and_info():
 
 def test_info_writes_shape():
     with Driver('rust', concurrency=2) as driver:
-        jobs = [driver.submit(add, (index, 0)) for index in range(3)]
+        for index in range(3):
+            driver.submit(add, (index, 0))
         driver.wait()
         writes = driver.pool.info['writes']
         assert set(writes) == {'total', 'avg', 'all', 'raw', 'strategy', 'inqueues'}
@@ -497,3 +499,27 @@ def test_pss_and_throughput_vs_prefork():
     # processo in più nel conteggio PSS: i numeri sono riportati, non un gate).
     assert rust['pss_idle_kb'] < prefork['pss_idle_kb'] * 2
     assert rust['pss_loaded_kb'] < prefork['pss_loaded_kb'] * 2
+
+
+@app.task
+def gc_configuration():
+    return [gc.isenabled(), list(gc.get_threshold())]
+
+
+@pytest.mark.parametrize('enabled', [False, True])
+def test_zygote_preserves_user_gc_configuration(enabled):
+    previous_enabled = gc.isenabled()
+    previous_thresholds = gc.get_threshold()
+    thresholds = (701, 11, 13)
+    try:
+        gc.set_threshold(*thresholds)
+        (gc.enable if enabled else gc.disable)()
+        with Driver('rust', concurrency=1) as driver:
+            assert gc.isenabled() is enabled
+            assert gc.get_threshold() == thresholds
+            request, _, _, _ = driver.submit(gc_configuration)
+            driver.wait()
+            assert driver.value(request) == [enabled, list(thresholds)]
+    finally:
+        gc.set_threshold(*previous_thresholds)
+        (gc.enable if previous_enabled else gc.disable)()

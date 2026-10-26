@@ -14,8 +14,6 @@ from datetime import datetime
 from datetime import timezone as datetime_timezone
 from operator import attrgetter
 
-from click.exceptions import Exit
-from dateutil.parser import isoparse
 from kombu.clocks import LamportClock
 from kombu.utils.objects import cached_property
 from kombu.utils.uuid import uuid
@@ -619,6 +617,7 @@ class Celery:
         if argv is None:
             argv = sys.argv
 
+        from click.exceptions import Exit
         try:
             celery.main(args=argv, standalone_mode=False)
         except Exit as e:
@@ -1136,6 +1135,7 @@ class Celery:
                 if exchange_type != 'direct':
                     if eta:
                         if isinstance(eta, str):
+                            from dateutil.parser import isoparse
                             eta = isoparse(eta)
                         countdown = subtract_datetimes(eta, self.now()).total_seconds()
 
@@ -1166,6 +1166,7 @@ class Celery:
             if isinstance(expires, datetime):
                 expires_s = subtract_datetimes(expires, self.now()).total_seconds()
             elif isinstance(expires, str):
+                from dateutil.parser import isoparse
                 expires_s = subtract_datetimes(isoparse(expires), self.now()).total_seconds()
             else:
                 expires_s = expires
