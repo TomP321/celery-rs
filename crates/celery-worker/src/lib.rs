@@ -1,6 +1,7 @@
 //! Worker master: consumer, pool supervisor, control, eventi (vedi PLAN.md, fase 5).
 
 pub mod consumer;
+pub mod mailbox;
 pub mod pool;
 pub mod wake;
 

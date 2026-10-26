@@ -5,13 +5,13 @@ import os
 import socket
 from functools import partial
 
-from kombu.entity import Exchange, Queue
-
 from .functional import memoize
 from .text import simple_format
 
-#: Exchange for worker direct queues.
-WORKER_DIRECT_EXCHANGE = Exchange('C.dq2')
+#: Nome dell'exchange delle worker direct queues (l'oggetto `kombu.Exchange`
+#: si crea al primo uso: importare `kombu.entity` caricherebbe anche
+#: `kombu.connection` nel master del worker).
+WORKER_DIRECT_EXCHANGE_NAME = 'C.dq2'
 
 #: Format for worker direct queue names.
 WORKER_DIRECT_QUEUE_FORMAT = '{hostname}.dq2'
@@ -35,6 +35,14 @@ __all__ = (
 )
 
 
+def __getattr__(name):
+    """``WORKER_DIRECT_EXCHANGE`` creato al primo accesso (PEP 562)."""
+    if name == 'WORKER_DIRECT_EXCHANGE':
+        from kombu.entity import Exchange
+        return Exchange(WORKER_DIRECT_EXCHANGE_NAME)
+    raise AttributeError(name)
+
+
 def worker_direct(hostname: str | Queue) -> Queue:
     """Return the :class:`kombu.Queue` being a direct route to a worker.
 
@@ -44,11 +52,12 @@ def worker_direct(hostname: str | Queue) -> Queue:
             :class:`kombu.Queue` instance it will simply return
             that instead.
     """
+    from kombu.entity import Exchange, Queue
     if isinstance(hostname, Queue):
         return hostname
     return Queue(
         WORKER_DIRECT_QUEUE_FORMAT.format(hostname=hostname),
-        WORKER_DIRECT_EXCHANGE,
+        Exchange(WORKER_DIRECT_EXCHANGE_NAME),
         hostname,
     )
 

@@ -16,11 +16,9 @@ from operator import attrgetter
 
 from click.exceptions import Exit
 from dateutil.parser import isoparse
-from kombu import Exchange, pools
 from kombu.clocks import LamportClock
 from kombu.common import oid_from
 from kombu.exceptions import LimitExceeded
-from kombu.transport.native_delayed_delivery import calculate_routing_key
 from kombu.utils.compat import register_after_fork
 from kombu.utils.objects import cached_property
 from kombu.utils.uuid import uuid
@@ -1145,6 +1143,9 @@ class Celery:
 
                     if countdown:
                         if countdown > 0:
+                            from kombu.transport.native_delayed_delivery import (
+                                calculate_routing_key,
+                            )
                             routing_key = calculate_routing_key(int(countdown), routing_key)
                             exchange = Exchange(
                                 'celery_delayed_27',
@@ -1697,6 +1698,7 @@ class Celery:
             This attribute is not related to the workers concurrency pool.
         """
         if self._pool is None:
+            from kombu import pools
             self._ensure_after_fork()
             limit = self.conf.broker_pool_limit
             pools.set_limit(limit)

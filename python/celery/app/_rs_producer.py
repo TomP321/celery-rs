@@ -31,11 +31,11 @@ from kombu.pools import ProducerPool, connections as connection_pools
 from kombu.pools import set_limit
 from kombu.resource import Resource
 from kombu.serialization import dumps
-from kombu.transport import TRANSPORT_ALIASES
-from kombu.transport.base import to_rabbitmq_queue_arguments
 from kombu.utils.functional import dictfilter
 from kombu.utils.json import JSONEncoder
 from kombu.utils.url import as_url, parse_url
+
+from celery.utils.queue_arguments import to_rabbitmq_queue_arguments
 
 try:  # il pacchetto completo lo installa sempre; il riferimento no.
     import _celery_rs
@@ -120,8 +120,14 @@ def _scheme_is_fast(scheme):
     scheme = scheme.lower()
     if scheme not in _DEFAULT_ALIASES:
         return False
-    # Nessun import: il valore di default è una stringa.
-    return TRANSPORT_ALIASES.get(scheme) == _DEFAULT_ALIASES[scheme]
+    # Nessun import: il valore di default è una stringa. Se `kombu.transport`
+    # non è ancora stato importato nessun alias custom può essere registrato;
+    # altrimenti si confronta la tabella (il pacchetto è già in memoria).
+    import sys
+    transport = sys.modules.get('kombu.transport')
+    if transport is None:
+        return True
+    return transport.TRANSPORT_ALIASES.get(scheme) == _DEFAULT_ALIASES[scheme]
 
 
 def driver_type_of(connection):
@@ -185,6 +191,21 @@ class FastConnection(KombuConnection):
     def driver_type(self):
         """``transport.driver_type`` senza importare il trasporto."""
         return _SCHEMES[(self.transport_cls or '').lower()]
+
+    @property
+    def connection_errors(self):
+        """Gli errori che il percorso Rust può sollevare, senza trasporto kombu.
+
+        Il riferimento ottiene la tupla da ``Transport.connection_errors``
+        (che importa redis-py/py-amqp); per ``ignore_errors`` e per il loop
+        bastano le classi comuni, e ``OperationalError`` resta quella del
+        riferimento.
+        """
+        return (ConnectionError, OSError, kombu_exceptions.OperationalError)
+
+    @property
+    def channel_errors(self):
+        return (kombu_exceptions.OperationalError,)
 
     def as_uri(self, include_password=False, mask='**', getfields=None):
         """Come ``Connection.as_uri`` senza `self.transport` (nessun import)."""

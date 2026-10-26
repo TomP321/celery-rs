@@ -63,6 +63,30 @@ app.conf.update(
 _CHILD_LIFECYCLE = os.environ.get('CELERY_RS_TEST_CHILD_LIFECYCLE')
 #: File in cui il master annota worker_ready/worker_shutting_down.
 _WORKER_LIFECYCLE = os.environ.get('CELERY_RS_TEST_WORKER_LIFECYCLE')
+#: File in cui il probe del gossip annota join/leave/lost (test della spec 08a).
+_GOSSIP_LOG = os.environ.get('CELERY_RS_TEST_GOSSIP_LOG')
+
+
+if _GOSSIP_LOG:
+    from celery import bootsteps
+
+    def _record_gossip(kind, hostname):
+        with open(_GOSSIP_LOG, 'a', encoding='utf-8') as handle:
+            handle.write(f'{kind} {hostname}\n')
+
+    class _GossipProbe(bootsteps.StartStopStep):
+        """Registra gli handler ``on.node_*`` del bootstep Gossip."""
+
+        requires = ('celery.worker.consumer.gossip:Gossip',)
+
+        def start(self, c):
+            gossip = c.gossip
+            for kind in ('node_join', 'node_leave', 'node_lost'):
+                getattr(gossip.on, kind).add(
+                    lambda worker, kind=kind: _record_gossip(
+                        kind, worker.hostname))
+
+    app.steps['consumer'].add(_GossipProbe)
 
 
 if _CHILD_LIFECYCLE:
@@ -91,6 +115,20 @@ if _WORKER_LIFECYCLE:
     @signals.worker_shutting_down.connect(weak=False)
     def _worker_shutting_down(**_kwargs):
         _record_worker('shutting_down')
+
+
+#: File in cui il master scrive i moduli importati (test della spec 08a).
+_MASTER_MODULES = os.environ.get('CELERY_RS_TEST_MASTER_MODULES')
+
+if _MASTER_MODULES:
+    import json
+    import sys
+
+    @signals.worker_ready.connect(weak=False)
+    def _dump_master_modules(**_kwargs):
+        with open(_MASTER_MODULES, 'w', encoding='utf-8') as handle:
+            json.dump({'pid': os.getpid(), 'modules': sorted(sys.modules)},
+                      handle)
 
 
 

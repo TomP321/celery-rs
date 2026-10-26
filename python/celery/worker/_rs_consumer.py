@@ -28,7 +28,7 @@ from types import SimpleNamespace
 
 from kombu.exceptions import OperationalError
 from kombu.serialization import prepare_accept_content
-from kombu.transport.base import to_rabbitmq_queue_arguments
+from celery.utils.queue_arguments import to_rabbitmq_queue_arguments
 
 from celery._rs_message import RsMessage
 from celery.app import _rs_producer
@@ -160,7 +160,12 @@ def use_rs_pool(worker):
     if getattr(worker, 'pool_cls', None) is not PreforkPool:
         return False
     try:
-        return transport_is_eligible(worker.app.connection_for_read())
+        from celery.app import _rs_producer
+        connection = (
+            _rs_producer.fast_connection(
+                worker.app, worker.app.conf.broker_read_url)
+            or worker.app.connection_for_read())
+        return transport_is_eligible(connection)
     except Exception:  # configurazione non valida: si resta sul riferimento
         return False
 
@@ -197,17 +202,15 @@ class RsTransport:
 class _RsChannel:
     """Canale presentato al codice Python che chiede un canale kombu.
 
-    Solo ``basic_qos`` è gestito dal consumer Rust; tutto il resto (pidbox,
-    mingle, gossip) delega a *un* canale kombu vero. Il canale è quello scelto
-    da :meth:`RsConnection.channel` / :meth:`RsConnection.default_channel`:
-    pidbox e gossip hanno canali distinti, come nel riferimento, così la
-    manutenzione periodica delle binding (che kombu tiene per canale) produce
-    lo stesso traffico.
+    Solo ``basic_qos`` è gestito dal consumer Rust; il canale kombu viene
+    aperto alla prima operazione che lo richiede davvero (pidbox/gossip hanno
+    il loro consumer Rust). Sul percorso caldo nessuno lo tocca: il master non
+    importa il trasporto kombu.
     """
 
     __slots__ = ('_rs', '_channel')
 
-    def __init__(self, rs, channel):
+    def __init__(self, rs, channel=None):
         self._rs = rs
         self._channel = channel
 
@@ -215,8 +218,11 @@ class _RsChannel:
         self._rs.set_default_prefetch(prefetch_count)
 
     def __getattr__(self, name):
-        # `channel.connection.client` deve esistere per il Consumer di kombu.
-        return getattr(self._channel, name)
+        channel = self._channel
+        if channel is None:
+            channel = self._rs.kombu_connection().default_channel
+            self._channel = channel
+        return getattr(channel, name)
 
 
 class RsConnection:
@@ -242,6 +248,7 @@ class RsConnection:
         self._waker = waker or _celery_rs.Waker()
         self._default_prefetch = 0
         self._hub = None
+        self._aux = []
         self._kombu_open = False
         self._closed = False
         # `bound_open_broker_sockets` legge l'attributo privato.
@@ -328,18 +335,41 @@ class RsConnection:
     @property
     def default_channel(self):
         # Il consumer dei task resta su Rust: il canale serve solo a
-        # basic_qos (prefetch Rust) e a mingle (coda di risposta), come il
-        # default_channel della connessione del riferimento.
-        return _RsChannel(self, self.kombu_connection().default_channel)
+        # basic_qos (prefetch Rust); qualunque altra operazione apre il canale
+        # kombu al primo uso.
+        return _RsChannel(self)
 
     def channel(self):
         """Nuovo canale kombu, come ``kombu.Connection.channel``.
 
-        Pidbox e gossip ne chiedono uno ciascuno: canali distinti tengono la
-        manutenzione delle binding per canale, con lo stesso traffico del
-        worker di riferimento.
+        Solo il percorso del riferimento (``CELERY_RS_WORKER=0``) lo usa
+        davvero: pidbox e gossip hanno il loro consumer Rust.
         """
         return _RsChannel(self, self.kombu_connection().channel())
+
+    # --------------------------------------------------------- consumer ausiliari
+
+    def new_worker(self):
+        """Un ``WorkerConsumer`` Rust sulla stessa connessione (pidbox/gossip)."""
+        return _celery_rs.WorkerConsumer(
+            self._url, self._waker, self._options,
+            retry_policy={'enabled': False})
+
+    def register_aux(self, consumer):
+        """Registra un consumer ausiliario drenato dal loop del master."""
+        if consumer not in self._aux:
+            self._aux.append(consumer)
+
+    def unregister_aux(self, consumer):
+        try:
+            self._aux.remove(consumer)
+        except ValueError:
+            pass
+
+    def drain_aux(self):
+        """Consegna gli handler i messaggi pronti di pidbox/gossip."""
+        for consumer in tuple(self._aux):
+            consumer.drain()
 
     def set_default_prefetch(self, prefetch_count):
         logger.debug('RsConnection: prefetch iniziale %s (worker=%r)',
@@ -612,7 +642,13 @@ class RsTaskConsumer:
 
 def connection(consumer, heartbeat=None):
     """``RsConnection`` per *consumer*, o ``None`` se il trasporto non è idoneo."""
-    conninfo = consumer.app.connection_for_read(heartbeat=heartbeat)
+    from celery.app import _rs_producer
+    # Il descrittore della connessione non deve importare il trasporto kombu:
+    # servono solo URL, opzioni e classi di errore.
+    conninfo = (
+        _rs_producer.fast_connection(
+            consumer.app, consumer.app.conf.broker_read_url)
+        or consumer.app.connection_for_read(heartbeat=heartbeat))
     if not transport_is_eligible(conninfo):
         return None
     url = _rs_producer._broker_url(conninfo)
@@ -820,6 +856,12 @@ def rsloop(obj, connection, consumer, blueprint, hub, qos, heartbeat, clock,
             # Eventi del pool (ack, risultati, timeout, figli persi) prima
             # delle consegne: i callback possono accodare ack sull'hub.
             _run_pool_ready(obj, hub)
+
+            # Pidbox e gossip: i loro consumer Rust condividono il Waker, quindi
+            # un comando o un evento di un altro worker ha svegliato il poll.
+            drain_aux = getattr(connection, 'drain_aux', None)
+            if drain_aux is not None:
+                drain_aux()
 
             deliveries = consumer.drain_messages()
             if deliveries:

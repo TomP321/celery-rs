@@ -10,10 +10,6 @@ if sys.version_info < (3, 11):  # pragma: no cover
     # Backport of PEP 654 for Python versions < 3.11
     from exceptiongroup import ExceptionGroup
 
-from kombu import Connection, Queue
-from kombu.common import Broadcast
-from kombu.transport.native_delayed_delivery import (bind_queue_to_native_delayed_delivery_exchange,
-                                                     declare_native_delayed_delivery_exchanges_and_queues)
 from kombu.utils.functional import retry_over_time
 from kombu.utils.url import maybe_sanitize_url
 
@@ -61,7 +57,11 @@ class DelayedDelivery(bootsteps.StartStopStep):
         Returns:
             bool: True if quorum queues are detected, False otherwise
         """
-        return detect_quorum_queues(c.app, c.app.connection_for_write().transport.driver_type)[0]
+        # `FastConnection` espone già il driver senza importare il trasporto.
+        driver = getattr(c.conninfo, 'driver_type', None)
+        if driver is None:
+            driver = c.app.connection_for_write().transport.driver_type
+        return detect_quorum_queues(c.app, driver)[0]
 
     def start(self, c: Consumer) -> None:
         """Initialize delayed delivery for all broker URLs.
@@ -122,6 +122,9 @@ class DelayedDelivery(bootsteps.StartStopStep):
             Exception: For other unexpected errors during setup
         """
         with c.app.connection_for_write(url=broker_url) as connection:
+            from kombu.transport.native_delayed_delivery import (
+                declare_native_delayed_delivery_exchanges_and_queues,
+            )
             queue_type = c.app.conf.broker_native_delayed_delivery_queue_type
             logger.debug(
                 "Setting up delayed delivery for broker %r with queue type %r",
@@ -149,7 +152,7 @@ class DelayedDelivery(bootsteps.StartStopStep):
                 )
                 raise
 
-    def _bind_queues(self, app: Celery, connection: Connection) -> None:
+    def _bind_queues(self, app: Celery, connection: 'Connection') -> None:
         """Bind all application queues to delayed delivery exchanges.
 
         Args:
@@ -159,11 +162,15 @@ class DelayedDelivery(bootsteps.StartStopStep):
         Raises:
             Exception: If queue binding fails
         """
-        queues: ValuesView[Queue] = app.amqp.queues.values()
+        queues = app.amqp.queues.values()
         if not queues:
             logger.warning("No queues found to bind for delayed delivery")
             return
 
+        from kombu.common import Broadcast
+        from kombu.transport.native_delayed_delivery import (
+            bind_queue_to_native_delayed_delivery_exchange,
+        )
         exceptions: list[Exception] = []
         for queue in queues:
             if isinstance(queue, Broadcast):

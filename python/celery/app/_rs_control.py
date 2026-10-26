@@ -17,7 +17,7 @@ from __future__ import annotations
 import time
 
 from kombu.exceptions import OperationalError
-from kombu.transport.base import to_rabbitmq_queue_arguments
+from celery.utils.queue_arguments import to_rabbitmq_queue_arguments
 from kombu.utils.json import JSONEncoder
 from kombu.utils.uuid import uuid
 

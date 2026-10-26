@@ -90,6 +90,9 @@ struct Shared {
     /// Il consumatore è stato cancellato (`Tasks.stop`): lo stream che
     /// termina non è una connessione persa.
     cancelled: AtomicBool,
+    /// `basic.consume(no_ack=true)`: le consegne vanno confermate subito dal
+    /// task di lettura (pidbox e gossip non hanno ack dal master).
+    no_ack: AtomicBool,
     /// Sveglia il task del consumer quando c'è spazio nella coda.
     space: Notify,
     /// Ferma il task del consumer senza chiudere il trasporto.
@@ -138,6 +141,7 @@ impl WorkerConsumer {
                 state: Mutex::new(State::new(prefetch)),
                 closed: AtomicBool::new(false),
                 cancelled: AtomicBool::new(false),
+                no_ack: AtomicBool::new(false),
                 space: Notify::new(),
                 stop: Notify::new(),
             }),
@@ -154,6 +158,21 @@ impl WorkerConsumer {
     /// Va chiamata dentro un runtime tokio: il task di lettura vive col
     /// runtime del processo.
     pub async fn start(&self, queues: Option<Vec<CompactString>>) -> Result<()> {
+        self.start_inner(queues, false).await
+    }
+
+    /// Come [`WorkerConsumer::start`] ma con `basic.consume(no_ack=true)`:
+    /// pidbox e gossip non confermano nulla, il task di lettura fa l'ack (o lo
+    /// omette, per i trasporti che lo supportano nativamente) appena consegna.
+    pub async fn start_no_ack(&self, queues: Option<Vec<CompactString>>) -> Result<()> {
+        self.start_inner(queues, true).await
+    }
+
+    async fn start_inner(
+        &self,
+        queues: Option<Vec<CompactString>>,
+        no_ack: bool,
+    ) -> Result<()> {
         if self.shared.closed.load(Ordering::Acquire) {
             return Err(Error::Closed);
         }
@@ -169,7 +188,12 @@ impl WorkerConsumer {
             }
             (state.queues.clone(), state.prefetch)
         };
-        let consumer = self.shared.transport.consume(&queues, prefetch).await?;
+        self.shared.no_ack.store(no_ack, Ordering::Release);
+        let consumer = if no_ack {
+            self.shared.transport.consume_no_ack(&queues, prefetch).await?
+        } else {
+            self.shared.transport.consume(&queues, prefetch).await?
+        };
         let control = Arc::clone(&consumer.control);
         {
             let mut state = lock(&self.shared.state);
@@ -360,7 +384,14 @@ async fn run_stream(shared: Arc<Shared>, mut stream: DeliveryStream) {
             biased;
             _ = shared.stop.notified() => return,
             item = next(&mut stream) => match item {
-                Some(Ok(delivery)) => shared.push(delivery),
+                Some(Ok(delivery)) => {
+                    if shared.no_ack.load(Ordering::Acquire) {
+                        // Best effort: per AMQP `consume_no_ack` non richiede
+                        // ack (no-op), per Redis chiude il messaggio in volo.
+                        let _ = shared.transport.ack(&delivery.delivery_tag).await;
+                    }
+                    shared.push(delivery);
+                }
                 Some(Err(error)) => {
                     shared.fail(&error);
                     return;
