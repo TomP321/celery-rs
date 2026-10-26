@@ -36,3 +36,19 @@ def noop():
 @app.task
 def add(x, y):
     return x + y
+
+
+@app.task(ignore_result=True)
+def noop_pure():
+    """Task del bench che non importa nulla (misura solo il costo nostro).
+
+    Il completamento è contato dal padre sulla dimensione del file: nessun
+    client redis-py nel figlio (spec 08b, variante ``--task pure``).
+    """
+    path = os.environ.get('BENCH_PURE_DONE')
+    if path:
+        fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o644)
+        try:
+            os.write(fd, b'.')
+        finally:
+            os.close(fd)

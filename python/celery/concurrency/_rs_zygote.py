@@ -124,6 +124,17 @@ def _main(control, app, hostname):
         # (test/uso diretto) si prosegue con il registry esistente.
         traceback.print_exc()
 
+    # Moduli che ogni figlio usa al primo task: importarli qui (e non nel
+    # figlio) li rende condivisi in copy-on-write con lo zygote.
+    for module in (
+            'celery.app.task', 'celery.canvas', 'celery.result',
+            'celery.backends', 'celery.backends.base', 'celery.app.trace',
+            'celery.app._rs_producer', 'celery.app.amqp'):
+        try:
+            __import__(module)
+        except Exception:  # pragma: no cover - dipendenze opzionali
+            traceback.print_exc()
+
     _close_inherited_fds({control.fileno()})
     # `gc.freeze()` (non `collect`): nel figlio di un master multi-thread i
     # finalizer di oggetti ereditati possono toccare stato non valido dopo il

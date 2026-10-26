@@ -10,11 +10,23 @@ import threading
 from itertools import count
 from threading import TIMEOUT_MAX as THREAD_TIMEOUT_MAX
 from time import sleep
-from typing import Any, Callable, Iterator, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Iterator, Optional, Tuple
 
-from kombu.asynchronous.timer import Entry
-from kombu.asynchronous.timer import Timer as Schedule
-from kombu.asynchronous.timer import logger, to_timestamp
+import logging
+
+from celery._lazy import install as _install_lazy, lazy_class_attr
+
+#: I nomi pubblici restano gli oggetti di kombu, risolti al primo accesso:
+#: importarli caricherebbe `kombu.utils` (py-amqp, billiard, importlib.metadata)
+#: anche nel worker che usa solo il pool Rust (spec 08b).
+_Entry = lazy_class_attr('kombu.asynchronous.timer', 'Entry')
+_Schedule = lazy_class_attr('kombu.asynchronous.timer', 'Timer')
+
+logger = logging.getLogger('celery.utils.timer2')
+
+if TYPE_CHECKING:  # nomi risolti da __getattr__, per pyflakes
+    from kombu.asynchronous.timer import Entry, Timer as Schedule  # noqa: F401
+    from kombu.asynchronous.timer import to_timestamp  # noqa: F401
 
 TIMER_DEBUG = os.environ.get('TIMER_DEBUG')
 
@@ -28,8 +40,8 @@ class Timer(threading.Thread):
         This is only used for transports not supporting AsyncIO.
     """
 
-    Entry = Entry
-    Schedule = Schedule
+    Entry = _Entry
+    Schedule = _Schedule
 
     running: bool = False
     on_tick: Optional[Callable[[float], None]] = None
@@ -67,7 +79,7 @@ class Timer(threading.Thread):
     def _next_entry(self) -> Optional[float]:
         with self.not_empty:
             delay: Optional[float]
-            entry: Optional[Entry]
+            entry: Optional["Entry"]
             delay, entry = next(self.scheduler)
             if entry is None:
                 if delay is None:
@@ -79,7 +91,7 @@ class Timer(threading.Thread):
     def run(self) -> None:
         try:
             self.running = True
-            self.scheduler: Iterator[Tuple[Optional[float], Optional[Entry]]] = iter(self.schedule)
+            self.scheduler: Iterator[Tuple[Optional[float], Optional["Entry"]]] = iter(self.schedule)
 
             while not self.__is_shutdown.is_set():
                 delay = self._next_entry()
@@ -158,3 +170,10 @@ class Timer(threading.Thread):
     @property
     def queue(self) -> list:
         return self.schedule.queue
+
+
+_install_lazy(globals(), {
+    'Entry': ('kombu.asynchronous.timer', 'Entry'),
+    'Schedule': ('kombu.asynchronous.timer', 'Timer'),
+    'to_timestamp': ('kombu.asynchronous.timer', 'to_timestamp'),
+})

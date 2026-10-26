@@ -5,8 +5,7 @@ import warnings
 import weakref
 from weakref import WeakMethod
 
-from kombu.utils.functional import retry_over_time
-
+from celery._compat import retry_over_time
 from celery.exceptions import CDeprecationWarning
 from celery.local import PromiseProxy, Proxy
 from celery.utils.functional import fun_accepts_kwargs

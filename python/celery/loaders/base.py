@@ -5,14 +5,12 @@ import re
 import sys
 from datetime import datetime, timezone
 
-from kombu.utils import json
-from kombu.utils.objects import cached_property
-
 from celery import signals
+from celery._compat import cached_property, maybe_list
 from celery.exceptions import reraise
 from celery.utils.collections import DictAttribute, force_mapping
-from celery.utils.functional import maybe_list
-from celery.utils.imports import NotAPackage, find_module, import_from_cwd, symbol_by_name
+from celery.utils.imports import NotAPackage, find_module, import_from_cwd
+from celery.utils.imports import _symbol_by_name as symbol_by_name
 
 __all__ = ('BaseLoader',)
 
@@ -162,7 +160,9 @@ class BaseLoader:
                               re_type=re.compile(r'\((\w+)\)'),
                               extra_types=None,
                               override_types=None):
-        extra_types = extra_types if extra_types else {'json': json.loads}
+        if not extra_types:
+            from kombu.utils import json
+            extra_types = {'json': json.loads}
         override_types = override_types if override_types else {
             'tuple': 'json',
             'list': 'json',

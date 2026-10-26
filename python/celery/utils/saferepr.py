@@ -11,7 +11,6 @@ Very slow with no limits, super quick with limits.
 """
 import traceback
 from collections import deque, namedtuple
-from decimal import Decimal
 from itertools import chain
 from numbers import Number
 from pprint import _recursion
@@ -220,7 +219,10 @@ def reprstream(stack: deque,
                 yield val, it
             elif isinstance(val, _key):
                 yield val, it
-            elif isinstance(val, Decimal):
+            elif (type(val).__module__ == 'decimal'
+                    and type(val).__name__ == 'Decimal'):
+                # `decimal` non si importa: la classe esiste solo se l'ha
+                # già caricata qualcun altro (il costo è nel percorso client).
                 yield _repr(val), it
             elif isinstance(val, safe_t):
                 yield str(val), it

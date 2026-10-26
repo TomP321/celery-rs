@@ -13,12 +13,22 @@ import sys
 from datetime import datetime
 from functools import partial
 
-from billiard.common import REMAP_SIGTERM
-from billiard.process import current_process
-from kombu.common import ignore_errors
-from kombu.utils.encoding import safe_str
-
 from celery import VERSION_BANNER, _original_os_write, platforms, signals
+from celery._compat import safe_str
+
+#: Stesso valore di `billiard.common.REMAP_SIGTERM`, senza importare billiard.
+REMAP_SIGTERM = os.environ.get('REMAP_SIGTERM')
+
+
+def current_process():
+    # Wrapper: billiard si importa al primo uso e i test possono sostituirlo.
+    from billiard.process import current_process as _current_process
+    return _current_process()
+
+
+def ignore_errors(connection, fun):
+    from kombu.common import ignore_errors as _ignore_errors
+    return _ignore_errors(connection, fun)
 from celery.app import trace
 from celery.loaders.app import AppLoader
 from celery.platforms import EX_FAILURE, EX_OK, check_privileges, isatty

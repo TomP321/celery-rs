@@ -14,24 +14,22 @@ from datetime import datetime
 from datetime import timezone as datetime_timezone
 from operator import attrgetter
 
-from click.exceptions import Exit
-from dateutil.parser import isoparse
-from kombu.clocks import LamportClock
-from kombu.utils.objects import cached_property
-from kombu.utils.uuid import uuid
 from vine import starpromise
+
+from celery._compat import LamportClock, cached_property, maybe_list
 
 from celery import platforms, signals
 from celery._state import (_announce_app_finalized, _deregister_app, _register_app, _set_current_app, _task_stack,
                            connect_on_app_finalize, get_current_app, get_current_worker_task, set_default_app)
-from celery.exceptions import AlwaysEagerIgnored, DuplicateTaskNameWarning, ImproperlyConfigured, OperationalError
+from celery.exceptions import AlwaysEagerIgnored, DuplicateTaskNameWarning, ImproperlyConfigured
 from celery.loaders import get_loader_cls
 from celery.local import PromiseProxy, maybe_evaluate
 from celery.utils import abstract
 from celery.utils.collections import AttributeDictMixin
 from celery.utils.dispatch import Signal
-from celery.utils.functional import first, head_from_fun, maybe_list
-from celery.utils.imports import gen_task_name, instantiate, qualname, symbol_by_name
+from celery.utils.functional import first, head_from_fun
+from celery.utils.imports import _symbol_by_name as symbol_by_name
+from celery.utils.imports import gen_task_name, instantiate, qualname
 from celery.utils.log import get_logger
 from celery.utils.objects import FallbackContext, mro_lookup
 from celery.utils.time import subtract_datetimes, timezone, to_utc
@@ -61,6 +59,34 @@ _OMITTED = object()
 _UTC_ZONE = timezone.utc
 
 logger = get_logger(__name__)
+
+
+def _oid_from(instance, threads=True):
+    """Copie di ``kombu.common.oid_from`` senza importare ``kombu.common``."""
+    import threading
+    from uuid import NAMESPACE_OID, UUID, uuid4, uuid5
+    node_id = uuid4().int
+    ent = '{:x}-{:x}-{:x}-{:x}'.format(
+        node_id, os.getpid(),
+        threading.get_ident() if threads else 0, id(instance))
+    try:
+        # uuid3 senza importare `hashlib` (che carica _hashlib/_blake2, ~0.5 MB):
+        # `_md5` è il modulo C minimo che serve.
+        import _md5
+        digest = _md5.md5(NAMESPACE_OID.bytes + ent.encode()).digest()
+        buf = bytearray(digest)
+        buf[6] = (buf[6] & 0x0f) | 0x30
+        buf[8] = (buf[8] & 0x3f) | 0x80
+        return str(UUID(bytes=bytes(buf), version=3))
+    except ValueError:  # pragma: no cover
+        return str(uuid5(NAMESPACE_OID, ent))
+
+
+def _uuid():
+    # Stesso valore di `kombu.utils.uuid.uuid` (str(uuid4())), senza importare
+    # `kombu.utils` (py-amqp/billiard) al caricamento del modulo.
+    from uuid import uuid4
+    return str(uuid4())
 
 if sys.version_info >= (3, 14):
     import annotationlib
@@ -619,6 +645,7 @@ class Celery:
         if argv is None:
             argv = sys.argv
 
+        from click.exceptions import Exit
         try:
             celery.main(args=argv, standalone_mode=False)
         except Exit as e:
@@ -1049,7 +1076,7 @@ class Celery:
         """
         parent = have_parent = None
         amqp = self.amqp
-        task_id = task_id or uuid()
+        task_id = task_id or _uuid()
         producer = producer or publisher  # XXX compat
         router = router or amqp.router
         conf = self.conf
@@ -1136,6 +1163,7 @@ class Celery:
                 if exchange_type != 'direct':
                     if eta:
                         if isinstance(eta, str):
+                            from dateutil.parser import isoparse
                             eta = isoparse(eta)
                         countdown = subtract_datetimes(eta, self.now()).total_seconds()
 
@@ -1166,6 +1194,7 @@ class Celery:
             if isinstance(expires, datetime):
                 expires_s = subtract_datetimes(expires, self.now()).total_seconds()
             elif isinstance(expires, str):
+                from dateutil.parser import isoparse
                 expires_s = subtract_datetimes(isoparse(expires), self.now()).total_seconds()
             else:
                 expires_s = expires
@@ -1324,13 +1353,16 @@ class Celery:
     broker_connection = connection
 
     def _acquire_connection(self, pool=True):
-        from kombu.exceptions import LimitExceeded
         """Helper for :meth:`connection_or_acquire`."""
         if pool:
             timeout = self.conf.broker_pool_acquire_timeout
             try:
                 return self.pool.acquire(block=True, timeout=timeout)
-            except LimitExceeded as exc:
+            except Exception as exc:
+                # L'import di kombu serve solo se il pool ha davvero un limite.
+                from kombu.exceptions import LimitExceeded, OperationalError
+                if not isinstance(exc, LimitExceeded):
+                    raise
                 pool_limit = self.conf.broker_pool_limit
                 raise OperationalError(
                     f"Timed out waiting for a broker connection after "
@@ -1356,11 +1388,14 @@ class Celery:
     default_connection = connection_or_acquire  # XXX compat
 
     def _acquire_producer(self, timeout=None):
-        from kombu.exceptions import LimitExceeded
         """Helper for :meth:`producer_or_acquire`."""
         try:
             return self.producer_pool.acquire(block=True, timeout=timeout)
-        except LimitExceeded as exc:
+        except Exception as exc:
+            # L'import di kombu serve solo se il pool ha davvero un limite.
+            from kombu.exceptions import LimitExceeded, OperationalError
+            if not isinstance(exc, LimitExceeded):
+                raise
             pool_limit = self.conf.broker_pool_limit
             raise OperationalError(
                 f"Timed out waiting for a broker producer after "
@@ -1727,8 +1762,7 @@ class Celery:
         # generating the process id.  This is due to how the RPC
         # backend now dedicates a single thread to receive results,
         # which would not work if each thread has a separate id.
-        from kombu.common import oid_from
-        return oid_from(self, threads=False)
+        return _oid_from(self, threads=False)
 
     @property
     def thread_oid(self):
@@ -1736,8 +1770,7 @@ class Celery:
         try:
             return self._local.oid
         except AttributeError:
-            from kombu.common import oid_from
-            self._local.oid = new_oid = oid_from(self, threads=True)
+            self._local.oid = new_oid = _oid_from(self, threads=True)
             return new_oid
 
     @cached_property

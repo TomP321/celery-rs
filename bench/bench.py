@@ -78,6 +78,22 @@ print(json.dumps({{"publish_s": dt, "wall_start": wall0, "maxrss_kb": resource.g
                   "maxrss_before_kb": rss0}}))
 '''
 
+#: Variante ``--task pure``: nessun import nel figlio, completamenti contati
+#: dal padre sull'append di un byte (spec 08b).
+PUBLISH_PURE = '''
+import json, resource, time
+from benchapp import noop_pure
+noop_pure.delay()  # warm-up della connessione
+rss0 = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+wall0 = time.time()
+t0 = time.perf_counter()
+for _ in range({n}):
+    noop_pure.delay()
+dt = time.perf_counter() - t0
+print(json.dumps({{"publish_s": dt, "wall_start": wall0, "maxrss_kb": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
+                  "maxrss_before_kb": rss0}}))
+'''
+
 LATENCY = '''
 import json, time
 from benchapp import add
@@ -117,10 +133,19 @@ def main():
     ap.add_argument('--pool', default='prefork')
     ap.add_argument('--n', type=int, default=20000)
     ap.add_argument('--latency-n', type=int, default=500)
+    ap.add_argument('--task', default='bench', choices=('bench', 'pure'))
     ARGS = args = ap.parse_args()
     label = args.label or Path(args.venv).name.lstrip('.').removeprefix('venv-')
+    pure_done = None
     ENV = env = {**{k: v for k, v in os.environ.items() if not k.startswith('PYTHON')},
                  'PYTHONPATH': str(HERE), 'PYTHONHASHSEED': '0'}
+    if args.task == 'pure':
+        pure_done = HERE / 'results' / f'.pure-done-{os.getpid()}'
+        try:
+            pure_done.unlink()
+        except OSError:
+            pass
+        env['BENCH_PURE_DONE'] = str(pure_done)
 
     import redis
     r = redis.Redis(*REDIS)
@@ -146,10 +171,21 @@ def main():
         sampler = threading.Thread(target=sample, daemon=True)
         sampler.start()
 
-        pub = client(args.venv, PUBLISH.format(n=args.n), env)
+        pub = client(args.venv,
+                     (PUBLISH_PURE if args.task == 'pure' else PUBLISH).format(n=args.n),
+                     env)
         cnt = redis.Redis(*REDIS, db=2)
         t0 = time.perf_counter()
-        while int(cnt.get('bench:done') or 0) < args.n:
+        while True:
+            if pure_done is not None:
+                try:
+                    done = pure_done.stat().st_size
+                except OSError:
+                    done = 0
+            else:
+                done = int(cnt.get('bench:done') or 0)
+            if done >= args.n:
+                break
             if time.perf_counter() - t0 > 600:
                 raise SystemExit('timeout in attesa del completamento')
             time.sleep(0.02)
@@ -185,6 +221,12 @@ def main():
                        'p99': lat_ms[int(len(lat_ms) * 0.99) - 1], 'max': lat_ms[-1]},
         'python': sys.version.split()[0],
     }
+    res['task'] = args.task
+    if pure_done is not None:
+        try:
+            pure_done.unlink()
+        except OSError:
+            pass
     out = HERE / 'results' / f'{label}.json'
     out.parent.mkdir(exist_ok=True)
     out.write_text(json.dumps(res, indent=1))

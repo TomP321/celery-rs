@@ -5,16 +5,14 @@ statistics, and revoked tasks.
 """
 import os
 import platform
-import shelve
 import sys
 import weakref
 import zlib
 from collections import Counter
 
-from kombu.serialization import pickle, pickle_protocol
-from kombu.utils.objects import cached_property
-
 from celery import __version__
+from celery._compat import cached_property
+from celery._lazy import lazy_module
 from celery.exceptions import ImproperlyConfigured, WorkerShutdown, WorkerTerminate
 from celery.utils.collections import LimitedSet
 
@@ -297,8 +295,9 @@ class Persistent:
     Currently only stores revoked task id's.
     """
 
-    storage = shelve
-    protocol = pickle_protocol
+    storage = lazy_module('shelve')
+    #: Come `kombu.serialization.pickle_protocol`.
+    protocol = int(os.environ.get('PICKLE_PROTOCOL', 4))
     compress = zlib.compress
     decompress = zlib.decompress
     _is_open = False
@@ -361,6 +360,7 @@ class Persistent:
 
     def _merge_revoked_v3(self, zrevoked):
         if zrevoked:
+            from kombu.serialization import pickle
             self._merge_revoked_v1(pickle.loads(self.decompress(zrevoked)))
 
     def _merge_revoked_v2(self, saved):
@@ -373,6 +373,7 @@ class Persistent:
         self.state.merge_revoked(saved)
 
     def _dumps(self, obj):
+        from kombu.serialization import pickle
         return pickle.dumps(obj, protocol=self.protocol)
 
     @property

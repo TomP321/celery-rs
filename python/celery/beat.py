@@ -22,7 +22,7 @@ from billiard.context import Process
 from kombu import pidbox
 from kombu.common import ignore_errors
 from kombu.utils.encoding import safe_str
-from kombu.utils.functional import maybe_evaluate, reprcall
+from celery._compat import maybe_evaluate, reprcall
 from kombu.utils.objects import cached_property
 
 from . import __version__, platforms, signals
@@ -572,6 +572,11 @@ class Scheduler:
     @cached_property
     def connection(self):
         from .app import _rs_producer
+        if self.Producer is not self.app.amqp.Producer:
+            # Un Producer personalizzato (kombu) ha bisogno di una vera
+            # `kombu.Connection`: `maybe_channel` non riconosce il descrittore
+            # Rust e lo userebbe come canale.
+            return self.app.connection_for_write()
         connection = _rs_producer.fast_connection(self.app)
         return connection if connection is not None \
             else self.app.connection_for_write()

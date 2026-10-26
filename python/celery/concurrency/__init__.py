@@ -1,10 +1,9 @@
 """Pool implementation abstract factory, and alias definitions."""
 import os
 
-# Import from kombu directly as it's used
-# early in the import stage, where celery.utils loads
-# too much (e.g., for eventlet patching)
-from kombu.utils.imports import symbol_by_name
+# Copia locale di `symbol_by_name`: importare `kombu.utils.imports` carica
+# `kombu.utils` (py-amqp, billiard) già nelle prime fasi dell'import.
+from celery.utils.imports import _symbol_by_name as symbol_by_name
 
 __all__ = ('get_implementation', 'get_available_pool_names',)
 

@@ -5,24 +5,32 @@ import sys
 import threading
 import traceback
 import types
+from typing import TYPE_CHECKING
 from contextlib import contextmanager
 from threading import TIMEOUT_MAX as THREAD_TIMEOUT_MAX
 
+from celery._lazy import install as _install_lazy
+
+if TYPE_CHECKING:  # nomi risolti da __getattr__, per pyflakes
+    from greenlet import getcurrent as get_ident  # noqa: F401
 from celery.local import Proxy
 
+#: Identità del contesto corrente. `get_ident` pubblico resta
+#: `greenlet.getcurrent` quando greenlet è installato (come il riferimento),
+#: ma qui non lo importiamo: eventlet/gevent sono fuori scope v1 e il client
+#: non deve pagare greenlet. Il codice interno usa il thread id.
 try:
-    from greenlet import getcurrent as get_ident
-except ImportError:
+    from _thread import get_ident as _get_ident
+except ImportError:  # pragma: no cover
+    from dummy_thread import get_ident as _get_ident
+
+
+def _public_get_ident():
     try:
-        from _thread import get_ident
+        from greenlet import getcurrent
     except ImportError:
-        try:
-            from thread import get_ident
-        except ImportError:
-            try:
-                from _dummy_thread import get_ident
-            except ImportError:
-                from dummy_thread import get_ident
+        return _get_ident
+    return getcurrent
 
 
 __all__ = (
@@ -174,7 +182,7 @@ class Local:
 
     def __init__(self):
         object.__setattr__(self, '__storage__', {})
-        object.__setattr__(self, '__ident_func__', get_ident)
+        object.__setattr__(self, '__ident_func__', _get_ident)
 
     def __iter__(self):
         return iter(self.__storage__.items())
@@ -334,7 +342,7 @@ class LocalManager:
             for local in self.locals:
                 object.__setattr__(local, '__ident_func__', ident_func)
         else:
-            self.ident_func = get_ident
+            self.ident_func = _get_ident
 
     def get_ident(self):
         """Return context identifier.
@@ -388,3 +396,6 @@ else:  # pragma: no cover
     # identifiers for the context.  If greenlets aren't available we
     # fall back to the  current thread ident.
     LocalStack = _LocalStack
+
+
+_install_lazy(globals(), {'get_ident': _public_get_ident})

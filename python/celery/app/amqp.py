@@ -4,10 +4,10 @@ from collections import namedtuple
 from collections.abc import Mapping
 from weakref import WeakValueDictionary
 
-from kombu.utils.functional import maybe_list
-from kombu.utils.objects import cached_property
+from celery._compat import cached_property, maybe_list
 
 from ._lazy_kombu import lazy_class
+from ._fast_entities import Exchange as _FastExchange, Queue as _FastQueue
 
 from celery import signals
 from celery.utils.nodenames import anon_nodename
@@ -31,6 +31,28 @@ def _task_repr(obj, maxsize, maxlevels):
 
 
 __all__ = ('AMQP', 'Queues', 'task_message')
+
+
+def _is_broadcast(queue):
+    """True per ``kombu.common.Broadcast``, senza importarlo quando non serve."""
+    if not type(queue).__module__.startswith('kombu'):
+        return False
+    from kombu.common import Broadcast
+    return isinstance(queue, Broadcast)
+
+
+_FAST_QUEUES_CLASSES = {}
+
+
+def _fast_queues_cls(base):
+    """Sottoclasse di ``Queues`` che crea entità leggere (niente kombu)."""
+    cls = _FAST_QUEUES_CLASSES.get(base)
+    if cls is None:
+        cls = type(f'_Fast{base.__name__}', (base,), {
+            '_entity_classes': (_FastQueue, _FastExchange),
+        })
+        _FAST_QUEUES_CLASSES[base] = cls
+    return cls
 
 
 def _exchange_cls():
@@ -65,6 +87,9 @@ def utf8dict(d, encoding='utf-8'):
 class Queues(dict):
     """Queue name⇒ declaration mapping.
 
+    ``_entity_classes`` permette al percorso Rust di usare entità leggere
+    (``celery.app._fast_entities``) senza importare ``kombu.entity``.
+
     Arguments:
         queues (Iterable): Initial list/tuple or dict of queues.
         create_missing (bool): By default any unknown queues will be
@@ -84,6 +109,17 @@ class Queues(dict):
     #: The rest of the queues are then used for routing only.
     _consume_from = None
 
+    #: (Queue, Exchange) da usare; None → le classi di kombu.
+    _entity_classes = None
+
+    def _queue_class(self):
+        classes = self._entity_classes
+        return _queue_cls() if classes is None else classes[0]
+
+    def _exchange_class(self):
+        classes = self._entity_classes
+        return _exchange_cls() if classes is None else classes[1]
+
     def __init__(
             self, queues=None, default_exchange=None,
             create_missing=True, create_missing_queue_type=None,
@@ -98,12 +134,12 @@ class Queues(dict):
         self.create_missing_queue_type = create_missing_queue_type
         self.create_missing_queue_exchange_type = create_missing_queue_exchange_type
         self.autoexchange = (
-            _exchange_cls() if autoexchange is None else autoexchange)
+            self._exchange_class() if autoexchange is None else autoexchange)
         self.max_priority = max_priority
         if queues is not None and not isinstance(queues, Mapping):
             queues = {q.name: q for q in queues}
         queues = queues or {}
-        queue_cls = _queue_cls()
+        queue_cls = self._queue_class()
         for name, q in queues.items():
             self.add(q) if isinstance(q, queue_cls) else self.add_compat(name, **q)
         # The default set of queues to consume from if no -Q option is set.
@@ -150,7 +186,9 @@ class Queues(dict):
             **options (Any): Additional declaration options used when
                 queue is a str.
         """
-        if not isinstance(queue, _queue_cls()):
+        if not (isinstance(queue, self._queue_class())
+                or (hasattr(queue, 'queue_arguments')
+                    and hasattr(queue, 'routing_key'))):
             return self.add_compat(queue, **kwargs)
         return self._add(queue)
 
@@ -159,7 +197,7 @@ class Queues(dict):
         options.setdefault('routing_key', options.get('binding_key'))
         if options['routing_key'] is None:
             options['routing_key'] = name
-        return self._add(_queue_cls().from_dict(name, **options))
+        return self._add(self._queue_class().from_dict(name, **options))
 
     def _add(self, queue):
         if self.default_exchange and (queue.exchange is None or queue.exchange.name == ''):
@@ -236,11 +274,12 @@ class Queues(dict):
             queue_arguments = {"x-queue-type": self.create_missing_queue_type}
 
         if self.create_missing_queue_exchange_type:
-            exchange = _exchange_cls()(name, self.create_missing_queue_exchange_type)
+            exchange = self._exchange_class()(name, self.create_missing_queue_exchange_type)
         else:
             exchange = self.autoexchange(name)
 
-        return _queue_cls()(name, exchange, name, queue_arguments=queue_arguments)
+        return self._queue_class()(name, exchange, name,
+                                   queue_arguments=queue_arguments)
 
     @property
     def consume_from(self):
@@ -315,13 +354,24 @@ class AMQP:
             queue_arguments = None
             if conf.task_default_queue_type == 'quorum':
                 queue_arguments = {'x-queue-type': 'quorum'}
-            queues = (_queue_cls()(conf.task_default_queue,
+            # Come `Queues.__setitem__`: la priorità massima fa parte della
+            # dichiarazione (argomento della coda), non del solo publish.
+            if conf.task_queue_max_priority is not None:
+                queue_arguments = queue_arguments or {}
+                queue_arguments.setdefault('x-max-priority',
+                                           conf.task_queue_max_priority)
+            queue_cls = (_FastQueue if self._use_fast_entities()
+                         else _queue_cls())
+            queues = (queue_cls(conf.task_default_queue,
                             exchange=self.default_exchange,
                             routing_key=default_routing_key,
                             queue_arguments=queue_arguments),)
         autoexchange = (self.autoexchange if autoexchange is None
                         else autoexchange)
-        return self.queues_cls(
+        queues_cls = self.queues_cls
+        if self._use_fast_entities() and queues_cls is Queues:
+            queues_cls = _fast_queues_cls(Queues)
+        return queues_cls(
             queues,
             default_exchange=self.default_exchange,
             create_missing=create_missing,
@@ -332,9 +382,22 @@ class AMQP:
             default_routing_key=default_routing_key,
         )
 
+    def _use_fast_entities(self):
+        """True se il producer è Rust: entità leggere, niente kombu.entity."""
+        cached = self.__dict__.get('_fast_entities_mode')
+        if cached is None:
+            from . import _rs_producer
+            cached = _rs_producer.fast_connection(self.app) is not None
+            self.__dict__['_fast_entities_mode'] = cached
+        return cached
+
+    def _routing_queues(self):
+        """Mappa nome→coda per il routing (leggera sul percorso Rust)."""
+        return self.queues
+
     def Router(self, queues=None, create_missing=None):
         """Return the current task router."""
-        return _routes.Router(self.routes, queues or self.queues,
+        return _routes.Router(self.routes, queues or self._routing_queues(),
                               self.app.either('task_create_missing_queues',
                                               create_missing), app=self.app)
 
@@ -525,7 +588,9 @@ class AMQP:
         default_retry = self.app.conf.task_publish_retry
         default_policy = self.app.conf.task_publish_retry_policy
         default_delivery_mode = self.app.conf.task_default_delivery_mode
-        queues = self.queues
+        # `Queues` importa kombu: si costruisce solo se il routing usa davvero
+        # una coda non di default o un trasporto non-Rust.
+        queues = None
         send_before_publish = signals.before_task_publish.send
         before_receivers = signals.before_task_publish.receivers
         send_after_publish = signals.after_task_publish.send
@@ -534,12 +599,20 @@ class AMQP:
         send_task_sent = signals.task_sent.send   # XXX compat (remove 6.0)
         sent_receivers = signals.task_sent.receivers   # XXX compat (remove 6.0)
 
-        default_evd = self._event_dispatcher
-        default_exchange = self.default_exchange
+        def default_evd():
+            # Solo `task_send_sent_event` usa il dispatcher: crearlo sempre
+            # importava `celery.events` (e kombu.mixins) a ogni publish.
+            return self._event_dispatcher
 
         default_rkey = self.app.conf.task_default_routing_key
         default_serializer = self.app.conf.task_serializer
         default_compressor = self.app.conf.task_compression
+
+        def _routing_queues():
+            nonlocal queues
+            if queues is None:
+                queues = amqp._routing_queues()
+            return queues
 
         def send_task_message(producer, name, message,
                               exchange=None, routing_key=None, queue=None,
@@ -557,10 +630,10 @@ class AMQP:
 
             qname = queue
             if queue is None and exchange is None:
-                queue = amqp.default_queue
+                queue = _routing_queues()[amqp.app.conf.task_default_queue]
             if queue is not None:
                 if isinstance(queue, str):
-                    qname, queue = queue, queues[queue]
+                    qname, queue = queue, _routing_queues()[queue]
                 else:
                     qname = queue.name
 
@@ -582,10 +655,9 @@ class AMQP:
                 exchange, routing_key = '', qname
             elif exchange is None:
                 # not topic exchange, and exchange not undefined
-                exchange = queue.exchange.name or default_exchange
+                exchange = queue.exchange.name or amqp.default_exchange
                 routing_key = routing_key or queue.routing_key or default_rkey
-            from kombu.common import Broadcast
-            if declare is None and queue and not isinstance(queue, Broadcast):
+            if declare is None and queue and not _is_broadcast(queue):
                 declare = [queue]
 
             # merge default and custom policy
@@ -632,7 +704,7 @@ class AMQP:
                         eta=body['eta'], taskset=body['taskset'],
                     )
             if sent_event:
-                evd = event_dispatcher or default_evd
+                evd = event_dispatcher or default_evd()
                 exname = exchange
                 if isinstance(exname, _exchange_cls()):
                     exname = exname.name
@@ -694,8 +766,10 @@ class AMQP:
 
     @cached_property
     def default_exchange(self):
-        return _exchange_cls()(self.app.conf.task_default_exchange,
-                               self.app.conf.task_default_exchange_type)
+        exchange_cls = (_FastExchange if self._use_fast_entities()
+                        else _exchange_cls())
+        return exchange_cls(self.app.conf.task_default_exchange,
+                            self.app.conf.task_default_exchange_type)
 
     @cached_property
     def utc(self):

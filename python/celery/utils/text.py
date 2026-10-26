@@ -4,7 +4,6 @@ from __future__ import annotations
 import io
 import re
 from functools import partial
-from pprint import pformat
 from re import Match
 from textwrap import fill
 from typing import Any, Callable, Pattern
@@ -104,12 +103,15 @@ def pretty(value: str, width: int = 80, nl_width: int = 80, sep: str = '\n', **
            kw: Any) -> str:
     """Format value for printing to console."""
     if isinstance(value, dict):
+        from pprint import pformat
         return f'{sep} {pformat(value, 4, nl_width)[1:]}'
     elif isinstance(value, tuple):
+        from pprint import pformat
         return '{}{}{}'.format(
             sep, ' ' * 4, pformat(value, width=nl_width, **kw),
         )
     else:
+        from pprint import pformat
         return pformat(value, width=width, **kw)
 
 

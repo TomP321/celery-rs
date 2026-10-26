@@ -14,8 +14,8 @@ from __future__ import annotations
 import logging
 
 from kombu.exceptions import ContentDisallowed, DecodeError
-from kombu.serialization import prepare_accept_content
-from kombu.utils.json import JSONEncoder
+from celery._compat import prepare_accept_content
+from celery.app._rs_producer import _json_default as _JSON_DEFAULT
 
 from celery._rs_message import RsMessage
 
@@ -29,7 +29,6 @@ __all__ = ('RsMailboxConsumer', 'pidbox_consumer', 'events_consumer')
 logger = logging.getLogger('celery.worker.consumer')
 
 #: default del JSON di kombu: legge `kombu.utils.json._encoders` a ogni uso.
-_JSON_DEFAULT = JSONEncoder().default
 
 #: Limite di consegne lette a ogni giro del loop (lo stesso del consumer).
 DRAIN_BATCH = 1000

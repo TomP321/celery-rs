@@ -14,14 +14,29 @@ from functools import partial
 from uuid import UUID
 from weakref import WeakValueDictionary
 
-from billiard.einfo import ExceptionInfo
-from kombu.compression import compress, decompress
-from kombu.compression import encoders as compression_encoders
-from kombu.compression import get_encoder as get_compression_encoder
-from kombu.serialization import dumps, loads, prepare_accept_content
-from kombu.serialization import registry as serializer_registry
-from kombu.utils.encoding import bytes_to_str, ensure_bytes
-from kombu.utils.url import maybe_sanitize_url
+from celery._compat import bytes_to_str, maybe_sanitize_url as _maybe_sanitize_url
+from celery._compat import str_to_bytes as ensure_bytes
+
+#: Alias dei content type per i serializer più comuni: evita di importare il
+#: registro di kombu (yaml/msgpack) per il caso json, che è quello del core
+#: Rust. Gli altri serializer passano dal registro, come il riferimento.
+_ACCEPT_TYPES = {'json': 'application/json'}
+
+
+def _json_encoder(obj, **kwargs):
+    """Encoder JSON di ``kombu.utils.json`` risolto solo al primo uso."""
+    from kombu.utils.json import dumps
+    return dumps(obj, **kwargs)
+
+
+def _prepare_accept_content(content_types):
+    if content_types is None:
+        return None
+    try:
+        return {n if '/' in n else _ACCEPT_TYPES[n] for n in content_types}
+    except KeyError:
+        from kombu.serialization import prepare_accept_content
+        return prepare_accept_content(content_types)
 
 import celery.exceptions
 from celery import current_app, group, maybe_signature, states
@@ -31,7 +46,8 @@ from celery.exceptions import (BackendGetMetaError, BackendStoreError, ChordErro
                                NotRegistered, SecurityError, TaskRevokedError, TimeoutError)
 from celery.result import GroupResult, ResultBase, ResultSet, allow_join_result, result_from_tuple
 from celery.utils.collections import BufferMap
-from celery.utils.functional import LRUCache, arity_greater
+from celery._compat import LRUCache
+from celery.utils.functional import arity_greater
 from celery.utils.log import get_logger
 from celery.utils.serialization import (create_exception_cls, ensure_serializable, get_pickleable_exception,
                                         get_pickled_exception, raise_with_context)
@@ -125,6 +141,7 @@ def compress_payload(payload, compression):
         compression (str): Name of a method in the Kombu compression
             registry, for example ``'gzip'``.
     """
+    from kombu.compression import compress
     body, content_type = compress(payload, compression)
     return b''.join([
         COMPRESSED_PAYLOAD_MAGIC, content_type.encode('utf-8'), b'\x00', body,
@@ -147,6 +164,7 @@ def decompress_payload(payload):
         return payload
     content_type, _, body = payload[
         len(COMPRESSED_PAYLOAD_MAGIC):].partition(b'\x00')
+    from kombu.compression import decompress
     return decompress(body, content_type.decode('utf-8'))
 
 
@@ -242,9 +260,17 @@ class Backend:
         self.app = app
         conf = self.app.conf
         self.serializer = serializer or conf.result_serializer
-        (self.content_type,
-         self.content_encoding,
-         self.encoder) = serializer_registry._encoders[self.serializer]
+        if self.serializer == 'json':
+            # Percorso caldo: stesso encoder/decoder di kombu ma senza
+            # caricarne il registro (e yaml/msgpack/json finché non serve).
+            self.content_type = 'application/json'
+            self.content_encoding = 'utf-8'
+            self.encoder = _json_encoder
+        else:
+            from kombu.serialization import registry as serializer_registry
+            (self.content_type,
+             self.content_encoding,
+             self.encoder) = serializer_registry._encoders[self.serializer]
         self.compression = self.prepare_compression(
             conf.get('result_compression'))
         cmax = max_cached_results or conf.result_cache_max
@@ -255,7 +281,7 @@ class Backend:
         # precedence: accept, conf.result_accept_content, conf.accept_content
         self.accept = conf.result_accept_content if accept is None else accept
         self.accept = conf.accept_content if self.accept is None else self.accept
-        self.accept = prepare_accept_content(self.accept)
+        self.accept = _prepare_accept_content(self.accept)
 
         if (conf.get('result_failure_expires') is not None
                 and not self.supports_failure_expires):
@@ -280,7 +306,7 @@ class Backend:
         # we're stripping it for consistency
         if include_password:
             return self.url
-        url = maybe_sanitize_url(self.url or '')
+        url = _maybe_sanitize_url(self.url or '')
         return url[:-1] if url.endswith(':///') else url
 
     def mark_as_started(self, task_id, **meta):
@@ -576,6 +602,7 @@ class Backend:
         type_, real_exc, tb = sys.exc_info()
         try:
             exc = real_exc if exc is None else exc
+            from billiard.einfo import ExceptionInfo
             exception_info = ExceptionInfo((type_, exc, tb))
             self.mark_as_failure(task_id, exc, exception_info.traceback)
             return exception_info
@@ -691,6 +718,7 @@ class Backend:
                 and self.content_type == 'application/json'):
             payload = _celery_rs.json_dumps(data, _json_default())
             return self.content_type, self.content_encoding, payload.decode('utf-8')
+        from kombu.serialization import dumps
         return dumps(data, serializer=self.serializer)
 
     def meta_from_decoded(self, meta):
@@ -717,6 +745,7 @@ class Backend:
                 and self.content_type == 'application/json'
                 and (self.accept is None or 'application/json' in self.accept)):
             return _celery_rs.json_loads(payload)
+        from kombu.serialization import loads
         return loads(payload,
                      content_type=self.content_type,
                      content_encoding=self.content_encoding,
@@ -738,11 +767,12 @@ class Backend:
             )
             return None
         try:
+            from kombu.compression import get_encoder as get_compression_encoder
             get_compression_encoder(compression)
         except KeyError as e:
             raise ImproperlyConfigured(E_UNKNOWN_COMPRESSION.format(
                 compression,
-                ', '.join(sorted(compression_encoders())))) from e
+                ', '.join(sorted(_compression_encoders())))) from e
         return compression
 
     def prepare_expires(self, value, type=None):
@@ -1537,3 +1567,8 @@ class DisabledBackend(BaseBackend):
 
     get_state = get_status = get_result = get_traceback = _is_disabled
     get_task_meta_for = wait_for = get_many = _is_disabled
+
+
+def _compression_encoders():
+    from kombu.compression import encoders as compression_encoders
+    return compression_encoders()

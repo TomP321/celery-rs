@@ -10,11 +10,13 @@ if sys.version_info < (3, 11):  # pragma: no cover
     # Backport of PEP 654 for Python versions < 3.11
     from exceptiongroup import ExceptionGroup
 
-from kombu import Connection, Queue
-from kombu.utils.functional import retry_over_time
-from kombu.utils.url import maybe_sanitize_url
-
 from celery import Celery, bootsteps
+from celery._compat import maybe_sanitize_url, retry_over_time
+from celery._lazy import lazy_class_attr
+
+#: Solo per le annotazioni: non importano kombu al caricamento.
+Connection = lazy_class_attr('kombu.connection', 'Connection')
+Queue = lazy_class_attr('kombu.entity', 'Queue')
 from celery.utils.log import get_logger
 from celery.utils.quorum_queues import detect_quorum_queues
 from celery.worker.consumer import Consumer, Tasks

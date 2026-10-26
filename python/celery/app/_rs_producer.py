@@ -18,24 +18,153 @@ from __future__ import annotations
 import os
 import time
 from contextlib import contextmanager
-from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 
-from kombu import Connection as KombuConnection
-from kombu import Producer as KombuProducer
-from kombu import exceptions as kombu_exceptions
-from kombu.connection import is_connection
-from kombu.entity import Exchange, Queue, binding as binding_t
-from kombu.entity import maybe_delivery_mode
-from kombu.exceptions import OperationalError
-from kombu.pools import ProducerPool, connections as connection_pools
-from kombu.pools import set_limit
-from kombu.resource import Resource
-from kombu.serialization import dumps
-from kombu.utils.functional import dictfilter
-from kombu.utils.json import JSONEncoder
-from kombu.utils.url import as_url, parse_url
-
+from celery._compat import dictfilter, url_to_parts
+from celery.app._fast_entities import Exchange, Queue, maybe_delivery_mode
 from celery.utils.queue_arguments import to_rabbitmq_queue_arguments
+
+#: Il percorso veloce non importa kombu: Connection/Producer/pool sarebbero
+#: `kombu.connection` → py-amqp, billiard, ssl, importlib.metadata. Le classi
+#: vere servono solo nei rami di fallback e per la vista API (`__getattr__`).
+
+
+_ALWAYS_SAFE = frozenset(
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-~')
+
+
+def _quote(text):
+    """``urllib.parse.quote(text, safe='')`` senza importare ``urllib.parse``.
+
+    In Python 3.13 ``urllib.parse`` importa ``ipaddress``: nel client sono
+    pagine mappate in più per due sole funzioni.
+    """
+    out = []
+    for char in str(text):
+        if char in _ALWAYS_SAFE:
+            out.append(char)
+        else:
+            out.extend(f'%{byte:02X}' for byte in char.encode('utf-8'))
+    return ''.join(out)
+
+
+def _quote_plus(text):
+    return _quote(str(text)).replace('%20', '+')
+
+
+def _unquote_plus(text):
+    from urllib.parse import unquote_plus
+    return unquote_plus(text)
+
+
+def _url_scheme(url):
+    scheme, sep, _rest = url.partition('://')
+    return scheme if sep else ''
+
+
+def _operational_error():
+    from kombu.exceptions import OperationalError
+    return OperationalError
+
+
+def _kombu_connection_cls():
+    from kombu import Connection
+    return Connection
+
+
+def _kombu_producer_cls():
+    from kombu import Producer
+    return Producer
+
+
+def _binding_cls():
+    from kombu.entity import binding
+    return binding
+
+
+def _kombu_dumps(body, serializer):
+    from kombu.serialization import dumps
+    return dumps(body, serializer=serializer)
+
+
+def is_connection(obj):
+    """True per una connessione (nostra o di kombu), False per un canale."""
+    return (isinstance(obj, FastConnection)
+            or (hasattr(obj, 'declared_entities')
+                and hasattr(obj, 'transport_options')))
+
+
+def _json_default(o):
+    """Copie di ``kombu.utils.json.JSONEncoder.default`` (stesso JSON)."""
+    import base64
+    from datetime import date, datetime, time
+    from decimal import Decimal
+    from uuid import UUID
+
+    reducer = getattr(o, '__json__', None)
+    if reducer is not None:
+        return reducer()
+    if isinstance(o, datetime):
+        return {'__type__': 'datetime', '__value__': o.isoformat()}
+    if isinstance(o, date):
+        return {'__type__': 'date', '__value__': o.isoformat()}
+    if isinstance(o, time):
+        return {'__type__': 'time', '__value__': o.isoformat()}
+    if isinstance(o, Decimal):
+        return {'__type__': 'decimal', '__value__': str(o)}
+    if isinstance(o, UUID):
+        return {'__type__': 'uuid', '__value__': {'hex': o.hex}}
+    if isinstance(o, bytes):
+        try:
+            return {'__type__': 'bytes', '__value__': o.decode('utf-8')}
+        except UnicodeDecodeError:
+            return {'__type__': 'base64',
+                    '__value__': base64.b64encode(o).decode('utf-8')}
+    raise TypeError(
+        f'Object of type {type(o).__name__} is not JSON serializable')
+
+
+def _parse_ssl_cert_reqs(value):
+    # `ssl` fornisce le costanti come interi: non serve importarlo.
+    constants = {'CERT_REQUIRED': 2, 'CERT_OPTIONAL': 1, 'CERT_NONE': 0,
+                 'required': 2, 'optional': 1, 'none': 0}
+    return constants.get(value)
+
+
+def parse_url(url):
+    """Copie di ``kombu.utils.url.parse_url`` senza importare kombu."""
+    parts = url_to_parts(url)
+    query = dict(parts.query)
+    for key in [k for k in query if k.startswith('ssl_')]:
+        if key == 'ssl_check_hostname':
+            query[key] = query[key].lower() != 'false'
+        elif key == 'ssl_cert_reqs':
+            query[key] = _parse_ssl_cert_reqs(query[key])
+        query.setdefault('ssl', {})[key] = query[key]
+        del query[key]
+    return dict(transport=parts.scheme, hostname=parts.hostname,
+                port=parts.port, userid=parts.username,
+                password=parts.password, virtual_host=parts.path, **query)
+
+
+def as_url(scheme, host=None, port=None, user=None, password=None,
+           path=None, query=None, sanitize=False, mask='**'):
+    """Copie di ``kombu.utils.url.as_url`` (stessa stringa)."""
+    safequote = _quote
+    parts = [f'{scheme}://']
+    if user or password:
+        if user:
+            parts.append(safequote(user))
+        if password:
+            if sanitize:
+                parts.extend([':', mask] if mask else [':'])
+            else:
+                parts.extend([':', safequote(password)])
+        parts.append('@')
+    parts.append(safequote(host) if host else '')
+    if port:
+        parts.extend([':', port])
+    parts.extend(['/', path])
+    return ''.join(str(part) for part in parts if part)
 
 try:  # il pacchetto completo lo installa sempre; il riferimento no.
     import _celery_rs
@@ -89,7 +218,7 @@ _SUPPORTED_OPTIONS = {
 _RETRY_ERRORS = (ConnectionError, OSError)
 
 #: default del JSON di kombu: legge ``kombu.utils.json._encoders`` a ogni uso.
-_JSON_DEFAULT = JSONEncoder().default
+_JSON_DEFAULT = _json_default
 
 #: Contatori interni (verificati dai test: il publish passa davvero da Rust).
 _STATS = {
@@ -175,17 +304,47 @@ def use_fast_producer(connection):
     return _options_are_fast(driver, options)
 
 
-class FastConnection(KombuConnection):
-    """``kombu.Connection`` costruita senza importare la classe del trasporto.
+class FastConnection:
+    """Descrittore di connessione del percorso Rust.
 
-    ``kombu.Connection(url)`` importa il modulo del trasporto solo per leggere
-    ``can_parse_url``: con i componenti già separati (host, porta, vhost)
-    otteniamo la stessa connessione lazy senza pagare redis-py o py-amqp.
-
-    ``send_task`` usa ``_reraise_as_library_errors`` anche quando pubblica dal
-    percorso Rust: qui la mappatura non richiede il trasporto (basta
-    ``OperationalError``, come fa kombu).
+    Non eredita da ``kombu.Connection``: importarlo trascinerebbe py-amqp,
+    billiard/cffi, ssl e ``importlib.metadata`` nel processo client (spec
+    08b). Espone gli stessi attributi che il producer, il consumer e
+    ``_broker_url`` leggono; qualunque altro attributo viene delegato a una
+    vera ``kombu.Connection`` creata al primo accesso (solo per chi usa
+    l'API kombu completa, es. ``connection.channel()``).
     """
+
+    def __init__(self, hostname='localhost', userid=None, password=None,
+                 virtual_host=None, port=None, transport=None, ssl=None,
+                 heartbeat=None, login_method=None, failover_strategy=None,
+                 transport_options=None, connect_timeout=None, alt=None,
+                 **kwargs):
+        self.hostname = hostname or 'localhost'
+        self.userid = userid
+        self.password = password
+        self.virtual_host = virtual_host
+        self.port = port
+        self.transport_cls = transport or 'amqp'
+        self.ssl = ssl
+        self.heartbeat = heartbeat
+        self.login_method = login_method
+        self.failover_strategy = failover_strategy
+        self.transport_options = transport_options or {}
+        self.connect_timeout = connect_timeout
+        self.alt = alt
+        self.declared_entities = set()
+        self._transport = None
+        self._connection = None
+        self._default_channel = None
+        self._closed = False
+        self._kombu_view = None
+
+    # ------------------------------------------------------------- API kombu
+
+    @property
+    def connected(self):
+        return False
 
     @property
     def driver_type(self):
@@ -194,18 +353,16 @@ class FastConnection(KombuConnection):
 
     @property
     def connection_errors(self):
-        """Gli errori che il percorso Rust può sollevare, senza trasporto kombu.
-
-        Il riferimento ottiene la tupla da ``Transport.connection_errors``
-        (che importa redis-py/py-amqp); per ``ignore_errors`` e per il loop
-        bastano le classi comuni, e ``OperationalError`` resta quella del
-        riferimento.
-        """
-        return (ConnectionError, OSError, kombu_exceptions.OperationalError)
+        """Gli errori che il percorso Rust può sollevare, senza trasporto kombu."""
+        return (ConnectionError, OSError, _operational_error())
 
     @property
     def channel_errors(self):
-        return (kombu_exceptions.OperationalError,)
+        return (_operational_error(),)
+
+    @property
+    def default_channel(self):
+        return self._kombu().default_channel
 
     def as_uri(self, include_password=False, mask='**', getfields=None):
         """Come ``Connection.as_uri`` senza `self.transport` (nessun import)."""
@@ -218,32 +375,59 @@ class FastConnection(KombuConnection):
     def release(self):
         """Chiude senza istanziare il trasporto kombu.
 
-        `kombu.Connection._close` legge `self._transport`, che se assente
-        verrebbe creato (importando redis-py/py-amqp) solo per essere chiuso.
-        Sul percorso Rust il socket vive nella connessione nativa: qui si
-        azzerano solo i riferimenti lazy quando non c'è nulla da chiudere.
+        Il socket vive nella connessione nativa: qui si azzerano i riferimenti
+        eager e si chiude l'eventuale vista kombu creata da ``__getattr__``.
         """
-        if (self._transport is None and self._connection is None
-                and self._default_channel is None):
-            self.declared_entities.clear()
-            self._closed = True
-            return
-        super().release()
+        view = self._kombu_view
+        if view is not None:
+            self._kombu_view = None
+            view.release()
+        self.declared_entities.clear()
+        self._transport = None
+        self._connection = None
+        self._default_channel = None
+        self._closed = True
 
     close = release
 
     @contextmanager
-    def _reraise_as_library_errors(
-        self,
-        ConnectionError=kombu_exceptions.OperationalError,
-        ChannelError=kombu_exceptions.OperationalError,
-    ):
+    def _reraise_as_library_errors(self, ConnectionError=None,
+                                   ChannelError=None):
+        # Nessun import nel caso comune: `kombu.exceptions` si carica solo se
+        # c'è davvero un errore di trasporto da rimappare.
         try:
             yield
-        except (ConnectionError, ChannelError):
+        except Exception as exc:
+            if ConnectionError is not None and isinstance(
+                    exc, (ConnectionError, ChannelError)):
+                raise
+            if isinstance(exc, OSError):
+                error = ConnectionError if ConnectionError is not None \
+                    else _operational_error()
+                raise error(str(exc)) from exc
             raise
-        except OSError as exc:
-            raise ConnectionError(str(exc)) from exc
+
+    def _kombu(self):
+        """Vista ``kombu.Connection`` completa, creata solo se richiesta."""
+        view = self._kombu_view
+        if view is None:
+            view = _kombu_connection_cls()(
+                self.hostname, userid=self.userid, password=self.password,
+                virtual_host=self.virtual_host, port=self.port,
+                transport=self.transport_cls, ssl=self.ssl,
+                heartbeat=self.heartbeat, login_method=self.login_method,
+                failover_strategy=self.failover_strategy,
+                transport_options=self.transport_options,
+                connect_timeout=self.connect_timeout, alt=self.alt,
+            )
+            view.declared_entities = self.declared_entities
+            self._kombu_view = view
+        return view
+
+    def __getattr__(self, name):
+        if name.startswith('_'):
+            raise AttributeError(name)
+        return getattr(self._kombu(), name)
 
 
 def _connection_params(app, url):
@@ -281,7 +465,7 @@ def fast_connection(app, url=None):
     if not isinstance(url, str) or not url or ';' in url:
         return None
     try:
-        scheme = app.conf.broker_transport or urlsplit(url).scheme or ''
+        scheme = app.conf.broker_transport or _url_scheme(url) or ''
     except ValueError:
         return None
     if not _scheme_is_fast(scheme):
@@ -330,7 +514,7 @@ def ensure_connection(connection, errback=None, max_retries=None,
             return connection
         except _RETRY_ERRORS as exc:
             if max_retries is not None and retries >= max_retries:
-                raise OperationalError(str(exc)) from exc
+                raise _operational_error()(str(exc)) from exc
             interval = min(interval_start + interval_step * retries, interval_max)
             if errback is not None:
                 errback(exc, interval)
@@ -352,15 +536,26 @@ def release_connection(connection):
 
 def pool_limit(app):
     """Limite effettivo del pool, come ``app.pool.limit`` ma senza crearlo."""
-    return set_limit(app.conf.broker_pool_limit)
+    limit = app.conf.broker_pool_limit
+    if isinstance(limit, bool):
+        raise TypeError('limit must be an int, not bool')
+    return limit or 0
 
 
 def _merge_query(url, extra):
-    parts = urlsplit(url)
-    query = dict(parse_qsl(parts.query, keep_blank_values=True))
-    query.update({key: str(value) for key, value in extra.items()})
-    return urlunsplit((parts.scheme, parts.netloc, parts.path,
-                       urlencode(query), parts.fragment))
+    base, sep, query = url.partition('?')
+    pairs = []
+    if sep:
+        for item in query.split('&'):
+            if not item:
+                continue
+            key, _eq, value = item.partition('=')
+            pairs.append((_unquote_plus(key), _unquote_plus(value)))
+    merged = dict(pairs)
+    merged.update({key: str(value) for key, value in extra.items()})
+    encoded = '&'.join(f'{_quote_plus(key)}={_quote_plus(value)}'
+                       for key, value in merged.items())
+    return f'{base}?{encoded}' if encoded else base
 
 
 def _broker_url(connection):
@@ -378,16 +573,16 @@ def _broker_url(connection):
     parts = [f'{scheme}://']
     if userid or password:
         if userid:
-            parts.append(quote(str(userid), safe=''))
+            parts.append(_quote(userid))
         if password:
-            parts.append(':' + quote(str(password), safe=''))
+            parts.append(':' + _quote(password))
         parts.append('@')
     host_text = str(host or '')
     if ':' in host_text and not host_text.startswith('['):
         # IPv6: `Connection.hostname` perde le parentesi, l'URL le richiede.
         parts.append(f'[{host_text}]')
     else:
-        parts.append(quote(host_text, safe=''))
+        parts.append(_quote(host_text))
     if connection.port:
         parts.append(f':{connection.port}')
     # `as_url` antepone sempre '/' e salta le parti vuote: vhost '/' → '//'.
@@ -511,7 +706,7 @@ def _prepare_body(body, serializer, content_type, content_encoding):
                 return body.encode('utf-8'), 'text/plain', 'utf-8'
         if serializer in (None, 'json'):
             return _celery_rs.json_dumps(body, _JSON_DEFAULT), 'application/json', 'utf-8'
-        content_type, content_encoding, body = dumps(body, serializer=serializer)
+        content_type, content_encoding, body = _kombu_dumps(body, serializer)
         if isinstance(body, str):
             body = body.encode(content_encoding)
         return body, content_type, content_encoding
@@ -536,12 +731,22 @@ def _compress_body(body, compression, headers):
     return body
 
 
-class RsProducer(KombuProducer):
+class RsProducer:
     """Sostituto di :class:`kombu.Producer` che pubblica dal core Rust.
 
     Mantiene ``connection``/``channel``/``exchange`` come il producer originale;
     solo ``publish`` (e le dichiarazioni) passano dal trasporto Rust.
     """
+
+    #: Stessi default di ``kombu.Producer``.
+    auto_declare = True
+    routing_key = ''
+    exchange = None
+    serializer = None
+    compression = None
+    on_return = None
+    _channel = None
+    __connection__ = None
 
     def __init__(self, channel=None, exchange=None, routing_key=None,
                  serializer=None, auto_declare=None, compression=None,
@@ -621,13 +826,13 @@ class RsProducer(KombuProducer):
         connection = self.connection
         if connection is None:
             # Errore permanente, non di trasporto: non va ritentato.
-            raise OperationalError('producer senza connessione')
+            raise _operational_error()('producer senza connessione')
         return connection, self._entry()
 
     def _delivery_details(self, exchange, delivery_mode=None):
-        if isinstance(exchange, Exchange):
+        if not isinstance(exchange, (str, bytes)) and hasattr(exchange, 'name'):
             return exchange.name, maybe_delivery_mode(
-                delivery_mode or exchange.delivery_mode,
+                delivery_mode or getattr(exchange, 'delivery_mode', None),
             )
         return exchange, maybe_delivery_mode(
             delivery_mode or self.exchange.delivery_mode,
@@ -692,11 +897,13 @@ class RsProducer(KombuProducer):
             )
 
     def _declare_entity(self, entry, entity):
-        if isinstance(entity, Queue):
+        if isinstance(entity, Queue) or hasattr(entity, 'queue_arguments') \
+                or hasattr(entity, 'bindings'):
             self._declare_queue(entry, entity)
-        elif isinstance(entity, Exchange):
+        elif (isinstance(entity, Exchange)
+                or (hasattr(entity, 'name') and hasattr(entity, 'type'))):
             self._declare_exchange(entry, entity)
-        elif isinstance(entity, binding_t):
+        elif hasattr(entity, 'unbind_arguments'):
             # binding exchange→exchange: il trasporto Rust non lo supporta.
             raise NotImplementedError(
                 'binding tra exchange non supportato dal producer Rust')
@@ -764,7 +971,7 @@ class RsProducer(KombuProducer):
                 return self._call(fun)
             except _RETRY_ERRORS as exc:
                 if max_retries is not None and retries >= max_retries:
-                    raise OperationalError(str(exc)) from exc
+                    raise _operational_error()(str(exc)) from exc
                 if had_connection and errback is not None:
                     errback(exc, 0)
                 interval = min(interval_start + interval_step * retries,
@@ -831,7 +1038,7 @@ class RsProducer(KombuProducer):
         # dentro le properties (stringa di millisecondi).
         properties.pop('delivery_mode', None)
         kwargs.pop('expiration', None)
-        producer = KombuProducer(
+        producer = _kombu_producer_cls()(
             self.channel,
             exchange=self.exchange,
             routing_key=self.routing_key,
@@ -870,7 +1077,7 @@ class RsProducer(KombuProducer):
                 declare.append(self.exchange)
 
         reply_to = properties.get('reply_to')
-        if isinstance(reply_to, Queue):
+        if not isinstance(reply_to, (str, bytes)) and hasattr(reply_to, 'name'):
             properties['reply_to'] = reply_to.name
 
         if self.on_return or mandatory or immediate:
@@ -907,23 +1114,66 @@ class RsProducer(KombuProducer):
     close = release
 
 
-class FastProducerPool(ProducerPool):
-    """``kombu.pools.ProducerPool`` che crea :class:`RsProducer` senza socket kombu."""
+class _PooledProducer:
+    """Contesto di ``acquire``: crea un producer e lo rilascia all'uscita."""
+
+    __slots__ = ('_pool', '_producer')
+
+    def __init__(self, pool):
+        self._pool = pool
+        self._producer = None
+
+    def __enter__(self):
+        self._producer = self._pool.create_producer()
+        return self._producer
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self._pool.release(self._producer)
+        self._producer = None
+
+
+class _ConnectionsView:
+    """Il minimo di ``kombu.pools.connections`` usato dai chiamanti."""
+
+    def __init__(self, connection):
+        self.connection = connection
+
+    def __getitem__(self, key):
+        return self
+
+
+class FastProducerPool:
+    """Pool di :class:`RsProducer` senza socket né pool kombu.
+
+    ``kombu.Pool``/``Resource`` importerebbero ``kombu.pools`` (e quindi
+    ``kombu.connection``): il percorso Rust crea un producer a ogni
+    ``acquire`` (è solo un descrittore, la connessione nativa è condivisa) e
+    non ha risorse da riciclare.
+    """
 
     Producer = RsProducer
 
     def __init__(self, connection, limit=None, driver_type=None):
-        super().__init__(connection_pools[connection], limit=limit)
+        self.connections = _ConnectionsView(connection)
+        self.limit = 0 if limit is None else limit
         # Evita l'accesso a `connection.transport.driver_type` in send_task
         # (importerebbe la libreria client) per la decisione su ETA.
         self.driver_type = driver_type or driver_type_of(connection)
 
+    def acquire(self, block=True, timeout=None):
+        return _PooledProducer(self)
+
     def create_producer(self):
-        # La connessione kombu resta solo un descrittore lazy (URL, opzioni);
+        # La connessione resta solo un descrittore lazy (URL, opzioni);
         # l'I/O passa dalla connessione Rust condivisa.
         return self.Producer(self.connections.connection)
 
     def release(self, resource):
-        # Non si tocca ``__connection__``: è il descrittore condiviso, non una
-        # PooledConnection acquisita dal pool.
-        Resource.release(self, resource)
+        # Nessuna risorsa del pool da restituire: la connessione è condivisa.
+        return None
+
+    def resize(self, limit):
+        self.limit = limit
+
+    def close(self):
+        return None

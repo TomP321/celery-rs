@@ -4,12 +4,11 @@ from functools import partial
 from heapq import heappush
 from operator import itemgetter
 
-from kombu import Consumer
-from kombu.asynchronous.semaphore import DummyLock
-from kombu.exceptions import ContentDisallowed, DecodeError
+import time as _time
+from operator import itemgetter as _itemgetter
 
 from celery import bootsteps, uuid
-from celery.events.receiver import EventReceiver
+from celery.utils.time import adjust_timestamp as _adjust_timestamp
 from celery.utils.log import get_logger
 from celery.utils.objects import Bunch
 
@@ -21,18 +20,55 @@ logger = get_logger(__name__)
 debug, info = logger.debug, logger.info
 
 
+_TZGETTER = _itemgetter('utcoffset', 'timestamp')
+#: Client non sincronizzati (come ``celery.events.receiver``).
+_CLIENT_CLOCK_SKEW = -1
+
+
 class _RsReceiver:
-    """Il minimo di ``EventReceiver`` per ``event_from_message`` (nessun canale)."""
+    """Il minimo di ``EventReceiver`` per ``event_from_message`` (nessun canale).
+
+    La copia evita di importare ``celery.events.receiver`` (e con lui
+    ``kombu.mixins``/``kombu.connection``) quando il gossip è disabilitato.
+    """
 
     __slots__ = ('app', 'clock', 'adjust_clock', 'forward_clock')
 
-    event_from_message = EventReceiver.event_from_message
+    def event_from_message(self, body, localize=True,
+                           now=_time.time, tzfields=_TZGETTER,
+                           adjust_timestamp=_adjust_timestamp,
+                           CLIENT_CLOCK_SKEW=_CLIENT_CLOCK_SKEW):
+        type = body['type']
+        if type == 'task-sent':
+            _c = body['clock'] = (self.clock.value or 1) + CLIENT_CLOCK_SKEW
+            self.adjust_clock(_c)
+        else:
+            try:
+                clock = body['clock']
+            except KeyError:
+                body['clock'] = self.forward_clock()
+            else:
+                self.adjust_clock(clock)
+        if localize:
+            try:
+                offset, timestamp = tzfields(body)
+            except KeyError:
+                pass
+            else:
+                body['timestamp'] = adjust_timestamp(timestamp, offset)
+        body['local_received'] = now()
+        return type, body
 
     def __init__(self, app):
         self.app = app
         self.clock = app.clock
         self.adjust_clock = self.clock.adjust
         self.forward_clock = self.clock.forward
+
+
+def _decode_errors():
+    from kombu.exceptions import ContentDisallowed, DecodeError
+    return (DecodeError, ContentDisallowed)
 
 
 class Gossip(bootsteps.ConsumerStep):
@@ -71,6 +107,7 @@ class Gossip(bootsteps.ConsumerStep):
                 max_tasks_in_memory=1,
             )
             if c.hub:
+                from kombu.asynchronous.semaphore import DummyLock
                 c._mutex = DummyLock()
             self.update_state = self.state.event
         self.interval = interval
@@ -238,6 +275,7 @@ class Gossip(bootsteps.ConsumerStep):
         self.register_timer()
         ev = self.Receiver(channel, routing_key='worker.#',
                            queue_ttl=self.heartbeat_interval)
+        from kombu import Consumer
         return [Consumer(
             channel,
             queues=[ev.queue],
@@ -266,7 +304,7 @@ class Gossip(bootsteps.ConsumerStep):
             try:
                 _, event = prepare(message.payload)
                 self.update_state(event)
-            except (DecodeError, ContentDisallowed, TypeError) as exc:
+            except (_decode_errors() + (TypeError,)) as exc:
                 logger.error(exc)
         else:
             self.clock.forward()

@@ -8,14 +8,12 @@ from importlib import import_module
 from typing import IO, TYPE_CHECKING, Any, List, Optional, cast
 from uuid import uuid4
 
-from kombu.utils.imports import symbol_by_name
-from kombu.utils.objects import cached_property
-
 from celery import _state, signals
+from celery._compat import cached_property
 from celery.exceptions import FixupWarning, ImproperlyConfigured
 from celery.local import Proxy
+from celery.utils.imports import _symbol_by_name as symbol_by_name
 from celery.utils.log import get_logger
-from celery.worker import WorkController
 
 if TYPE_CHECKING:
     from types import ModuleType
@@ -25,6 +23,7 @@ if TYPE_CHECKING:
     from django.db.utils import ConnectionHandler
 
     from celery.app.base import Celery
+    from celery.worker import WorkController  # noqa: F401
     from celery.app.task import Task
 
     class DjangoDBModule(Protocol):

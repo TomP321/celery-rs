@@ -2,12 +2,25 @@
 import atexit
 import warnings
 
-from kombu.asynchronous import Hub as _Hub
-from kombu.asynchronous import get_event_loop, set_event_loop
-from kombu.asynchronous.semaphore import DummyLock, LaxBoundedSemaphore
-from kombu.asynchronous.timer import Timer as _Timer
-
 from celery import bootsteps
+from celery._lazy import lazy_class_attr
+
+#: Nomi del riferimento, risolti solo quando usati e sostituibili nei test.
+_Timer = lazy_class_attr('kombu.asynchronous.timer', 'Timer')
+_Hub = lazy_class_attr('kombu.asynchronous', 'Hub')
+DummyLock = lazy_class_attr('kombu.asynchronous.semaphore', 'DummyLock')
+LaxBoundedSemaphore = lazy_class_attr(
+    'kombu.asynchronous.semaphore', 'LaxBoundedSemaphore')
+
+
+def get_event_loop():
+    from kombu.asynchronous import get_event_loop as _get_event_loop
+    return _get_event_loop()
+
+
+def set_event_loop(loop):
+    from kombu.asynchronous import set_event_loop as _set_event_loop
+    return _set_event_loop(loop)
 from celery._state import _set_task_join_will_block
 from celery.exceptions import ImproperlyConfigured
 from celery.platforms import IS_WINDOWS

@@ -2,19 +2,16 @@
 import sys
 import types
 
-from billiard.einfo import ExceptionInfo, ExceptionWithTraceback
-from kombu import serialization
-from kombu.exceptions import OperationalError
-from kombu.utils.uuid import uuid
-
 from celery import current_app, states
+from celery._lazy import lazy_class_attr
 from celery._state import _task_stack
 from celery.canvas import _chain, group, signature
 from celery.exceptions import Ignore, ImproperlyConfigured, MaxRetriesExceededError, Reject, Retry
 from celery.local import class_property
 from celery.result import EagerResult, denied_join_result
 from celery.utils import abstract, deprecated
-from celery.utils.functional import mattrgetter, maybe_list
+from celery._compat import maybe_list
+from celery.utils.functional import mattrgetter
 from celery.utils.imports import instantiate
 from celery.utils.nodenames import gethostname
 from celery.utils.serialization import raise_with_context
@@ -24,6 +21,12 @@ from .registry import _unpickle_task_v2
 from .utils import appstr
 
 __all__ = ('Context', 'Task')
+
+
+def _uuid():
+    # Stesso valore di `kombu.utils.uuid.uuid`, senza importare `kombu.utils`.
+    from uuid import uuid4
+    return str(uuid4())
 
 # Sentinel used by Context.update() to detect whether 'timelimit' was changed.
 _UNSET = object()
@@ -217,7 +220,9 @@ class Task:
     __v2_compat__ = False  # set by old base in celery.task.base
 
     MaxRetriesExceededError = MaxRetriesExceededError
-    OperationalError = OperationalError
+    #: Risolta al primo accesso: importare `kombu.exceptions` carica py-amqp
+    #: (ssl, decimal, ...) e il client non ne ha bisogno (spec 08b).
+    OperationalError = lazy_class_attr('kombu.exceptions', 'OperationalError')
 
     #: Execution strategy used, or the qualified name of one.
     Strategy = 'celery.worker.strategy:default'
@@ -719,6 +724,7 @@ class Task:
                     else:
                         serializer = app.conf.task_serializer
                 body = args, kwargs
+                from kombu import serialization
                 content_type, content_encoding, data = serialization.dumps(
                     body, serializer,
                 )
@@ -727,7 +733,7 @@ class Task:
                     accept=[content_type]
                 )
             with denied_join_result():
-                return self.apply(args, kwargs, task_id=task_id or uuid(),
+                return self.apply(args, kwargs, task_id=task_id or _uuid(),
                                   link=link, link_error=link_error, **options)
         else:
             return app.send_task(
@@ -917,7 +923,7 @@ class Task:
         app = self._get_app()
         args = args or ()
         kwargs = kwargs or {}
-        task_id = task_id or uuid()
+        task_id = task_id or _uuid()
         retries = retries or 0
         if throw is None:
             throw = app.conf.task_eager_propagates
@@ -971,6 +977,7 @@ class Task:
         )
         ret = tracer(task_id, args, kwargs, request)
         retval = ret.retval
+        from billiard.einfo import ExceptionInfo, ExceptionWithTraceback
         if isinstance(retval, ExceptionInfo):
             retval, tb = retval.exception, retval.traceback
             if isinstance(retval, ExceptionWithTraceback):

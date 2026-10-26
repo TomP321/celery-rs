@@ -8,7 +8,7 @@ from functools import partial
 from inspect import getmro
 from itertools import takewhile
 
-from kombu.utils.encoding import bytes_to_str, safe_repr, str_to_bytes
+from celery._compat import bytes_to_str, safe_repr, str_to_bytes
 
 try:
     import cPickle as pickle

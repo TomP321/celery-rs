@@ -2,7 +2,7 @@
 from collections import deque, namedtuple
 from datetime import timedelta
 
-from celery.utils.functional import memoize
+from celery._compat import memoize
 from celery.utils.serialization import strtobool
 
 __all__ = ('Option', 'NAMESPACES', 'flatten', 'find')

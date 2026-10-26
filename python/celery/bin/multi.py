@@ -104,7 +104,7 @@ import sys
 from functools import wraps
 
 import click
-from kombu.utils.objects import cached_property
+from celery._compat import cached_property
 
 from celery import VERSION_BANNER
 from celery.apps.multi import Cluster, MultiParser, NamespacedOptionParser

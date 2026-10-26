@@ -11,15 +11,11 @@ import warnings
 from collections import defaultdict, deque
 from time import sleep
 
-from billiard.common import restart_state
-from billiard.exceptions import RestartFreqExceeded
-from kombu.asynchronous.semaphore import DummyLock
-from kombu.common import ignore_errors
-from kombu.exceptions import ContentDisallowed, DecodeError
-from kombu.utils.compat import _detect_environment
-from kombu.utils.encoding import safe_repr
-from kombu.utils.limits import TokenBucket
 from vine import ppartial, promise
+
+from celery._compat import RestartFreqExceeded, restart_state
+from celery._compat import restart_freq_exceeded
+from celery._compat import _detect_environment, safe_repr
 
 from celery import bootsteps, signals
 from celery.app import _rs_producer
@@ -38,6 +34,21 @@ from celery.worker.state import (active_requests, maybe_shutdown, requests, rese
                                  successful_requests, task_reserved)
 
 __all__ = ('Consumer', 'Evloop', 'dump_body')
+
+def _content_disallowed():
+    from kombu.exceptions import ContentDisallowed
+    return ContentDisallowed
+
+
+def _decode_error():
+    from kombu.exceptions import DecodeError
+    return DecodeError
+
+
+def _ignore_errors(*args, **kwargs):
+    from kombu.common import ignore_errors
+    return ignore_errors(*args, **kwargs)
+
 
 CLOSE = bootsteps.CLOSE
 TERMINATE = bootsteps.TERMINATE
@@ -319,7 +330,10 @@ class Consumer:
 
     def bucket_for_task(self, type):
         limit = rate(getattr(type, 'rate_limit', None))
-        return TokenBucket(limit, capacity=1) if limit else None
+        if not limit:
+            return None
+        from kombu.utils.limits import TokenBucket
+        return TokenBucket(limit, capacity=1)
 
     def reset_rate_limits(self):
         self.task_buckets.update(
@@ -394,7 +408,7 @@ class Consumer:
             if self.restart_count:
                 try:
                     self._restart_state.step()
-                except RestartFreqExceeded as exc:
+                except (RestartFreqExceeded, restart_freq_exceeded()) as exc:
                     crit('Frequent restarts detected: %r', exc, exc_info=1)
                     sleep(1)
             self.restart_count += 1
@@ -487,7 +501,7 @@ class Consumer:
         # stay open for in-flight task acks.
         connection, self.connection = self.connection, None
         if connection:
-            ignore_errors(connection, connection.close)
+            _ignore_errors(connection, connection.close)
 
         if self.app.conf.worker_cancel_long_running_tasks_on_connection_loss:
             for request in tuple(active_requests):
@@ -876,9 +890,9 @@ class Consumer:
                         reject_log_error_promise,
                         callbacks,
                     )
-                except (InvalidTaskError, ContentDisallowed) as exc:
+                except (InvalidTaskError, _content_disallowed()) as exc:
                     return on_invalid_task(payload, message, exc)
-                except DecodeError as exc:
+                except _decode_error() as exc:
                     return self.on_decode_error(message, exc)
 
         return on_task_received
@@ -972,4 +986,5 @@ class Evloop(bootsteps.StartStopStep):
         loop(*c.loop_args())
 
     def patch_all(self, c):
+        from kombu.asynchronous.semaphore import DummyLock
         c.qos._mutex = DummyLock()

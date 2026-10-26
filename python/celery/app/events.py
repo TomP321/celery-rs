@@ -1,7 +1,7 @@
 """Implementation for the app.events shortcuts."""
 from contextlib import contextmanager
 
-from kombu.utils.objects import cached_property
+from celery._compat import cached_property
 
 
 class Events:

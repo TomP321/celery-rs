@@ -13,28 +13,53 @@ import platform as _platform
 import signal as _signal
 import sys
 import warnings
+from typing import TYPE_CHECKING
 from contextlib import contextmanager
 
-from billiard.compat import close_open_fds as _billiard_close_open_fds
-from billiard.compat import get_fdmax
-from billiard.util import set_pdeathsig as _set_pdeathsig
-# fileno used to be in this module
-from kombu.utils.compat import maybe_fileno
-from kombu.utils.encoding import safe_str
+from celery._compat import maybe_fileno, safe_str
+from celery._lazy import install as _install_lazy, lazy_module
 
 from .exceptions import SecurityError, SecurityWarning, reraise
 from .local import try_import
 
-try:
-    from billiard.process import current_process
-except ImportError:
-    current_process = None
+if TYPE_CHECKING:  # nomi risolti da __getattr__, per pyflakes
+    from billiard.compat import get_fdmax  # noqa: F401
+
+
+def _get_fdmax(default=None):
+    """Copie locale di ``billiard.compat.get_fdmax`` (solo resource)."""
+    try:
+        import resource
+    except ImportError:  # pragma: no cover - piattaforme senza resource
+        return default
+    fdmax = resource.getrlimit(resource.RLIMIT_NOFILE)[1]
+    if fdmax == resource.RLIM_INFINITY:
+        return default
+    return fdmax
+
+
 
 _setproctitle = try_import('setproctitle')
 resource = try_import('resource')
 pwd = try_import('pwd')
 grp = try_import('grp')
-mputil = try_import('multiprocessing.util')
+#: Modulo risolto al primo uso (i test sostituiscono questo nome).
+mputil = lazy_module('multiprocessing.util')
+
+
+def current_process():
+    from billiard.process import current_process as _current_process
+    return _current_process()
+
+
+def _set_pdeathsig(signum):
+    from billiard.util import set_pdeathsig as _set_pdeathsig
+    return _set_pdeathsig(signum)
+
+
+def _billiard_close_open_fds(keep):
+    from billiard.compat import close_open_fds as _close_open_fds
+    return _close_open_fds(keep)
 
 __all__ = (
     'EX_OK', 'EX_FAILURE', 'EX_UNAVAILABLE', 'EX_USAGE', 'SYSTEM',
@@ -318,7 +343,7 @@ def fd_by_path(paths):
         # No fd directory on this platform.  Scan the numeric range, as
         # before: fdmax is only unreasonably large (~1e9) in containers, and
         # those run Linux, where /proc/self/fd is listed above (issue #9886).
-        fds = range(get_fdmax(2048))
+        fds = range(_get_fdmax(2048))
     return [_fd for _fd in fds if fd_in_stats(_fd)]
 
 
@@ -414,7 +439,10 @@ class DaemonContext:
                 for fd in self.stdfds:
                     self.redirect_to_null(maybe_fileno(fd))
                 if self.after_forkers and mputil is not None:
-                    mputil._run_after_forkers()
+                    try:
+                        mputil._run_after_forkers()
+                    except ImportError:  # pragma: no cover
+                        pass
 
             self._is_open = True
 
@@ -809,7 +837,11 @@ else:
         """
         if hostname:
             progname = f'{progname}: {hostname}'
-        name = current_process().name if current_process else 'MainProcess'
+        try:
+            process = current_process()
+        except ImportError:  # pragma: no cover
+            process = None
+        name = process.name if process is not None else 'MainProcess'
         return set_process_title(f'{progname}:{name}', info=info)
 
 
@@ -907,3 +939,6 @@ def _warn_or_raise_security_error(egid, euid, gid, uid, pickle_or_serialize):
     )),
         stacklevel=2,
     )
+
+
+_install_lazy(globals(), {'get_fdmax': ('billiard.compat', 'get_fdmax')})

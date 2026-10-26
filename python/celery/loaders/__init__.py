@@ -3,7 +3,8 @@
 Loaders define how configuration is read, what happens
 when workers start, when tasks are executed and so on.
 """
-from celery.utils.imports import import_from_cwd, symbol_by_name
+from celery.utils.imports import _symbol_by_name as symbol_by_name
+from celery.utils.imports import import_from_cwd
 
 __all__ = ('get_loader_cls',)
 

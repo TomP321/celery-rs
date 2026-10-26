@@ -9,8 +9,7 @@ from typing import Any
 
 import click
 from click import Context, ParamType
-from kombu.exceptions import OperationalError
-from kombu.utils.objects import cached_property
+from celery._compat import cached_property
 
 from celery._state import get_current_app
 from celery.exceptions import CeleryCommandException
@@ -125,7 +124,8 @@ def handle_remote_command_error(command: str, exc: Exception) -> None:
     if isinstance(exc, click.ClickException):
         raise
 
-    if isinstance(exc, OperationalError):
+    from celery._compat import operational_error
+    if isinstance(exc, operational_error()):
         raise CeleryCommandException(
             message=(
                 'Could not connect to the message broker. '

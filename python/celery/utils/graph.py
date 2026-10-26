@@ -2,7 +2,7 @@
 from collections import Counter
 from textwrap import dedent
 
-from kombu.utils.encoding import bytes_to_str, safe_str
+from celery._compat import bytes_to_str, safe_str
 
 __all__ = ('DOT', 'CycleError', 'DependencyGraph', 'GraphFormatter')
 

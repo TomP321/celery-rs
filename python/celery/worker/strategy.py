@@ -1,7 +1,7 @@
 """Task execution strategy (optimization)."""
 import logging
 
-from kombu.asynchronous.timer import to_timestamp
+from celery._compat import to_timestamp
 
 from celery import signals
 from celery.app import trace as _app_trace

@@ -10,13 +10,11 @@ import types
 import warnings
 from contextlib import contextmanager
 from functools import partial
-from ssl import CERT_NONE, CERT_OPTIONAL, CERT_REQUIRED
 from urllib.parse import unquote
 
-from kombu.utils import symbol_by_name
-from kombu.utils.functional import retry_over_time
-from kombu.utils.objects import cached_property
-from kombu.utils.url import _parse_url, maybe_sanitize_url
+from celery._compat import cached_property, maybe_sanitize_url, retry_over_time
+from celery._compat import url_to_parts as _parse_url
+from celery.utils.imports import _symbol_by_name as symbol_by_name
 
 from celery import states
 from celery._state import task_join_will_block
@@ -24,12 +22,17 @@ from celery.backends.base import _create_chord_error_with_cause
 from celery.canvas import maybe_signature
 from celery.exceptions import BackendStoreError, ChordError, ImproperlyConfigured
 from celery.result import GroupResult, allow_join_result
-from celery.utils.functional import _regen, dictfilter
+from celery._compat import dictfilter
+from celery.utils.functional import _regen
 from celery.utils.log import get_logger
 from celery.utils.time import humanize_seconds
 
 from .asynchronous import AsyncBackendMixin, BaseResultConsumer
 from .base import BaseKeyValueStoreBackend
+
+#: Costanti di `ssl` usate come valori di default: sono interi, quindi non
+#: serve importare `ssl` (e con lui socket/hmac) nel client.
+CERT_NONE, CERT_OPTIONAL, CERT_REQUIRED = 0, 1, 2
 
 logger = get_logger(__name__)
 
@@ -860,8 +863,12 @@ class RedisBackend(BaseKeyValueStoreBackend, AsyncBackendMixin):
     def ensure(self, fun, args, **policy):
         retry_policy = dict(self.retry_policy, **policy)
         max_retries = retry_policy.get('max_retries')
+        # Le classi di errore di kombu/redis-py servono solo se qualcosa
+        # fallisce: risolverle sempre importerebbe `kombu.transport.redis`
+        # sul percorso client (es. chord), dove l'I/O è in Rust.
+        from celery._compat import LazyErrors
         return retry_over_time(
-            fun, self.connection_errors, args, {},
+            fun, LazyErrors(lambda: self.connection_errors), args, {},
             partial(self.on_connection_error, max_retries),
             **retry_policy)
 

@@ -10,12 +10,16 @@ from queue import Empty
 from time import sleep
 from weakref import WeakKeyDictionary
 
-from kombu.utils.compat import detect_environment
-
 from celery import states
 from celery.exceptions import TimeoutError
 from celery.utils.log import get_logger
 from celery.utils.threads import THREAD_TIMEOUT_MAX
+
+
+def detect_environment():
+    # Wrapper: i test sostituiscono questo nome; kombu si importa al primo uso.
+    from celery._compat import detect_environment as _detect_environment
+    return _detect_environment()
 
 E_CELERY_RESTART_REQUIRED = "Celery must be restarted because a shutdown signal was detected."
 

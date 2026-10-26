@@ -108,14 +108,17 @@ def test_pool_uses_rust_producer_and_counts_publish():
     app.close()
 
 
-def test_producer_exposes_kombu_connection_without_opening_it():
+def test_producer_exposes_lazy_connection_without_opening_it():
+    """Il descrittore di connessione non importa kombu (spec 08b)."""
     app, _, _ = make_app()
     with app.producer_or_acquire() as producer:
         assert isinstance(producer, RsProducer)
-        assert isinstance(producer.connection, KombuConnection)
+        assert isinstance(producer.connection, _rs_producer.FastConnection)
         # Nessun canale kombu finché non lo si chiede esplicitamente.
         assert producer._channel is producer.connection
         assert producer.connection.connected is False
+        # La vista kombu esiste solo se qualcuno la usa davvero.
+        assert producer.connection._kombu_view is None
     app.close()
 
 
@@ -334,9 +337,8 @@ def test_fast_path_does_not_import_client_libraries(broker, tmp_path):
     )
     loaded = set(json.loads(result.stdout.strip().splitlines()[-1]))
     assert not (loaded & set(CLIENT_MODULES)), loaded
-    # `amqp` (py-amqp) è già importato da `kombu.exceptions` quando si importa
-    # `celery`, sia nel riferimento sia in celery-rs: non è un import nostro.
-    assert 'amqp' in loaded
+    # Spec 08b: il percorso Rust non importa nemmeno py-amqp.
+    assert 'amqp' not in loaded
 
 
 def test_broker_url_always_states_heartbeat_for_amqp():

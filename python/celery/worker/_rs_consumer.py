@@ -26,8 +26,7 @@ import os
 import time
 from types import SimpleNamespace
 
-from kombu.exceptions import OperationalError
-from kombu.serialization import prepare_accept_content
+from celery._compat import prepare_accept_content
 from celery.utils.queue_arguments import to_rabbitmq_queue_arguments
 
 from celery._rs_message import RsMessage
@@ -86,7 +85,17 @@ def _write_state():
     path = os.environ.get(ENV_STATE)
     if not path:
         return
-    payload = {'pid': os.getpid(), 'consumer': 'rust'}
+    import sys
+    prefixes = ('kombu', 'amqp', 'billiard', 'click', 'redis', 'yaml',
+                'msgpack', 'greenlet', 'cffi', 'ssl', 'multiprocessing',
+                'importlib.metadata', 'email', 'decimal', 'dateutil',
+                'tzlocal', 'celery.worker', 'celery.events')
+    payload = {
+        'pid': os.getpid(), 'consumer': 'rust', 'modules': len(sys.modules),
+        'loaded': sorted(m for m in sys.modules
+                         if any(m == p or m.startswith(p + '.')
+                                for p in prefixes)),
+    }
     payload.update(_STATS)
     try:
         temporary = f'{path}.{os.getpid()}.tmp'
@@ -298,7 +307,8 @@ class RsConnection:
                 return self
             except OSError as exc:
                 if max_retries is not None and retries >= max_retries:
-                    raise OperationalError(str(exc)) from exc
+                    from celery._compat import operational_error
+                    raise operational_error()(str(exc)) from exc
                 interval = min(interval_start + interval_step * retries,
                                interval_max)
                 if errback is not None:
