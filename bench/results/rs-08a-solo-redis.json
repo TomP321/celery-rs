@@ -1,0 +1,24 @@
+{
+ "label": "rs-08a-solo-redis",
+ "venv": "../.venv-rs",
+ "pool": "solo",
+ "concurrency": 1,
+ "n": 10000,
+ "pss_idle_kb": 37043,
+ "pss_idle_per_process_kb": [
+  37043
+ ],
+ "pss_peak_kb": 46041,
+ "pss_after_kb": 46796,
+ "client_publish_per_s": 2962.543289510096,
+ "client_maxrss_kb": 48236,
+ "end_to_end_s": 6.362944841384888,
+ "end_to_end_tasks_per_s": 1571.5993536451138,
+ "drain_after_publish_s": 2.9191944700141903,
+ "latency_ms": {
+  "p50": 1.5366164880106226,
+  "p99": 2.2142249799799174,
+  "max": 2.5269410107284784
+ },
+ "python": "3.13.9"
+}

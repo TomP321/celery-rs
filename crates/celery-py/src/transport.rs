@@ -392,7 +392,7 @@ pub(crate) fn tag_from_py(tag: &Bound<'_, PyAny>) -> PyResult<DeliveryTag> {
     Err(PyTypeError::new_err("delivery_tag deve essere int o str"))
 }
 
-fn body_from_py(body: &Bound<'_, PyAny>) -> PyResult<Bytes> {
+pub(crate) fn body_from_py(body: &Bound<'_, PyAny>) -> PyResult<Bytes> {
     if let Ok(bytes) = body.cast::<PyBytes>() {
         return Ok(Bytes::copy_from_slice(bytes.as_bytes()));
     }

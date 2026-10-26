@@ -8,7 +8,8 @@ from kombu import Consumer
 from kombu.asynchronous.semaphore import DummyLock
 from kombu.exceptions import ContentDisallowed, DecodeError
 
-from celery import bootsteps
+from celery import bootsteps, uuid
+from celery.events.receiver import EventReceiver
 from celery.utils.log import get_logger
 from celery.utils.objects import Bunch
 
@@ -18,6 +19,20 @@ __all__ = ('Gossip',)
 
 logger = get_logger(__name__)
 debug, info = logger.debug, logger.info
+
+
+class _RsReceiver:
+    """Il minimo di ``EventReceiver`` per ``event_from_message`` (nessun canale)."""
+
+    __slots__ = ('app', 'clock', 'adjust_clock', 'forward_clock')
+
+    event_from_message = EventReceiver.event_from_message
+
+    def __init__(self, app):
+        self.app = app
+        self.clock = app.clock
+        self.adjust_clock = self.clock.adjust
+        self.forward_clock = self.clock.forward
 
 
 class Gossip(bootsteps.ConsumerStep):
@@ -35,7 +50,7 @@ class Gossip(bootsteps.ConsumerStep):
 
     def __init__(self, c, without_gossip=False,
                  interval=5.0, heartbeat_interval=2.0, **kwargs):
-        self.enabled = not without_gossip and self.compatible_transport(c.app)
+        self.enabled = not without_gossip and self._compatible(c)
         self.app = c.app
         c.gossip = self
         self.Receiver = c.app.events.Receiver
@@ -48,6 +63,7 @@ class Gossip(bootsteps.ConsumerStep):
         )
 
         self.timer = c.timer
+        self._rs_consumer = None
         if self.enabled:
             self.state = c.app.events.State(
                 on_node_join=self.on_node_join,
@@ -73,6 +89,16 @@ class Gossip(bootsteps.ConsumerStep):
         }
 
         super().__init__(c, **kwargs)
+
+    def _compatible(self, c):
+        """True se il trasporto supporta gossip; senza aprire kombu su Rust."""
+        from celery.worker import _rs_consumer
+        if _rs_consumer.use_rs_worker(c):
+            # Stesso `driver_type` del trasporto, ma letto dallo schema: nessun
+            # import di redis-py/py-amqp.
+            from celery.app._rs_producer import driver_type_of
+            return driver_type_of(c.conninfo) in self.compatible_transports
+        return self.compatible_transport(c.app)
 
     def compatible_transport(self, app):
         with app.connection_for_read() as conn:
@@ -104,8 +130,48 @@ class Gossip(bootsteps.ConsumerStep):
         self.dispatcher.send('worker-elect-ack', id=id_)
 
     def start(self, c):
+        from celery.worker import _rs_consumer
+        if _rs_consumer.is_rs_connection(getattr(c, 'connection', None)):
+            self._start_rs(c)
+            self.dispatcher = c.event_dispatcher
+            return
         super().start(c)
         self.dispatcher = c.event_dispatcher
+
+    # ------------------------------------------------------------ trasporto Rust
+
+    def _start_rs(self, c):
+        """``get_consumers`` sul consumer Rust, con gli stessi handler Python."""
+        from celery.worker import _rs_mailbox
+        if self._rs_consumer is not None:
+            self._rs_consumer.close()
+        self.register_timer()
+        driver = c.connection.driver_type
+        exchange = c.app.conf.event_exchange
+        exchange_type = 'fanout' if driver in {'redis', 'gcpubsub'} else 'topic'
+        self._rs_receiver = _RsReceiver(c.app)
+        self._rs_prepare = partial(
+            self._rs_receiver.event_from_message, localize=False)
+        consumer = _rs_mailbox.events_consumer(
+            c.connection,
+            c.app.conf.event_queue_prefix,
+            uuid(),
+            exchange,
+            exchange_type,
+            'worker.#',
+            self._on_rs_message,
+            accept={c.app.conf.event_serializer, 'json'},
+            expires=c.app.conf.event_queue_expires,
+            message_ttl=self.heartbeat_interval,
+            queue_exclusive=c.app.conf.event_queue_exclusive,
+            queue_durable=c.app.conf.event_queue_durable,
+        )
+        self._rs_consumer = consumer
+        self.consumers = [consumer]
+        consumer.start()
+
+    def _on_rs_message(self, body, message):
+        self.on_message(self._rs_prepare, message)
 
     def on_elect_ack(self, event):
         id = event['id']

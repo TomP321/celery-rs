@@ -265,12 +265,15 @@ class Worker(WorkController):
         if not self.task_events:
             events = 'OFF (enable -E to monitor tasks in this worker)'
 
+        from celery.app import _rs_producer
+        conninfo = _rs_producer.fast_connection(self.app) or self.app.connection()
+
         banner = BANNER.format(
             app=appr,
             hostname=safe_str(self.hostname),
             timestamp=datetime.now().replace(microsecond=0),
             version=VERSION_BANNER,
-            conninfo=self.app.connection().as_uri(),
+            conninfo=conninfo.as_uri(),
             results=self.app.backend.as_uri(),
             concurrency=concurrency,
             platform=safe_str(_platform.platform()),

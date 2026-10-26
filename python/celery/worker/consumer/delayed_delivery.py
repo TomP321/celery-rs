@@ -11,9 +11,6 @@ if sys.version_info < (3, 11):  # pragma: no cover
     from exceptiongroup import ExceptionGroup
 
 from kombu import Connection, Queue
-from kombu.common import Broadcast
-from kombu.transport.native_delayed_delivery import (bind_queue_to_native_delayed_delivery_exchange,
-                                                     declare_native_delayed_delivery_exchanges_and_queues)
 from kombu.utils.functional import retry_over_time
 from kombu.utils.url import maybe_sanitize_url
 
@@ -25,6 +22,28 @@ from celery.worker.consumer import Consumer, Tasks
 __all__ = ('DelayedDelivery',)
 
 logger = get_logger(__name__)
+
+
+def declare_native_delayed_delivery_exchanges_and_queues(connection, queue_type):
+    """``kombu.transport.native_delayed_delivery`` importato solo quando serve.
+
+    Il bootstep è nel blueprint di ogni consumer, quindi un import a livello di
+    modulo caricherebbe ``kombu.transport`` anche nel master senza quorum queue.
+    La funzione ha lo stesso nome del riferimento: i test la sostituiscono con
+    ``patch`` sul modulo.
+    """
+    from kombu.transport.native_delayed_delivery import (
+        declare_native_delayed_delivery_exchanges_and_queues as declare,
+    )
+    return declare(connection, queue_type)
+
+
+def bind_queue_to_native_delayed_delivery_exchange(connection, queue):
+    """Come sopra: binding di una coda all'exchange del delayed delivery."""
+    from kombu.transport.native_delayed_delivery import (
+        bind_queue_to_native_delayed_delivery_exchange as bind,
+    )
+    return bind(connection, queue)
 
 
 # Default retry settings
@@ -61,7 +80,11 @@ class DelayedDelivery(bootsteps.StartStopStep):
         Returns:
             bool: True if quorum queues are detected, False otherwise
         """
-        return detect_quorum_queues(c.app, c.app.connection_for_write().transport.driver_type)[0]
+        # `FastConnection` espone già il driver senza importare il trasporto.
+        driver = getattr(c.conninfo, 'driver_type', None)
+        if driver is None:
+            driver = c.app.connection_for_write().transport.driver_type
+        return detect_quorum_queues(c.app, driver)[0]
 
     def start(self, c: Consumer) -> None:
         """Initialize delayed delivery for all broker URLs.
@@ -163,6 +186,8 @@ class DelayedDelivery(bootsteps.StartStopStep):
         if not queues:
             logger.warning("No queues found to bind for delayed delivery")
             return
+
+        from kombu.common import Broadcast
 
         exceptions: list[Exception] = []
         for queue in queues:

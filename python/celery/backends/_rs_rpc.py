@@ -19,7 +19,7 @@ import time
 import weakref
 
 import kombu
-from kombu.transport.base import to_rabbitmq_queue_arguments
+from celery.utils.queue_arguments import to_rabbitmq_queue_arguments
 
 from celery._rs_message import RsMessage
 from celery.app import _rs_producer

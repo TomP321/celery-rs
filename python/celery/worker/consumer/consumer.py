@@ -212,7 +212,13 @@ class Consumer:
         self.pool = pool
         self.timer = timer
         self.strategies = self.Strategies()
-        self.conninfo = self.app.connection_for_read()
+        # Come in `Worker.setup_instance`: sul percorso Rust la connessione
+        # descrittiva non deve importare il trasporto kombu.
+        from celery.app import _rs_producer
+        self.conninfo = (
+            _rs_producer.fast_connection(
+                self.app, self.app.conf.broker_read_url)
+            or self.app.connection_for_read())
         self.connection_errors = self.conninfo.connection_errors
         self.channel_errors = self.conninfo.channel_errors
         self._restart_state = restart_state(maxR=5, maxT=1)

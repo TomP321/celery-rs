@@ -78,6 +78,25 @@ const KEY_BINDING_DEADLINES: &str = "_kombu.binding_deadlines";
 /// TTL minimo di una tabella di binding con `x-expires` (ms), come kombu.
 const MIN_BINDING_TTL: u64 = 60 * 60 * 1000;
 const BINDING_EXPIRES_FACTOR: u64 = 2;
+
+/// Tuning delle binding: i test accelerano TTL e refresh come fanno con
+/// `kombu.transport.redis` (stesse variabili d'ambiente di `worker_consumer_app`).
+fn binding_tuning() -> (f64, u64) {
+    let accelerate = std::env::var("CELERY_RS_TEST_BINDING_SWEEP")
+        .is_ok_and(|value| !matches!(value.trim().to_ascii_lowercase().as_str(), "0" | "false" | "no" | "off"));
+    if !accelerate {
+        return (BINDING_EXPIRES_FACTOR as f64, MIN_BINDING_TTL);
+    }
+    let factor = std::env::var("CELERY_RS_TEST_BINDING_EXPIRES_FACTOR")
+        .ok()
+        .and_then(|value| value.parse::<f64>().ok())
+        .unwrap_or(0.01);
+    let min_ttl = std::env::var("CELERY_RS_TEST_BINDING_TTL_MS")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(3000);
+    (factor, min_ttl)
+}
 const BINDING_SWEEP_INTERVAL: Duration = Duration::from_secs(60);
 
 /// Script di `Channel.REFRESH_BINDING`.
@@ -158,6 +177,11 @@ struct Config {
     visibility_timeout: f64,
     body_encoding: CompactString,
     queue_order_strategy: QueueOrderStrategy,
+    /// Fattore e TTL minimo delle binding con `x-expires`. Sono i valori di
+    /// `BINDING_EXPIRES_FACTOR`/`MIN_BINDING_TTL`; i test possono accelerarli
+    /// con `CELERY_RS_TEST_BINDING_SWEEP` (stesse variabili del riferimento).
+    binding_expires_factor: f64,
+    min_binding_ttl_ms: u64,
 }
 
 impl Config {
@@ -178,6 +202,11 @@ impl Config {
 
     fn deadlines_key(&self) -> String {
         self.key(KEY_BINDING_DEADLINES)
+    }
+
+    /// TTL della tabella di binding per una coda con `x-expires`.
+    fn binding_ttl(&self, expire_ms: u64) -> u64 {
+        ((expire_ms as f64 * self.binding_expires_factor) as u64).max(self.min_binding_ttl_ms)
     }
 
     fn unacked_key(&self) -> String {
@@ -271,9 +300,15 @@ struct ConsumerState {
     order: Vec<CompactString>,
     prefetch: usize,
     in_flight: usize,
+    /// `no_ack`: le consegne non entrano in `unacked` e non bloccano il
+    /// prefetch (kombu registra `_noack_consumers` e salta `qos.append`).
+    no_ack: bool,
     cancelled: bool,
     notify: Arc<Notify>,
 }
+
+/// Riga di binding: `(exchange, routing_key, pattern)`.
+type BindingRow = (CompactString, CompactString, Option<CompactString>);
 
 #[derive(Debug, Default)]
 struct State {
@@ -281,6 +316,8 @@ struct State {
     bindings: HashSet<BindingKey>,
     fanout_queues: HashMap<CompactString, FanoutBinding>,
     queue_expires: HashMap<CompactString, u64>,
+    /// Code dichiarate con `auto_delete`: chiuse le fanout, kombu le elimina.
+    auto_delete_queues: HashSet<CompactString>,
     consumers: HashMap<u64, ConsumerState>,
     in_flight: HashMap<CompactString, Vec<InFlight>>,
     next_consumer: u64,
@@ -406,15 +443,20 @@ impl Shared {
         if queues.is_empty()
             && let Some(deadletter) = self.config.options.deadletter_queue.clone()
         {
-            self.new_queue(&deadletter, &Headers::new());
+            self.new_queue(&deadletter, &Headers::new(), false);
             queues.push(deadletter);
         }
         Ok(queues)
     }
 
-    /// `Channel._new_queue`: solo bookkeeping della scadenza.
-    fn new_queue(&self, queue: &str, arguments: &Headers) {
+    /// `Channel._new_queue`: bookkeeping di scadenza e `auto_delete`.
+    fn new_queue(&self, queue: &str, arguments: &Headers, auto_delete: bool) {
         let mut state = lock(&self.state);
+        if auto_delete {
+            state.auto_delete_queues.insert(CompactString::from(queue));
+        } else {
+            state.auto_delete_queues.remove(queue);
+        }
         match queue_expire(arguments) {
             Some(expire) => {
                 state
@@ -601,6 +643,14 @@ impl Shared {
         }
     }
 
+    /// `true` se il consumatore è `no_ack` (nessuna contabilità `unacked`).
+    fn consumer_no_ack(&self, id: u64) -> bool {
+        lock(&self.state)
+            .consumers
+            .get(&id)
+            .is_some_and(|consumer| consumer.no_ack)
+    }
+
     /// `_restore`/`restore_by_tag`: rimette in coda il messaggio del tag.
     async fn restore_by_tag(&self, tag: &str, leftmost: bool) -> Result<()> {
         let mut conn = self.transactions.lock().await;
@@ -716,10 +766,9 @@ impl Shared {
         let member = binding_member(&self.config.sep, routing_key, pattern, queue);
         let mut conn = self.command_conn();
         if let Some(expire) = self.queue_expire(queue) {
-            let ttl = expire
-                .saturating_mul(BINDING_EXPIRES_FACTOR)
-                .max(MIN_BINDING_TTL);
-            ::redis::Script::new(REFRESH_BINDING)
+            let ttl = self.config.binding_ttl(expire);
+            let script = ::redis::Script::new(REFRESH_BINDING);
+            script
                 .key(self.config.binding_key(exchange))
                 .key(self.config.deadlines_key())
                 .arg(&member)
@@ -762,64 +811,6 @@ impl Shared {
         Ok(removed as u64)
     }
 
-    /// `maybe_refresh_binding_expiry`: rinnova le tabelle di binding delle
-    /// code con `x-expires` e fa pulizia di quelle scadute.
-    async fn maintain_bindings(&self, queues: &[CompactString]) -> Result<()> {
-        struct Row {
-            exchange: String,
-            member: String,
-            ttl: u64,
-        }
-        let rows: Vec<Row> = {
-            let state = lock(&self.state);
-            let mut rows = Vec::new();
-            for binding in &state.bindings {
-                if !queues.contains(&binding.queue) {
-                    continue;
-                }
-                let Some(expire) = state.queue_expires.get(&binding.queue).copied() else {
-                    continue;
-                };
-                let kind = state
-                    .exchanges
-                    .get(&binding.exchange)
-                    .map_or(ExchangeType::Direct, |info| info.kind);
-                let pattern = PreparedBinding::new(kind, &binding.queue, &binding.routing_key)
-                    .ok()
-                    .and_then(|prepared| prepared.pattern);
-                rows.push(Row {
-                    exchange: binding.exchange.to_string(),
-                    member: binding_member(
-                        &self.config.sep,
-                        &binding.routing_key,
-                        pattern.as_deref(),
-                        &binding.queue,
-                    ),
-                    ttl: expire
-                        .saturating_mul(BINDING_EXPIRES_FACTOR)
-                        .max(MIN_BINDING_TTL),
-                });
-            }
-            rows
-        };
-        if rows.is_empty() {
-            return Ok(());
-        }
-        let mut conn = self.command_conn();
-        for row in rows {
-            let _ = ::redis::Script::new(REFRESH_BINDING)
-                .key(self.config.binding_key(&row.exchange))
-                .key(self.config.deadlines_key())
-                .arg(&row.member)
-                .arg(&row.exchange)
-                .arg(row.ttl)
-                .invoke_async::<Value>(&mut conn)
-                .await;
-        }
-        let _ = self.sweep_bindings(100).await;
-        Ok(())
-    }
-
     /// Binding con `x-expires` delle *queues*, con il TTL effettivo.
     fn binding_rows(&self, queues: &[CompactString]) -> Vec<BindingRefreshRow> {
         let state = lock(&self.state);
@@ -846,9 +837,7 @@ impl Shared {
                     pattern.as_deref(),
                     &binding.queue,
                 ),
-                ttl: expire
-                    .saturating_mul(BINDING_EXPIRES_FACTOR)
-                    .max(MIN_BINDING_TTL),
+                ttl: self.config.binding_ttl(expire),
             });
         }
         rows
@@ -911,6 +900,65 @@ impl Shared {
         };
         if sweep {
             lock(&self.binding_maintenance).swept_at = Some(Instant::now());
+            self.sweep_bindings(100).await?;
+        }
+        Ok(())
+    }
+
+    /// Refresh/sweep delle binding per il loop del consumatore.
+    ///
+    /// Ogni canale di kombu ha il proprio throttle
+    /// (`_binding_expiry_refreshed_at`/`_bindings_swept_at`): qui lo stato è
+    /// nel [`Conn`] del consumatore, così pidbox e gossip sullo stesso
+    /// trasporto rinnovano ciascuno la propria tabella.
+    async fn refresh_binding_expiry_loop(
+        &self,
+        queues: &[CompactString],
+        maintenance: &mut BindingMaintenance,
+    ) -> Result<()> {
+        let rows = self.binding_rows(queues);
+        if rows.is_empty() {
+            return Ok(());
+        }
+        let refresh_every = rows
+            .iter()
+            .map(|row| row.ttl as f64 / 1000.0 / 3.0)
+            .fold(f64::INFINITY, f64::min);
+        let mut conn = self.command_conn();
+        if maintenance
+            .refreshed_at
+            .is_none_or(|at| at.elapsed().as_secs_f64() >= refresh_every)
+        {
+            maintenance.refreshed_at = Some(Instant::now());
+            let script = ::redis::Script::new(REFRESH_BINDING);
+            let _: Vec<i64> = ::redis::cmd("SCRIPT")
+                .arg("EXISTS")
+                .arg(script.get_hash())
+                .query_async(&mut conn)
+                .await
+                .map_err(transport_error)?;
+            let mut pipe = ::redis::pipe();
+            pipe.atomic();
+            for row in &rows {
+                pipe.cmd("EVALSHA")
+                    .arg(script.get_hash())
+                    .arg(2)
+                    .arg(self.config.binding_key(&row.exchange))
+                    .arg(self.config.deadlines_key())
+                    .arg(&row.member)
+                    .arg(&row.exchange)
+                    .arg(row.ttl)
+                    .ignore();
+            }
+            pipe.query_async::<()>(&mut conn)
+                .await
+                .map_err(transport_error)?;
+        }
+        if maintenance
+            .swept_at
+            .is_none_or(|at| at.elapsed() >= BINDING_SWEEP_INTERVAL)
+        {
+            maintenance.swept_at = Some(Instant::now());
             self.sweep_bindings(100).await?;
         }
         Ok(())
@@ -1136,6 +1184,7 @@ pub(crate) async fn connect(url: &Url, config: &ConnectConfig) -> Result<RedisTr
         }
     };
 
+    let (binding_expires_factor, min_binding_ttl_ms) = binding_tuning();
     let config = Config {
         client,
         conn_config,
@@ -1152,6 +1201,8 @@ pub(crate) async fn connect(url: &Url, config: &ConnectConfig) -> Result<RedisTr
         sep,
         priority_steps,
         fanout_prefix,
+        binding_expires_factor,
+        min_binding_ttl_ms,
     };
     let shared = Arc::new(Shared {
         config,
@@ -1287,6 +1338,68 @@ impl RedisTransport {
             }
         }
         Ok(outcome)
+    }
+
+    /// Crea un consumatore Redis; `no_ack` salta la contabilità `unacked` e
+    /// lascia sempre `can_consume` vero, come kombu per `_noack_consumers`.
+    async fn consume_inner(
+        &self,
+        queues: &[CompactString],
+        prefetch: u16,
+        no_ack: bool,
+    ) -> Result<Consumer> {
+        self.shared.ensure_open()?;
+        if queues.is_empty() {
+            return Err(Error::InvalidArgument(
+                "consume richiede almeno una coda".to_string(),
+            ));
+        }
+        let mut unique: Vec<CompactString> = Vec::with_capacity(queues.len());
+        for queue in queues {
+            if !unique.contains(queue) {
+                unique.push(queue.clone());
+            }
+        }
+        let id = {
+            let mut state = lock(&self.shared.state);
+            let id = state.next_consumer;
+            state.next_consumer = id.wrapping_add(1);
+            state.consumers.insert(
+                id,
+                ConsumerState {
+                    order: unique.clone(),
+                    queues: unique,
+                    prefetch: usize::from(prefetch),
+                    in_flight: 0,
+                    no_ack,
+                    cancelled: false,
+                    notify: Arc::new(Notify::new()),
+                },
+            );
+            id
+        };
+        let conn = match self.connect_consumer().await {
+            Ok(conn) => conn,
+            Err(error) => {
+                lock(&self.shared.state).consumers.remove(&id);
+                return Err(error);
+            }
+        };
+        let stream = RedisStream {
+            shared: Arc::clone(&self.shared),
+            id,
+            conn: Some(conn),
+            future: None,
+            finished: false,
+        };
+        let control: Arc<dyn ConsumerControl> = Arc::new(RedisConsumerControl {
+            shared: Arc::clone(&self.shared),
+            id,
+        });
+        Ok(Consumer {
+            deliveries: Box::pin(stream) as DeliveryStream,
+            control,
+        })
     }
 }
 
@@ -1498,7 +1611,8 @@ impl Transport for RedisTransport {
                     return Err(self.shared.not_found("queue", &name));
                 }
             } else {
-                self.shared.new_queue(&name, &declaration.arguments);
+                self.shared
+                    .new_queue(&name, &declaration.arguments, declaration.auto_delete);
             }
             let count = self.shared.size(&name).await?;
             Ok(QueueInfo {
@@ -1642,59 +1756,15 @@ impl Transport for RedisTransport {
         queues: &'a [CompactString],
         prefetch: u16,
     ) -> BoxFuture<'a, Result<Consumer>> {
-        Box::pin(async move {
-            self.shared.ensure_open()?;
-            if queues.is_empty() {
-                return Err(Error::InvalidArgument(
-                    "consume richiede almeno una coda".to_string(),
-                ));
-            }
-            let mut unique: Vec<CompactString> = Vec::with_capacity(queues.len());
-            for queue in queues {
-                if !unique.contains(queue) {
-                    unique.push(queue.clone());
-                }
-            }
-            let id = {
-                let mut state = lock(&self.shared.state);
-                let id = state.next_consumer;
-                state.next_consumer = id.wrapping_add(1);
-                state.consumers.insert(
-                    id,
-                    ConsumerState {
-                        order: unique.clone(),
-                        queues: unique,
-                        prefetch: usize::from(prefetch),
-                        in_flight: 0,
-                        cancelled: false,
-                        notify: Arc::new(Notify::new()),
-                    },
-                );
-                id
-            };
-            let conn = match self.connect_consumer().await {
-                Ok(conn) => conn,
-                Err(error) => {
-                    lock(&self.shared.state).consumers.remove(&id);
-                    return Err(error);
-                }
-            };
-            let stream = RedisStream {
-                shared: Arc::clone(&self.shared),
-                id,
-                conn: Some(conn),
-                future: None,
-                finished: false,
-            };
-            let control: Arc<dyn ConsumerControl> = Arc::new(RedisConsumerControl {
-                shared: Arc::clone(&self.shared),
-                id,
-            });
-            Ok(Consumer {
-                deliveries: Box::pin(stream) as DeliveryStream,
-                control,
-            })
-        })
+        Box::pin(async move { self.consume_inner(queues, prefetch, false).await })
+    }
+
+    fn consume_no_ack<'a>(
+        &'a self,
+        queues: &'a [CompactString],
+        prefetch: u16,
+    ) -> BoxFuture<'a, Result<Consumer>> {
+        Box::pin(async move { self.consume_inner(queues, prefetch, true).await })
     }
 
     fn get<'a>(&'a self, queue: &'a str, no_ack: bool) -> BoxFuture<'a, Result<Option<Delivery>>> {
@@ -1705,8 +1775,13 @@ impl Transport for RedisTransport {
         Box::pin(async move {
             self.shared.ensure_open()?;
             let tag = delivery_tag.to_string();
-            self.shared.remove_local(&tag);
-            self.shared.remove_unacked(&tag).await
+            // `QoS.ack` agisce solo sui tag consegnati: con `no_ack` (pidbox,
+            // gossip) il tag non è locale e non deve produrre HDEL/ZREM.
+            if self.shared.remove_local(&tag) {
+                self.shared.remove_unacked(&tag).await
+            } else {
+                Ok(())
+            }
         })
     }
 
@@ -1751,7 +1826,7 @@ impl Transport for RedisTransport {
     fn delete_queue<'a>(&'a self, queue: &'a str) -> BoxFuture<'a, Result<()>> {
         Box::pin(async move {
             self.shared.ensure_open()?;
-            let rows: Vec<(CompactString, CompactString, Option<CompactString>)> = {
+            let rows: Vec<BindingRow> = {
                 let mut state = lock(&self.shared.state);
                 let rows = state
                     .bindings
@@ -1775,6 +1850,8 @@ impl Transport for RedisTransport {
                     .collect();
                 state.bindings.retain(|binding| binding.queue != queue);
                 state.fanout_queues.remove(queue);
+                state.auto_delete_queues.remove(queue);
+                state.queue_expires.remove(queue);
                 rows
             };
             for (exchange, routing_key, pattern) in rows {
@@ -1790,6 +1867,48 @@ impl Transport for RedisTransport {
         Box::pin(async move {
             if self.shared.closed.swap(true, Ordering::Relaxed) {
                 return Ok(());
+            }
+            // `redis.Channel.close`: le code fanout `auto_delete` del canale
+            // vengono eliminate insieme ai loro binding.
+            let queues: Vec<(CompactString, Vec<BindingRow>)> = {
+                let state = lock(&self.shared.state);
+                state
+                    .auto_delete_queues
+                    .iter()
+                    .filter(|queue| state.fanout_queues.contains_key(*queue))
+                    .map(|queue| {
+                        let rows = state
+                            .bindings
+                            .iter()
+                            .filter(|binding| binding.queue == *queue)
+                            .map(|binding| {
+                                let kind = state
+                                    .exchanges
+                                    .get(&binding.exchange)
+                                    .map_or(ExchangeType::Direct, |info| info.kind);
+                                let pattern =
+                                    PreparedBinding::new(kind, &binding.queue, &binding.routing_key)
+                                        .ok()
+                                        .and_then(|prepared| prepared.pattern);
+                                (binding.exchange.clone(), binding.routing_key.clone(), pattern)
+                            })
+                            .collect();
+                        (queue.clone(), rows)
+                    })
+                    .collect()
+            };
+            for (queue, rows) in queues {
+                for (exchange, routing_key, pattern) in rows {
+                    let _ = self
+                        .shared
+                        .delete_queue_keys(&queue, &exchange, &routing_key, pattern.as_deref())
+                        .await;
+                }
+                let mut state = lock(&self.shared.state);
+                state.auto_delete_queues.remove(&queue);
+                state.fanout_queues.remove(&queue);
+                state.bindings.retain(|binding| binding.queue != queue);
+                state.queue_expires.remove(&queue);
             }
             let tags: Vec<CompactString> = {
                 let mut state = lock(&self.shared.state);
@@ -1837,8 +1956,10 @@ impl RedisTransport {
             brpop,
             pubsub: None,
             topics: Vec::new(),
-            last_restore: Instant::now(),
-            last_sweep: Instant::now(),
+            last_restore: Instant::now()
+                .checked_sub(RESTORE_INTERVAL)
+                .unwrap_or_else(Instant::now),
+            maintenance: BindingMaintenance::default(),
         })
     }
 }
@@ -1849,7 +1970,8 @@ struct Conn {
     pubsub: Option<PubSub>,
     topics: Vec<String>,
     last_restore: Instant,
-    last_sweep: Instant,
+    /// Throttle del refresh/sweep di questo canale (come kombu).
+    maintenance: BindingMaintenance,
 }
 
 impl Conn {
@@ -1929,7 +2051,9 @@ impl Snapshot {
         if consumer.cancelled {
             return Err(SnapshotError::Cancelled);
         }
-        let can_consume = consumer.prefetch == 0 || consumer.in_flight < consumer.prefetch;
+        let can_consume = consumer.no_ack
+            || consumer.prefetch == 0
+            || consumer.in_flight < consumer.prefetch;
         let mut queues: Vec<CompactString> = consumer
             .order
             .iter()
@@ -2064,6 +2188,10 @@ async fn wait_once(mut conn: Conn, shared: Arc<Shared>, id: u64) -> (Conn, Outco
     if let Err(error) = conn.sync_topics(&shared.config, &snapshot.topics).await {
         return (conn, Outcome::Lost(error.to_string()));
     }
+    // `MultiChannelPoller.get`: il refresh/sweep dei binding avviene a ogni
+    // giro, prima di BRPOP/SUBSCRIBE (il primo giro rinfresca subito, come
+    // `_binding_expiry_refreshed_at = -inf` del canale kombu).
+    maybe_maintain_bindings(&shared, &mut conn, id).await;
 
     if snapshot.can_consume && !snapshot.queues.is_empty() {
         let config = &shared.config;
@@ -2105,15 +2233,17 @@ async fn wait_once(mut conn: Conn, shared: Arc<Shared>, id: u64) -> (Conn, Outco
                     Ok(envelope) => envelope,
                     Err(error) => return (conn, Outcome::Lost(error.to_string())),
                 };
-                if let Err(error) = shared.append_unacked(&envelope, &raw).await {
-                    return (conn, Outcome::Lost(error.to_string()));
+                if !shared.consumer_no_ack(id) {
+                    if let Err(error) = shared.append_unacked(&envelope, &raw).await {
+                        return (conn, Outcome::Lost(error.to_string()));
+                    }
+                    shared.register_local(&envelope.delivery_tag, Some(id));
                 }
-                shared.register_local(&envelope.delivery_tag, Some(id));
                 shared.maybe_update_queue_expire(&queue).await;
                 (conn, Outcome::Delivery(delivery_from(envelope)))
             }
             Ok(None) => {
-                maybe_restore(&shared, &mut conn).await;
+                maybe_restore(&shared, &mut conn, id).await;
                 (conn, Outcome::Retry)
             }
             Err(error) => (conn, Outcome::Lost(error.to_string())),
@@ -2161,8 +2291,7 @@ async fn wait_once(mut conn: Conn, shared: Arc<Shared>, id: u64) -> (Conn, Outco
             }
         };
         if matches!(outcome, Outcome::Retry) {
-            maybe_restore(&shared, &mut conn).await;
-            maybe_maintain_bindings(&shared, &mut conn, id).await;
+            maybe_restore(&shared, &mut conn, id).await;
         }
         (conn, outcome)
     } else {
@@ -2177,8 +2306,7 @@ async fn wait_once(mut conn: Conn, shared: Arc<Shared>, id: u64) -> (Conn, Outco
             biased;
             _ = notify.notified() => (conn, Outcome::Retry),
             _ = tokio::time::sleep(TICK) => {
-                maybe_restore(&shared, &mut conn).await;
-                maybe_maintain_bindings(&shared, &mut conn, id).await;
+                maybe_restore(&shared, &mut conn, id).await;
                 (conn, Outcome::Retry)
             }
         }
@@ -2186,11 +2314,11 @@ async fn wait_once(mut conn: Conn, shared: Arc<Shared>, id: u64) -> (Conn, Outco
 }
 
 /// Refresh/sweep periodico delle tabelle di binding con `x-expires`.
+///
+/// Stessa sequenza di `Channel.maybe_refresh_binding_expiry`, che kombu invoca
+/// a ogni `drain_events`: il primo giro rinfresca (throttle sull'ultimo
+/// refresh) e il sweep ha il suo intervallo.
 async fn maybe_maintain_bindings(shared: &Shared, conn: &mut Conn, id: u64) {
-    if conn.last_sweep.elapsed() < BINDING_SWEEP_INTERVAL {
-        return;
-    }
-    conn.last_sweep = Instant::now();
     let queues: Vec<CompactString> = {
         let state = lock(&shared.state);
         state
@@ -2200,11 +2328,27 @@ async fn maybe_maintain_bindings(shared: &Shared, conn: &mut Conn, id: u64) {
             .unwrap_or_default()
     };
     if !queues.is_empty() {
-        let _ = shared.maintain_bindings(&queues).await;
+        let _ = shared
+            .refresh_binding_expiry_loop(&queues, &mut conn.maintenance)
+            .await;
     }
 }
 
-async fn maybe_restore(shared: &Shared, conn: &mut Conn) {
+async fn maybe_restore(shared: &Shared, conn: &mut Conn, id: u64) {
+    // Kombu: `maybe_restore_messages` considera solo i canali con code
+    // regolari (`active_queues`); pidbox/gossip sono solo fanout.
+    let has_regular = {
+        let state = lock(&shared.state);
+        state.consumers.get(&id).is_some_and(|consumer| {
+            consumer
+                .queues
+                .iter()
+                .any(|queue| !state.fanout_queues.contains_key(queue))
+        })
+    };
+    if !has_regular {
+        return;
+    }
     if conn.last_restore.elapsed() < RESTORE_INTERVAL {
         return;
     }
@@ -2218,16 +2362,17 @@ async fn handle_pubsub(
     id: u64,
     message: &::redis::Msg,
 ) -> Result<Option<Delivery>> {
-    let Some(queue) = fanout_queue_for(shared, id, message.get_channel_name()) else {
+    let Some(_queue) = fanout_queue_for(shared, id, message.get_channel_name()) else {
         return Ok(None);
     };
     let raw = message.get_payload_bytes();
     let envelope = json::decode(raw)?;
-    shared.append_unacked(&envelope, raw).await?;
-    shared.register_local(&envelope.delivery_tag, Some(id));
-    if shared.queue_expire(&queue).is_some() {
-        shared.maybe_update_queue_expire(&queue).await;
+    if !shared.consumer_no_ack(id) {
+        shared.append_unacked(&envelope, raw).await?;
+        shared.register_local(&envelope.delivery_tag, Some(id));
     }
+    // Come `_put_fanout` di kombu: nessuna lista e nessun `PEXPIRE` per i
+    // messaggi fanout.
     Ok(Some(delivery_from(envelope)))
 }
 

@@ -11,13 +11,15 @@ use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict, PyList};
 
 use celery_transport::{
-    ExchangeDecl, ExchangeType, QueueBinding, QueueDecl, TransportOptions, Url,
+    ExchangeDecl, ExchangeType, Message, Properties, PublishRequest, QueueBinding, QueueDecl,
+    TransportOptions, Url,
 };
 use celery_worker::pool::{self as pool_impl, Config, JobSpec, PoolError, Spawner};
 use celery_worker::{ConsumerStats, Waker as RustWaker, WorkerConsumer};
 
 use crate::transport::{
-    block, delivery_to_py, py_to_headers, retry_policy_from_py, tag_from_py, transport_error,
+    block, body_from_py, delivery_to_py, py_to_headers, retry_policy_from_py, tag_from_py,
+    transport_error,
 };
 
 /// `_celery_rs.Waker`: il loop Python dorme in `wait` finché un componente
@@ -135,6 +137,15 @@ impl PyWorkerConsumer {
         py.detach(|| block(self.inner.start(Some(queues))))
     }
 
+    /// Come :meth:`consume` ma con `basic.consume(no_ack=true)`.
+    fn consume_no_ack(&self, py: Python<'_>, queues: Vec<String>) -> PyResult<()> {
+        let queues = queues
+            .into_iter()
+            .map(CompactString::from)
+            .collect::<Vec<_>>();
+        py.detach(|| block(self.inner.start_no_ack(Some(queues))))
+    }
+
     fn add_queue(&self, py: Python<'_>, queue: &str) -> PyResult<()> {
         py.detach(|| block(self.inner.add_queue(queue)))
     }
@@ -214,6 +225,15 @@ impl PyWorkerConsumer {
         py.detach(|| block(self.inner.close()))
     }
 
+    /// Un consumer ausiliario (pidbox/gossip) che condivide questa connessione.
+    fn aux_consumer(&self) -> PyWorkerConsumer {
+        PyWorkerConsumer {
+            inner: self.inner.aux(0),
+            virtual_transport: self.virtual_transport,
+            body_encoding: self.body_encoding.clone(),
+        }
+    }
+
     fn is_closed(&self) -> bool {
         self.inner.is_closed()
     }
@@ -286,6 +306,107 @@ impl PyWorkerConsumer {
             binding.arguments = py_to_headers(arguments)?;
         }
         py.detach(|| block(self.inner.bind(&binding)))
+    }
+
+    /// Dichiara exchange fanout, coda del nodo e binding del pidbox.
+    ///
+    /// Nomi e argomenti TTL sono costruiti in Rust (`celery_worker::mailbox`),
+    /// così restano identici a `kombu.pidbox.Mailbox.get_queue`.
+    #[pyo3(signature = (hostname, namespace="celery", expires=None, message_ttl=None))]
+    fn declare_pidbox(
+        &self,
+        py: Python<'_>,
+        hostname: &str,
+        namespace: &str,
+        expires: Option<f64>,
+        message_ttl: Option<f64>,
+    ) -> PyResult<String> {
+        let binding = celery_worker::mailbox::pidbox(hostname, namespace, expires, message_ttl);
+        self.declare_mailbox(py, &binding)
+    }
+
+    /// Dichiara exchange eventi, coda del nodo e binding `worker.#`.
+    #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (prefix, node_id, exchange="celeryev", exchange_type="topic",
+                        routing_key="worker.#", expires=None, message_ttl=None,
+                        queue_exclusive=true, queue_durable=false))]
+    fn declare_events(
+        &self,
+        py: Python<'_>,
+        prefix: &str,
+        node_id: &str,
+        exchange: &str,
+        exchange_type: &str,
+        routing_key: &str,
+        expires: Option<f64>,
+        message_ttl: Option<f64>,
+        queue_exclusive: bool,
+        queue_durable: bool,
+    ) -> PyResult<String> {
+        let kind = ExchangeType::parse(exchange_type).map_err(transport_error)?;
+        let binding = celery_worker::mailbox::events(
+            prefix,
+            node_id,
+            exchange,
+            kind,
+            routing_key,
+            expires,
+            message_ttl,
+            queue_exclusive,
+            queue_durable,
+        );
+        self.declare_mailbox(py, &binding)
+    }
+
+    /// Pubblica un messaggio sulla connessione del consumer (risposte pidbox).
+    #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (body, exchange=None, routing_key="", headers=None, content_type=None,
+                        content_encoding=None, delivery_mode=1, priority=0))]
+    fn publish(
+        &self,
+        py: Python<'_>,
+        body: &Bound<'_, PyAny>,
+        exchange: Option<&str>,
+        routing_key: &str,
+        headers: Option<&Bound<'_, PyDict>>,
+        content_type: Option<&str>,
+        content_encoding: Option<&str>,
+        delivery_mode: u8,
+        priority: u8,
+    ) -> PyResult<()> {
+        let body = body_from_py(body)?;
+        let mut properties = Properties::new();
+        properties.set_delivery_mode(delivery_mode);
+        properties.set_priority(priority);
+        let message = Message {
+            body,
+            content_type: content_type.map(CompactString::from),
+            content_encoding: content_encoding.map(CompactString::from),
+            headers: match headers {
+                Some(dict) => py_to_headers(dict)?,
+                None => celery_transport::Headers::new(),
+            },
+            properties,
+        };
+        let request = PublishRequest::new(exchange, routing_key, message);
+        py.detach(|| block(self.inner.transport().publish(request)))
+    }
+}
+
+impl PyWorkerConsumer {
+    fn declare_mailbox(
+        &self,
+        py: Python<'_>,
+        binding: &celery_worker::mailbox::MailboxBinding,
+    ) -> PyResult<String> {
+        py.detach(|| {
+            block(async {
+                self.inner.declare_exchange(&binding.exchange).await?;
+                let info = self.inner.declare_queue(&binding.queue).await?;
+                self.inner.bind(&binding.binding).await?;
+                Ok(info.name.to_string())
+            })
+        })
     }
 }
 

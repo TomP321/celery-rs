@@ -16,12 +16,7 @@ from operator import attrgetter
 
 from click.exceptions import Exit
 from dateutil.parser import isoparse
-from kombu import Exchange, pools
 from kombu.clocks import LamportClock
-from kombu.common import oid_from
-from kombu.exceptions import LimitExceeded
-from kombu.transport.native_delayed_delivery import calculate_routing_key
-from kombu.utils.compat import register_after_fork
 from kombu.utils.objects import cached_property
 from kombu.utils.uuid import uuid
 from vine import starpromise
@@ -51,6 +46,7 @@ from .defaults import DEFAULT_SECURITY_DIGEST, find_deprecated_settings
 from .registry import TaskRegistry
 from .utils import (AppPickler, Settings, _new_key_to_old, _old_key_to_new, _unpickle_app, _unpickle_app_v2, appstr,
                     bugreport, detect_settings)
+from ..utils.after_fork import register_after_fork
 
 if typing.TYPE_CHECKING:  # pragma: no cover  # codecov does not capture this
     # flake8 marks the BaseModel import as unused, because the actual typehint is quoted.
@@ -1145,6 +1141,10 @@ class Celery:
 
                     if countdown:
                         if countdown > 0:
+                            from kombu import Exchange
+                            from kombu.transport.native_delayed_delivery import (
+                                calculate_routing_key,
+                            )
                             routing_key = calculate_routing_key(int(countdown), routing_key)
                             exchange = Exchange(
                                 'celery_delayed_27',
@@ -1324,6 +1324,7 @@ class Celery:
     broker_connection = connection
 
     def _acquire_connection(self, pool=True):
+        from kombu.exceptions import LimitExceeded
         """Helper for :meth:`connection_or_acquire`."""
         if pool:
             timeout = self.conf.broker_pool_acquire_timeout
@@ -1355,6 +1356,7 @@ class Celery:
     default_connection = connection_or_acquire  # XXX compat
 
     def _acquire_producer(self, timeout=None):
+        from kombu.exceptions import LimitExceeded
         """Helper for :meth:`producer_or_acquire`."""
         try:
             return self.producer_pool.acquire(block=True, timeout=timeout)
@@ -1697,6 +1699,7 @@ class Celery:
             This attribute is not related to the workers concurrency pool.
         """
         if self._pool is None:
+            from kombu import pools
             self._ensure_after_fork()
             limit = self.conf.broker_pool_limit
             pools.set_limit(limit)
@@ -1724,6 +1727,7 @@ class Celery:
         # generating the process id.  This is due to how the RPC
         # backend now dedicates a single thread to receive results,
         # which would not work if each thread has a separate id.
+        from kombu.common import oid_from
         return oid_from(self, threads=False)
 
     @property
@@ -1732,6 +1736,7 @@ class Celery:
         try:
             return self._local.oid
         except AttributeError:
+            from kombu.common import oid_from
             self._local.oid = new_oid = oid_from(self, threads=True)
             return new_oid
 

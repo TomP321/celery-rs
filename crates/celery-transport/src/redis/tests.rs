@@ -1391,3 +1391,80 @@ async fn queue_order_strategy_selects_the_queue_order() {
         sorted
     );
 }
+
+/// Consumer `no_ack` (pidbox/gossip): nessuna contabilità `unacked`, binding
+/// fanout con TTL e coda `auto_delete` eliminata alla chiusura.
+#[tokio::test]
+async fn no_ack_fanout_skips_unacked_and_deletes_auto_delete_queue() {
+    let _serial = serial().await;
+    flush().await;
+    let url = url();
+    let exchange = unique("celeryev");
+    let queue = unique("celeryev.node");
+
+    let transport = connect(&url).await;
+    let mut arguments = Headers::new();
+    arguments.insert("x-expires", HeaderValue::Int(60_000));
+    arguments.insert("x-message-ttl", HeaderValue::Int(2_000));
+    transport
+        .declare_exchange(&ExchangeDecl::new(exchange.as_str(), ExchangeType::Fanout))
+        .await
+        .expect("exchange");
+    transport
+        .declare_queue(&QueueDecl {
+            name: Some(queue.as_str().into()),
+            auto_delete: true,
+            exclusive: true,
+            arguments: arguments.clone(),
+            ..QueueDecl::default()
+        })
+        .await
+        .expect("coda");
+    transport
+        .bind(&QueueBinding::new(queue.as_str(), exchange.as_str(), "worker.#"))
+        .await
+        .expect("binding");
+
+    let consume_queue = CompactString::from(queue.as_str());
+    let consumer = transport
+        .consume_no_ack(std::slice::from_ref(&consume_queue), 0)
+        .await
+        .expect("consume no_ack");
+    let mut stream = consumer.deliveries;
+    // Il primo poll sottoscrive i topic fanout.
+    let _ = tokio::time::timeout(Duration::from_millis(200), next(&mut stream)).await;
+    transport
+        .publish(PublishRequest::new(
+            Some(exchange.as_str()),
+            "worker.online",
+            message("{}"),
+        ))
+        .await
+        .expect("publish");
+    let delivery = recv(&mut stream).await;
+    assert_eq!(delivery.routing_key.as_str(), "worker.online");
+    // `consume_no_ack`: il messaggio non è in `unacked`, nemmeno prima
+    // dell'ack che il consumer Rust fa comunque (best effort).
+    let client = ::redis::Client::open(url.clone()).expect("client");
+    let mut conn = client
+        .get_multiplexed_async_connection()
+        .await
+        .expect("connessione");
+    let unacked: i64 = ::redis::cmd("HLEN")
+        .arg("unacked")
+        .query_async(&mut conn)
+        .await
+        .expect("HLEN");
+    assert_eq!(unacked, 0);
+
+    transport.close().await.expect("close");
+    let members: Vec<String> = ::redis::cmd("SMEMBERS")
+        .arg(format!("_kombu.binding.{exchange}"))
+        .query_async(&mut conn)
+        .await
+        .expect("SMEMBERS");
+    assert!(
+        !members.iter().any(|member| member.ends_with(&queue)),
+        "binding rimasto: {members:?}"
+    );
+}

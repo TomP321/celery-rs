@@ -1,0 +1,29 @@
+{
+ "label": "rs-08a-prefork-c4-redis",
+ "venv": "../.venv-rs",
+ "pool": "prefork",
+ "concurrency": 4,
+ "n": 20000,
+ "pss_idle_kb": 75366,
+ "pss_idle_per_process_kb": [
+  20545,
+  8823,
+  11497,
+  11499,
+  11499,
+  11503
+ ],
+ "pss_peak_kb": 124844,
+ "pss_after_kb": 130517,
+ "client_publish_per_s": 2882.7769803590922,
+ "client_maxrss_kb": 48348,
+ "end_to_end_s": 7.151309490203857,
+ "end_to_end_tasks_per_s": 2796.6905959526407,
+ "drain_after_publish_s": 0.11341313499724492,
+ "latency_ms": {
+  "p50": 1.8826089944923297,
+  "p99": 2.5280530098825693,
+  "max": 29.089076997479424
+ },
+ "python": "3.13.9"
+}
