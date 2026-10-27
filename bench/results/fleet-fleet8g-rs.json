@@ -1,0 +1,467 @@
+{
+ "label": "fleet8g-rs",
+ "venv": ".venv-rs",
+ "concurrency": 10,
+ "budget_mb": 8192.0,
+ "series": [
+  {
+   "workers": 1,
+   "pss_mb": 93.4,
+   "processes": 12
+  },
+  {
+   "workers": 2,
+   "pss_mb": 186.1,
+   "processes": 24
+  },
+  {
+   "workers": 3,
+   "pss_mb": 279.6,
+   "processes": 36
+  },
+  {
+   "workers": 4,
+   "pss_mb": 370.6,
+   "processes": 48
+  },
+  {
+   "workers": 5,
+   "pss_mb": 462.4,
+   "processes": 60
+  },
+  {
+   "workers": 6,
+   "pss_mb": 553.8,
+   "processes": 72
+  },
+  {
+   "workers": 7,
+   "pss_mb": 645.6,
+   "processes": 84
+  },
+  {
+   "workers": 8,
+   "pss_mb": 737.4,
+   "processes": 96
+  },
+  {
+   "workers": 9,
+   "pss_mb": 829.1,
+   "processes": 108
+  },
+  {
+   "workers": 10,
+   "pss_mb": 920.3,
+   "processes": 120
+  },
+  {
+   "workers": 11,
+   "pss_mb": 1009.0,
+   "processes": 132
+  },
+  {
+   "workers": 12,
+   "pss_mb": 1103.4,
+   "processes": 144
+  },
+  {
+   "workers": 13,
+   "pss_mb": 1196.3,
+   "processes": 156
+  },
+  {
+   "workers": 14,
+   "pss_mb": 1287.5,
+   "processes": 168
+  },
+  {
+   "workers": 15,
+   "pss_mb": 1379.8,
+   "processes": 180
+  },
+  {
+   "workers": 16,
+   "pss_mb": 1471.3,
+   "processes": 192
+  },
+  {
+   "workers": 17,
+   "pss_mb": 1563.1,
+   "processes": 204
+  },
+  {
+   "workers": 18,
+   "pss_mb": 1655.0,
+   "processes": 216
+  },
+  {
+   "workers": 19,
+   "pss_mb": 1745.7,
+   "processes": 228
+  },
+  {
+   "workers": 20,
+   "pss_mb": 1836.8,
+   "processes": 240
+  },
+  {
+   "workers": 21,
+   "pss_mb": 1928.9,
+   "processes": 252
+  },
+  {
+   "workers": 22,
+   "pss_mb": 2021.1,
+   "processes": 264
+  },
+  {
+   "workers": 23,
+   "pss_mb": 2112.2,
+   "processes": 276
+  },
+  {
+   "workers": 24,
+   "pss_mb": 2204.2,
+   "processes": 288
+  },
+  {
+   "workers": 25,
+   "pss_mb": 2296.0,
+   "processes": 300
+  },
+  {
+   "workers": 26,
+   "pss_mb": 2388.0,
+   "processes": 312
+  },
+  {
+   "workers": 27,
+   "pss_mb": 2479.0,
+   "processes": 324
+  },
+  {
+   "workers": 28,
+   "pss_mb": 2570.1,
+   "processes": 336
+  },
+  {
+   "workers": 29,
+   "pss_mb": 2661.8,
+   "processes": 348
+  },
+  {
+   "workers": 30,
+   "pss_mb": 2753.0,
+   "processes": 360
+  },
+  {
+   "workers": 31,
+   "pss_mb": 2844.7,
+   "processes": 372
+  },
+  {
+   "workers": 32,
+   "pss_mb": 2936.6,
+   "processes": 384
+  },
+  {
+   "workers": 33,
+   "pss_mb": 3028.3,
+   "processes": 396
+  },
+  {
+   "workers": 34,
+   "pss_mb": 3120.0,
+   "processes": 408
+  },
+  {
+   "workers": 35,
+   "pss_mb": 3211.6,
+   "processes": 420
+  },
+  {
+   "workers": 36,
+   "pss_mb": 3302.7,
+   "processes": 432
+  },
+  {
+   "workers": 37,
+   "pss_mb": 3393.5,
+   "processes": 444
+  },
+  {
+   "workers": 38,
+   "pss_mb": 3484.9,
+   "processes": 456
+  },
+  {
+   "workers": 39,
+   "pss_mb": 3576.4,
+   "processes": 468
+  },
+  {
+   "workers": 40,
+   "pss_mb": 3668.0,
+   "processes": 480
+  },
+  {
+   "workers": 41,
+   "pss_mb": 3759.5,
+   "processes": 492
+  },
+  {
+   "workers": 42,
+   "pss_mb": 3850.9,
+   "processes": 504
+  },
+  {
+   "workers": 43,
+   "pss_mb": 3941.7,
+   "processes": 516
+  },
+  {
+   "workers": 44,
+   "pss_mb": 4033.1,
+   "processes": 528
+  },
+  {
+   "workers": 45,
+   "pss_mb": 4124.9,
+   "processes": 540
+  },
+  {
+   "workers": 46,
+   "pss_mb": 4216.4,
+   "processes": 552
+  },
+  {
+   "workers": 47,
+   "pss_mb": 4307.6,
+   "processes": 564
+  },
+  {
+   "workers": 48,
+   "pss_mb": 4398.6,
+   "processes": 576
+  },
+  {
+   "workers": 49,
+   "pss_mb": 4489.8,
+   "processes": 588
+  },
+  {
+   "workers": 50,
+   "pss_mb": 4581.8,
+   "processes": 600
+  },
+  {
+   "workers": 51,
+   "pss_mb": 4672.9,
+   "processes": 612
+  },
+  {
+   "workers": 52,
+   "pss_mb": 4764.7,
+   "processes": 624
+  },
+  {
+   "workers": 53,
+   "pss_mb": 4856.1,
+   "processes": 636
+  },
+  {
+   "workers": 54,
+   "pss_mb": 4947.0,
+   "processes": 648
+  },
+  {
+   "workers": 55,
+   "pss_mb": 5038.9,
+   "processes": 660
+  },
+  {
+   "workers": 56,
+   "pss_mb": 5130.3,
+   "processes": 672
+  },
+  {
+   "workers": 57,
+   "pss_mb": 5221.8,
+   "processes": 684
+  },
+  {
+   "workers": 58,
+   "pss_mb": 5313.4,
+   "processes": 696
+  },
+  {
+   "workers": 59,
+   "pss_mb": 5404.9,
+   "processes": 708
+  },
+  {
+   "workers": 60,
+   "pss_mb": 5496.1,
+   "processes": 720
+  },
+  {
+   "workers": 61,
+   "pss_mb": 5587.8,
+   "processes": 732
+  },
+  {
+   "workers": 62,
+   "pss_mb": 5679.2,
+   "processes": 744
+  },
+  {
+   "workers": 63,
+   "pss_mb": 5770.3,
+   "processes": 756
+  },
+  {
+   "workers": 64,
+   "pss_mb": 5860.9,
+   "processes": 768
+  },
+  {
+   "workers": 65,
+   "pss_mb": 5953.0,
+   "processes": 780
+  },
+  {
+   "workers": 66,
+   "pss_mb": 6044.8,
+   "processes": 792
+  },
+  {
+   "workers": 67,
+   "pss_mb": 6135.6,
+   "processes": 804
+  },
+  {
+   "workers": 68,
+   "pss_mb": 6227.4,
+   "processes": 816
+  },
+  {
+   "workers": 69,
+   "pss_mb": 6319.3,
+   "processes": 828
+  },
+  {
+   "workers": 70,
+   "pss_mb": 6411.0,
+   "processes": 840
+  },
+  {
+   "workers": 71,
+   "pss_mb": 6502.8,
+   "processes": 852
+  },
+  {
+   "workers": 72,
+   "pss_mb": 6595.0,
+   "processes": 864
+  },
+  {
+   "workers": 73,
+   "pss_mb": 6687.2,
+   "processes": 876
+  },
+  {
+   "workers": 74,
+   "pss_mb": 6778.3,
+   "processes": 888
+  },
+  {
+   "workers": 75,
+   "pss_mb": 6869.6,
+   "processes": 900
+  },
+  {
+   "workers": 76,
+   "pss_mb": 6960.8,
+   "processes": 912
+  },
+  {
+   "workers": 77,
+   "pss_mb": 7051.9,
+   "processes": 924
+  },
+  {
+   "workers": 78,
+   "pss_mb": 7143.2,
+   "processes": 936
+  },
+  {
+   "workers": 79,
+   "pss_mb": 7235.0,
+   "processes": 948
+  },
+  {
+   "workers": 80,
+   "pss_mb": 7326.7,
+   "processes": 960
+  },
+  {
+   "workers": 81,
+   "pss_mb": 7418.2,
+   "processes": 972
+  },
+  {
+   "workers": 82,
+   "pss_mb": 7509.3,
+   "processes": 984
+  },
+  {
+   "workers": 83,
+   "pss_mb": 7600.9,
+   "processes": 996
+  },
+  {
+   "workers": 84,
+   "pss_mb": 7692.4,
+   "processes": 1008
+  },
+  {
+   "workers": 85,
+   "pss_mb": 7783.8,
+   "processes": 1020
+  },
+  {
+   "workers": 86,
+   "pss_mb": 7875.3,
+   "processes": 1032
+  },
+  {
+   "workers": 87,
+   "pss_mb": 7966.6,
+   "processes": 1044
+  },
+  {
+   "workers": 88,
+   "pss_mb": 8058.1,
+   "processes": 1056
+  },
+  {
+   "workers": 89,
+   "pss_mb": 8149.8,
+   "processes": 1068
+  },
+  {
+   "workers": 90,
+   "pss_mb": 8240.8,
+   "processes": 1080
+  }
+ ],
+ "workers_fit_idle": 89,
+ "idle_total_mb": 8240.8,
+ "idle_per_worker_mb": 91.6,
+ "loaded_total_mb": 8863.0,
+ "loaded_per_worker_mb": 98.5,
+ "workers_fit_loaded": 83,
+ "tasks": 50000,
+ "tasks_completed": 50000,
+ "tasks_per_s": 2297.0
+}

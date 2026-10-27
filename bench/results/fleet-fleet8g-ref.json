@@ -1,0 +1,157 @@
+{
+ "label": "fleet8g-ref",
+ "venv": ".venv-ref",
+ "concurrency": 10,
+ "budget_mb": 8192.0,
+ "series": [
+  {
+   "workers": 1,
+   "pss_mb": 303.1,
+   "processes": 11
+  },
+  {
+   "workers": 2,
+   "pss_mb": 604.6,
+   "processes": 22
+  },
+  {
+   "workers": 3,
+   "pss_mb": 905.0,
+   "processes": 33
+  },
+  {
+   "workers": 4,
+   "pss_mb": 1204.9,
+   "processes": 44
+  },
+  {
+   "workers": 5,
+   "pss_mb": 1504.4,
+   "processes": 55
+  },
+  {
+   "workers": 6,
+   "pss_mb": 1804.7,
+   "processes": 66
+  },
+  {
+   "workers": 7,
+   "pss_mb": 2104.6,
+   "processes": 77
+  },
+  {
+   "workers": 8,
+   "pss_mb": 2404.2,
+   "processes": 88
+  },
+  {
+   "workers": 9,
+   "pss_mb": 2703.5,
+   "processes": 99
+  },
+  {
+   "workers": 10,
+   "pss_mb": 3003.0,
+   "processes": 110
+  },
+  {
+   "workers": 11,
+   "pss_mb": 3302.7,
+   "processes": 121
+  },
+  {
+   "workers": 12,
+   "pss_mb": 3602.5,
+   "processes": 132
+  },
+  {
+   "workers": 13,
+   "pss_mb": 3902.1,
+   "processes": 143
+  },
+  {
+   "workers": 14,
+   "pss_mb": 4201.9,
+   "processes": 154
+  },
+  {
+   "workers": 15,
+   "pss_mb": 4502.2,
+   "processes": 165
+  },
+  {
+   "workers": 16,
+   "pss_mb": 4801.8,
+   "processes": 176
+  },
+  {
+   "workers": 17,
+   "pss_mb": 5101.0,
+   "processes": 187
+  },
+  {
+   "workers": 18,
+   "pss_mb": 5400.7,
+   "processes": 198
+  },
+  {
+   "workers": 19,
+   "pss_mb": 5700.0,
+   "processes": 209
+  },
+  {
+   "workers": 20,
+   "pss_mb": 5999.9,
+   "processes": 220
+  },
+  {
+   "workers": 21,
+   "pss_mb": 6300.4,
+   "processes": 231
+  },
+  {
+   "workers": 22,
+   "pss_mb": 6599.5,
+   "processes": 242
+  },
+  {
+   "workers": 23,
+   "pss_mb": 6899.2,
+   "processes": 253
+  },
+  {
+   "workers": 24,
+   "pss_mb": 7198.4,
+   "processes": 264
+  },
+  {
+   "workers": 25,
+   "pss_mb": 7496.3,
+   "processes": 275
+  },
+  {
+   "workers": 26,
+   "pss_mb": 7796.3,
+   "processes": 286
+  },
+  {
+   "workers": 27,
+   "pss_mb": 8096.0,
+   "processes": 297
+  },
+  {
+   "workers": 28,
+   "pss_mb": 8395.7,
+   "processes": 308
+  }
+ ],
+ "workers_fit_idle": 27,
+ "idle_total_mb": 8395.7,
+ "idle_per_worker_mb": 299.8,
+ "loaded_total_mb": 8419.3,
+ "loaded_per_worker_mb": 300.7,
+ "workers_fit_loaded": 27,
+ "tasks": 50000,
+ "tasks_completed": 50000,
+ "tasks_per_s": 954.1
+}
