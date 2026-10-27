@@ -156,6 +156,7 @@ def main():
                     help='riempie la coda con il worker sospeso; misura dalla ripresa')
     ap.add_argument('--profile-master', type=Path)
     ap.add_argument('--include', help='moduli applicativi da precaricare nel worker')
+    ap.add_argument('--source', type=Path, help='sorgente alternativo per confrontare la baseline')
     ARGS = args = ap.parse_args()
     if args.n < 1 or args.latency_n < 1:
         ap.error('--n e --latency-n devono essere positivi')
@@ -163,7 +164,9 @@ def main():
     label = args.label or Path(args.venv).name.lstrip('.').removeprefix('venv-')
     pure_done = None
     ENV = env = {**{k: v for k, v in os.environ.items() if not k.startswith('PYTHON')},
-                 'PYTHONPATH': str(HERE), 'PYTHONHASHSEED': '0',
+                 'PYTHONPATH': os.pathsep.join(filter(None, (
+                     str(args.source.resolve()) if args.source else None, str(HERE)))),
+                 'PYTHONHASHSEED': '0',
                  'BENCH_QUEUE': f'bench-08d-{os.getpid()}',
                  'BENCH_COUNTER': f'bench:08d:done:{os.getpid()}'}
     env['BENCH_TOPLEVEL'] = '1' if args.task == 'bench-toplevel' else '0'
@@ -282,6 +285,7 @@ def main():
     }
     res['task'] = args.task
     res['include'] = args.include
+    res['source'] = str(args.source.resolve()) if args.source else None
     if pure_done is not None:
         try:
             pure_done.unlink()

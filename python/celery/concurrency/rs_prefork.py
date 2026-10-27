@@ -24,10 +24,9 @@ import socket
 import threading
 import time
 
-from billiard.common import human_status
+from billiard.common import TERM_SIGNAL, human_status
 from billiard.einfo import ExceptionInfo
 from billiard.exceptions import Terminated, TimeLimitExceeded, WorkerLostError
-from billiard.pool import TERM_SIGNAL
 
 from celery.concurrency.base import BasePool
 from celery.platforms import EX_FAILURE
@@ -462,6 +461,10 @@ class RsTaskPool(BasePool):
     def restart(self):
         if self._pool is not None:
             self._pool.restart()
+
+    def reset_backend(self, broker):
+        if self._pool is not None:
+            self._pool.reset_backend(broker)
 
     def grow(self, n=1):
         if self._pool is not None:

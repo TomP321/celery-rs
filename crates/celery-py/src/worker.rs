@@ -627,6 +627,12 @@ impl PyPool {
         self.inner.restart();
     }
 
+    fn reset_backend(&self, py: Python<'_>, broker: &str) {
+        let pool = Arc::clone(&self.inner);
+        let broker = Bytes::copy_from_slice(broker.as_bytes());
+        py.detach(move || pool.reset_backend(broker));
+    }
+
     /// Uccide i figli dopo la perdita dello zygote: i job in corso arrivano
     /// come ``worker-lost`` (WorkerLostError) e i messaggi vengono
     /// riconsegnati secondo ``acks_late``/``reject_on_worker_lost``.

@@ -159,10 +159,11 @@ def _warm_cffi():
 def _warm_backend_errors(app):
     # Il primo errore di rete importa redis-py e kombu (~15 MB): questi
     # oggetti devono nascere condivisi, prima del freeze e del fork dei figli.
-    from celery.backends.redis import RedisBackend
-
+    import sys
     backend = app.backend
-    if isinstance(backend, RedisBackend):
+    # RPC e memory non usano Redis: non trattenerne il modulo nello zygote.
+    redis = sys.modules.get('celery.backends.redis')
+    if redis is not None and isinstance(backend, redis.RedisBackend):
         backend.connection_errors
         backend.channel_errors
 
@@ -185,7 +186,6 @@ def _main(control, app, hostname):
     for module in (
             'celery.app.task', 'celery.canvas', 'celery.result',
             'celery.backends', 'celery.backends.base',
-            'celery.backends.asynchronous', 'celery.backends.redis',
             'celery.app.trace', 'celery.app._rs_producer', 'celery.app.amqp',
             # `billiard.util.set_pdeathsig` compila un wrapper cffi all'avvio
             # di ogni figlio (`cffi.FFI()` → cparser/pycparser): qui le pagine

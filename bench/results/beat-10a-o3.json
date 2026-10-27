@@ -1,0 +1,41 @@
+{
+ "micro": {
+  "remaining_estimate_simple_ns": 4208.10499927029,
+  "is_due_simple_ns": 10016.579198418185,
+  "remaining_estimate_mixed_ns": 4505.22015162278,
+  "is_due_mixed_ns": 9903.514350298792
+ },
+ "brokers": {
+  "redis": {
+   "pss_3_kb": 29033,
+   "pss_1000_kb": 33702,
+   "tick": {
+    "tick_us": 1025.2976989999997,
+    "tick_wall_us": 1025.4106110078283,
+    "entries": 1000
+   },
+   "sends": {
+    "sends": 2066,
+    "seconds": 3.000024801993277,
+    "sends_s": 688.6609732783902,
+    "cpu_sends_s": 777.8827871848406
+   }
+  },
+  "amqp": {
+   "pss_3_kb": 29067,
+   "pss_1000_kb": 33966,
+   "tick": {
+    "tick_us": 1044.1354564999997,
+    "tick_wall_us": 1044.2355585109908,
+    "entries": 1000
+   },
+   "sends": {
+    "sends": 2216,
+    "seconds": 3.00068346504122,
+    "sends_s": 738.4984207154815,
+    "cpu_sends_s": 745.9924538042625
+   }
+  }
+ },
+ "label": "10a-o3"
+}

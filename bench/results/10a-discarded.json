@@ -1,0 +1,191 @@
+{
+  "10a-worker-size": {
+    "pss_idle_per_process_kb": [
+      14064,
+      7114,
+      7283,
+      7291,
+      7291,
+      7291,
+      7291,
+      7291,
+      7291,
+      7291,
+      7291,
+      7296
+    ],
+    "end_to_end_tasks_per_s": 1917.255880712725,
+    "latency_ms": {
+      "p50": 2.192652493249625,
+      "p99": 4.868189978878945,
+      "max": 5.042567034251988
+    }
+  },
+  "10a-worker-verified": {
+    "pss_idle_per_process_kb": [
+      18968,
+      7991,
+      7506,
+      7514,
+      7514,
+      7514,
+      7514,
+      7514,
+      7514,
+      7514,
+      7514,
+      7520
+    ],
+    "end_to_end_tasks_per_s": 2547.055370452089,
+    "latency_ms": {
+      "p50": 2.1412214846350253,
+      "p99": 4.439067037310451,
+      "max": 4.589568008668721
+    }
+  },
+  "10a-worker-after": {
+    "pss_idle_per_process_kb": [
+      15695,
+      7473,
+      7403,
+      7413,
+      7413,
+      7413,
+      7413,
+      7413,
+      7413,
+      7413,
+      7413,
+      7418
+    ],
+    "end_to_end_tasks_per_s": 1776.0922450863527,
+    "latency_ms": {
+      "p50": 2.4568025255575776,
+      "p99": 4.95457201031968,
+      "max": 14.973470999393612
+    }
+  },
+  "beat-10a-size": {
+    "micro": {
+      "remaining_estimate_simple_ns": 4041.706299176439,
+      "is_due_simple_ns": 9731.368350912817,
+      "remaining_estimate_mixed_ns": 4382.308849017136,
+      "is_due_mixed_ns": 9846.231050323695
+    },
+    "brokers": {
+      "redis": {
+        "pss_3_kb": 25318,
+        "pss_1000_kb": 29392,
+        "tick": {
+          "tick_us": 1079.5610709999999,
+          "tick_wall_us": 1079.647060512798,
+          "entries": 1000
+        },
+        "sends": {
+          "sends": 1697,
+          "seconds": 3.000112658017315,
+          "sends_s": 565.6454251692991,
+          "cpu_sends_s": 615.0512323577855
+        }
+      },
+      "amqp": {
+        "pss_3_kb": 25307,
+        "pss_1000_kb": 29894,
+        "tick": {
+          "tick_us": 1091.7070605000001,
+          "tick_wall_us": 1091.72095998656,
+          "entries": 1000
+        },
+        "sends": {
+          "sends": 2086,
+          "seconds": 3.0001122470130213,
+          "sends_s": 695.3073179434764,
+          "cpu_sends_s": 712.1083260359896
+        }
+      }
+    },
+    "label": "10a-size"
+  },
+  "beat-10a-binding-size": {
+    "micro": {
+      "remaining_estimate_simple_ns": 3669.0090491902083,
+      "is_due_simple_ns": 8236.45225027576,
+      "remaining_estimate_mixed_ns": 3780.4854015121236,
+      "is_due_mixed_ns": 8203.48749984987
+    },
+    "brokers": {
+      "redis": {
+        "pss_3_kb": 24588,
+        "pss_1000_kb": 27920,
+        "tick": {
+          "tick_us": 1036.987014,
+          "tick_wall_us": 1037.0602644979954,
+          "entries": 1000
+        },
+        "sends": {
+          "sends": 1930,
+          "seconds": 3.000876954989508,
+          "sends_s": 643.1453301645779,
+          "cpu_sends_s": 715.6052469268282
+        }
+      },
+      "amqp": {
+        "pss_3_kb": 24637,
+        "pss_1000_kb": 28308,
+        "tick": {
+          "tick_us": 1027.9667585000002,
+          "tick_wall_us": 1028.1003544805571,
+          "entries": 1000
+        },
+        "sends": {
+          "sends": 2102,
+          "seconds": 3.0009319279924966,
+          "sends_s": 700.4490772991821,
+          "cpu_sends_s": 708.1132478955017
+        }
+      }
+    },
+    "label": "10a-binding-size"
+  },
+  "beat-10a-verified": {
+    "micro": {
+      "remaining_estimate_simple_ns": 3666.5870487922803,
+      "is_due_simple_ns": 8469.095602049492,
+      "remaining_estimate_mixed_ns": 3956.4255508594215,
+      "is_due_mixed_ns": 8596.413148916326
+    },
+    "brokers": {
+      "redis": {
+        "pss_3_kb": 29262,
+        "pss_1000_kb": 33682,
+        "tick": {
+          "tick_us": 1023.4788635,
+          "tick_wall_us": 1023.5031524789521,
+          "entries": 1000
+        },
+        "sends": {
+          "sends": 1920,
+          "seconds": 3.000513376959134,
+          "sends_s": 639.8904983205979,
+          "cpu_sends_s": 737.2384083354214
+        }
+      },
+      "amqp": {
+        "pss_3_kb": 29256,
+        "pss_1000_kb": 33994,
+        "tick": {
+          "tick_us": 985.4374555000002,
+          "tick_wall_us": 985.4872279975098,
+          "entries": 1000
+        },
+        "sends": {
+          "sends": 2103,
+          "seconds": 3.0001603749697097,
+          "sends_s": 700.9625277186165,
+          "cpu_sends_s": 706.3701574600719
+        }
+      }
+    },
+    "label": "10a-verified"
+  }
+}

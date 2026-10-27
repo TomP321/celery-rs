@@ -234,6 +234,7 @@ enum Command {
     },
     Flush(Sender<Vec<u64>>),
     Restart,
+    ResetBackend(Bytes, Sender<()>),
     Close,
     Terminate,
     Abandon,
@@ -361,6 +362,14 @@ impl Pool {
 
     pub fn restart(&self) {
         let _ = self.inner.tx.send(Command::Restart);
+    }
+
+    /// Invia il reset prima dei job successivi, anche ai figli occupati.
+    pub fn reset_backend(&self, broker: Bytes) {
+        let (tx, rx) = mpsc::channel();
+        if self.inner.tx.send(Command::ResetBackend(broker, tx)).is_ok() {
+            let _ = rx.recv();
+        }
     }
 
     /// Uccide subito tutti i figli (zygote perso): i job in corso finiscono
@@ -527,6 +536,23 @@ fn supervisor(inner: Arc<Inner>, rx: Receiver<Command>) {
 fn handle(inner: &Arc<Inner>, command: Command) {
     match command {
         Command::Wake => {}
+        Command::ResetBackend(broker, reply) => {
+            let frame = Frame::new(FrameKind::ResetBackend, 0, broker);
+            let header = frame.header();
+            let mut state = inner.state.lock().unwrap_or_else(PoisonError::into_inner);
+            for child in state.children.values_mut() {
+                if !child.shutdown_sent {
+                    let result = child
+                        .writer
+                        .write_all(&header)
+                        .and_then(|()| child.writer.write_all(&frame.payload));
+                    if result.is_err() {
+                        let _ = child.writer.shutdown(Shutdown::Both);
+                    }
+                }
+            }
+            let _ = reply.send(());
+        }
         Command::Grow => {
             // Il target è già stato aggiornato da `Pool::grow`.
             spawn_to_target(inner);
@@ -786,7 +812,7 @@ fn on_frame(inner: &Arc<Inner>, child_id: u32, frame: Frame) {
             });
             inner.cvar.notify_all();
         }
-        FrameKind::Task => {}
+        FrameKind::Task | FrameKind::ResetBackend => {}
     }
 }
 
@@ -1117,6 +1143,7 @@ mod tests {
         soft: AtomicBool,
         kill: AtomicI32,
         exit: Arc<FakeExit>,
+        resets: Mutex<Vec<Vec<u8>>>,
     }
 
     impl FakeControl {
@@ -1125,6 +1152,7 @@ mod tests {
                 soft: AtomicBool::new(false),
                 kill: AtomicI32::new(0),
                 exit: Arc::new(FakeExit::new()),
+                resets: Mutex::new(Vec::new()),
             }
         }
 
@@ -1223,6 +1251,10 @@ mod tests {
                 let job = u64::from_be_bytes(buffer[5..13].try_into().expect("job"));
                 let payload = buffer[13..4 + total].to_vec();
                 buffer.drain(..4 + total);
+                if kind == 4 {
+                    control.resets.lock().expect("resets").push(payload);
+                    continue;
+                }
                 if kind != 1 {
                     continue;
                 }
@@ -1386,6 +1418,34 @@ mod tests {
                 PoolEvent::PoolFailure { .. } => "failure",
             })
             .collect()
+    }
+
+    #[test]
+    fn backend_reset_reaches_every_child_without_submitting_jobs() {
+        let spawner = FakeSpawner::new();
+        let pool = Pool::new(Config::new(2), spawner.clone(), Waker::new());
+        let broker = Bytes::from_static(b"redis://localhost/1");
+        pool.reset_backend(broker.clone());
+        let deadline = Instant::now() + Duration::from_secs(2);
+        loop {
+            let done = spawner
+                .state
+                .lock()
+                .expect("state")
+                .children
+                .iter()
+                .all(|child| {
+                    child.control.resets.lock().expect("resets").as_slice() == [broker.to_vec()]
+                });
+            if done {
+                break;
+            }
+            assert!(Instant::now() < deadline, "reset non ricevuto");
+            thread::sleep(Duration::from_millis(2));
+        }
+        assert_eq!(pool.write_stats().0, 0);
+        assert!(pool.drain_events().is_empty());
+        pool.terminate();
     }
 
     #[test]

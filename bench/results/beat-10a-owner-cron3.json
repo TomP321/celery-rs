@@ -1,0 +1,41 @@
+{
+ "micro": {
+  "remaining_estimate_simple_ns": 3794.845801894553,
+  "is_due_simple_ns": 8354.94619968813,
+  "remaining_estimate_mixed_ns": 3986.2945501226927,
+  "is_due_mixed_ns": 9034.667449304834
+ },
+ "brokers": {
+  "redis": {
+   "pss_3_kb": 29239,
+   "pss_1000_kb": 33451,
+   "tick": {
+    "tick_us": 1007.4204520000001,
+    "tick_wall_us": 1007.4909300019498,
+    "entries": 1000
+   },
+   "sends": {
+    "sends": 1926,
+    "seconds": 3.0004978390061297,
+    "sends_s": 641.8934801292704,
+    "cpu_sends_s": 717.0825620614266
+   }
+  },
+  "amqp": {
+   "pss_3_kb": 29259,
+   "pss_1000_kb": 33934,
+   "tick": {
+    "tick_us": 1058.766759,
+    "tick_wall_us": 1058.888455008855,
+    "entries": 1000
+   },
+   "sends": {
+    "sends": 2226,
+    "seconds": 3.000961236015428,
+    "sends_s": 741.7623304443631,
+    "cpu_sends_s": 747.6167614944417
+   }
+  }
+ },
+ "label": "10a-owner-cron3"
+}

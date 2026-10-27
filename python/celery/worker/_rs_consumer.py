@@ -676,6 +676,14 @@ def connection(consumer, heartbeat=None):
         return None
     url = _rs_producer._broker_url(conninfo)
     options = dict(getattr(conninfo, 'transport_options', None) or {})
+    if (getattr(consumer, 'restart_count', 0) > 0
+            and conninfo.transport_cls in ('redis', 'rediss')):
+        import sys
+        backend = sys.modules.get('celery.backends._rs_redis')
+        if backend is not None:
+            backend._reset_on_broker_restart(consumer.app, url)
+        if _pool_is_rs_prefork(consumer):
+            consumer.pool.reset_backend(url)
     if getattr(consumer, 'restart_count', 0) > 0:
         _STATS['reconnects'] += 1
         _write_state()
