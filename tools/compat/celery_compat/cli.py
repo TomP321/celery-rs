@@ -120,6 +120,11 @@ ACCEPTED_API_DIFFS = {
         'in ogni client e master che importa celery.backends.redis); vars(cls) vede il descrittore',
     'names.SentinelBackend.members.connection_class_ssl':
         'come RedisBackend.connection_class_ssl (classe Sentinel+TLS creata al primo accesso)',
+    'names.TaskPool.members.Pool':
+        'risolta al primo accesso nella vera celery.concurrency.asynpool.AsynPool (evita billiard/'
+        'asynpool nel master del pool Rust); vars(cls) vede il descrittore',
+    'names.TaskPool.members.BlockingPool':
+        'risolta al primo accesso nella vera billiard.pool.Pool; vars(cls) vede il descrittore',
 }
 
 
