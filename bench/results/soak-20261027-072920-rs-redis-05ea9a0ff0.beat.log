@@ -1,0 +1,11 @@
+celery beat v5.7.0rc1 (collider) is starting.
+__    -    ... __   -        _
+LocalTime -> 2026-10-27 07:29:20
+Configuration ->
+    . broker -> redis://127.0.0.1:6393/12
+    . loader -> celery.loaders.app.AppLoader
+    . scheduler -> celery.beat.PersistentScheduler
+    . db -> /tmp/celery-soak-8iicc4nk/schedule
+    . logfile -> [stderr]@%ERROR
+    . maxinterval -> 5.00 minutes (300s)
+

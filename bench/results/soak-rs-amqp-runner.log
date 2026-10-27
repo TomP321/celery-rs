@@ -1,2 +1,4 @@
-corsia 2: /home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/.venv-rs/bin/python /home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/bench/soak.py --impl rs --broker amqp --minutes 60.0 --sample-seconds 30
-/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/bench/results/soak-20261027-010658-rs-amqp-da88a10c6f.json
+corsia 2: /home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/.venv-rs/bin/python /home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak.py --impl rs --broker amqp --minutes 15.0 --sample-seconds 30
+ Container celery-rs-lane-2-rabbitmq-1  Restarting
+ Container celery-rs-lane-2-rabbitmq-1  Started
+/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/results/soak-20261027-081422-rs-amqp-44b02fe9d8.json

@@ -1,0 +1,2507 @@
+ 
+ -------------- soak-ref-amqp-67b928dea9@cluster v5.7.0rc1 (collider)
+--- ***** ----- 
+-- ******* ---- Linux-6.8.0-87-generic-x86_64-with-glibc2.39 2026-10-27 07:13:32
+- *** --- * --- 
+- ** ---------- [config]
+- ** ---------- .> app:         soak:0x70929c64ecf0
+- ** ---------- .> transport:   amqp://guest:**@127.0.0.1:5675//
+- ** ---------- .> results:     redis://127.0.0.1:6392/13
+- *** --- * --- .> concurrency: 10 (prefork)
+-- ******* ---- .> task events: OFF (enable -E to monitor tasks in this worker)
+--- ***** ----- 
+ -------------- [queues]
+                .> soak-ref-amqp-67b928dea9 exchange=soak-ref-amqp-67b928dea9(direct) key=soak-ref-amqp-67b928dea9
+                
+
+[2026-10-27 07:13:33,676: ERROR/MainProcess] Task soak.fail[9cee0fbd-29a2-425e-8688-568287ad017f] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:13:48,093: ERROR/MainProcess] Task soak.fail[ea107eea-784d-4440-89d8-f3c0eb0c3e40] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:13:51,101: ERROR/MainProcess] Task soak.fail[e6c434b1-5ce6-410d-bd48-7b70247631ea] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:13:54,118: ERROR/MainProcess] Task soak.fail[86bf66a0-33e5-47ba-a547-0b63905d9c24] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:13:57,126: ERROR/MainProcess] Task soak.fail[737139a6-f1f5-421c-874d-72b4a7f85943] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:14:00,140: ERROR/MainProcess] Task soak.fail[52e472e9-982d-4e2b-a6c1-3ac6b4d2cb83] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:14:03,152: ERROR/MainProcess] Task soak.fail[46f55054-09c2-4a3d-a917-4c2c5e173f01] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:14:06,165: ERROR/MainProcess] Task soak.fail[33546872-7804-473f-bda1-640056f3b2f5] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:14:09,177: ERROR/MainProcess] Task soak.fail[4de2e26a-aaf3-467c-8392-e44921adabd5] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:14:12,187: ERROR/MainProcess] Task soak.fail[267c8458-6c6a-45bd-9d0b-0759d50db75c] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:14:15,202: ERROR/MainProcess] Task soak.fail[c0dc775b-eff5-4a26-abc8-73e6bc45767b] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:14:28,250: ERROR/MainProcess] Task soak.fail[115cae9b-a566-4289-9f8b-d1d60383c2a3] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:14:31,262: ERROR/MainProcess] Task soak.fail[df7d1761-630a-485d-9db5-64cbf1832f0c] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:14:34,275: ERROR/MainProcess] Task soak.fail[da1c9e3d-31b0-425f-8455-36df483934d2] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:14:37,288: ERROR/MainProcess] Task soak.fail[b340e53a-0a43-43ec-a835-9ea434c4e67d] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:14:40,307: ERROR/MainProcess] Task soak.fail[3479ac1d-a0a8-49a3-a1f9-2fa301711c25] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:14:43,316: ERROR/MainProcess] Task soak.fail[2407b6e9-db7a-4f69-bbae-e880d7eb1d2c] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:14:46,331: ERROR/MainProcess] Task soak.fail[dcb325cd-0d57-493b-96eb-43cf9ce62f8b] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:14:49,343: ERROR/MainProcess] Task soak.fail[71998955-af0f-484d-9f14-213054d78380] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:14:52,358: ERROR/MainProcess] Task soak.fail[130c1298-05d1-4d56-8534-3eee6023e0cc] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:14:55,369: ERROR/MainProcess] Task soak.fail[1336fc95-da3e-4bdc-8522-949bdd54fb7e] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:15:08,411: ERROR/MainProcess] Task soak.fail[b744fefa-d299-40b7-8f5c-be9a7623da20] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:15:11,420: ERROR/MainProcess] Task soak.fail[d392e8f9-5c39-44c6-b8a5-218580f5e2a2] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:15:14,435: ERROR/MainProcess] Task soak.fail[74f94e29-6cfa-494f-bc6f-74e50b6aa185] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:15:17,448: ERROR/MainProcess] Task soak.fail[bd03247a-1e73-47d6-b14f-1d4fa04d1f56] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:15:20,463: ERROR/MainProcess] Task soak.fail[32a6e820-4339-483b-bae6-dcaf05454681] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:15:23,473: ERROR/MainProcess] Task soak.fail[72fdcabe-cb93-4d92-8274-924119847b0f] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:15:26,484: ERROR/MainProcess] Task soak.fail[b3148362-3e71-4de8-940b-6d50777a0011] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:15:29,496: ERROR/MainProcess] Task soak.fail[c597a798-43e6-4962-89c1-6668957eb65d] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:15:32,510: ERROR/MainProcess] Task soak.fail[02d95550-9308-4cee-9b37-c6418a70cccb] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:15:35,522: ERROR/MainProcess] Task soak.fail[65047dd4-894a-4633-9d56-6485bd4d6f2b] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:15:48,558: ERROR/MainProcess] Task soak.fail[42c22856-79b6-4be7-810a-a1330d7579e7] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:15:51,567: ERROR/MainProcess] Task soak.fail[d31bae21-78e8-4eb9-bf4a-281c87b04d32] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:15:54,579: ERROR/MainProcess] Task soak.fail[a32d35a6-6b57-4271-9ebc-0fd6daaf7177] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:15:57,593: ERROR/MainProcess] Task soak.fail[c25effe8-938a-4908-9d37-cb07126532ad] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:16:00,610: ERROR/MainProcess] Task soak.fail[8c21ebc2-6420-47fa-959e-f5fcfe2dcf26] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:16:03,615: ERROR/MainProcess] Task soak.fail[82e903cd-6788-416d-a9ad-ab59c1b33c4b] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:16:06,628: ERROR/MainProcess] Task soak.fail[4f8de363-79a9-41f3-aa43-2d9ee99d4ea3] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:16:09,644: ERROR/MainProcess] Task soak.fail[18a5e7ca-842f-48d7-8034-f68921d2b4bd] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:16:12,655: ERROR/MainProcess] Task soak.fail[6bf30a23-4f0c-4c68-bae1-f93c00117ccd] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:16:15,670: ERROR/MainProcess] Task soak.fail[40dafac7-e2cd-451f-8594-5f8d209733f0] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:16:28,711: ERROR/MainProcess] Task soak.fail[986d33b8-d6e2-47d5-8961-e04bd3626dea] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:16:31,722: ERROR/MainProcess] Task soak.fail[f1eaa443-8e0b-4975-8b0a-848010575959] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:16:34,736: ERROR/MainProcess] Task soak.fail[4f1d9a82-4753-45ce-be78-e977a1efa307] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:16:37,748: ERROR/MainProcess] Task soak.fail[fd1fc5a7-e53d-4241-b4ff-a861a40dbaca] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:16:40,760: ERROR/MainProcess] Task soak.fail[7cc020b6-7008-454f-98e2-9c3e8e4c6727] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:16:43,774: ERROR/MainProcess] Task soak.fail[59305008-6cc2-4603-bb9c-0762038272ef] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:16:46,787: ERROR/MainProcess] Task soak.fail[88df2049-28b6-44e4-b413-da052d75f6a7] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:16:49,799: ERROR/MainProcess] Task soak.fail[3089e1b3-3b66-407b-ae0f-e267ad00336b] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:16:52,813: ERROR/MainProcess] Task soak.fail[11f3b3cd-18d0-4be1-af29-80595b4fd021] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:16:55,831: ERROR/MainProcess] Task soak.fail[d56e4e4b-667e-48e4-8fda-87b19caf226e] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:17:08,865: ERROR/MainProcess] Task soak.fail[6c471460-2080-4add-b396-80a330d7be54] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:17:11,875: ERROR/MainProcess] Task soak.fail[41bbca12-6b83-47db-9a67-55d64ae1eb4e] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:17:14,888: ERROR/MainProcess] Task soak.fail[8d0da7d5-4810-4523-86a6-901fe86a1937] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:17:17,900: ERROR/MainProcess] Task soak.fail[380331c0-2605-43ae-b82b-9cd04b6aa4bf] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:17:20,916: ERROR/MainProcess] Task soak.fail[5a4e98f5-dc5f-4e3b-a5cb-2a3c1af94e75] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:17:23,932: ERROR/MainProcess] Task soak.fail[9858a877-3dfc-4823-9f01-06775832ac60] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:17:26,939: ERROR/MainProcess] Task soak.fail[41b17382-d746-447b-8386-62dd67fa33d5] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:17:29,952: ERROR/MainProcess] Task soak.fail[d51f3445-fa29-4bfc-af9d-935484b318f4] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:17:32,967: ERROR/MainProcess] Task soak.fail[b825b812-7365-4e97-aa48-10536ad7d81e] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:17:35,977: ERROR/MainProcess] Task soak.fail[40533ebf-3541-430e-8fef-3a44a9894deb] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:17:49,013: ERROR/MainProcess] Task soak.fail[0c6d9b7f-177b-4bc2-b736-2308fe8fa13e] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:17:52,027: ERROR/MainProcess] Task soak.fail[df2aa477-2329-4e67-bda1-98f4da08a897] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:17:55,040: ERROR/MainProcess] Task soak.fail[afb742b8-55b9-4b31-ba14-4a6d00f136a7] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:17:58,054: ERROR/MainProcess] Task soak.fail[0e2d8e7e-a110-4338-8f97-09ae353342a5] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:18:01,068: ERROR/MainProcess] Task soak.fail[48d998a8-095f-41f7-9b7d-46b6cd94086f] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:18:04,081: ERROR/MainProcess] Task soak.fail[3c75b04f-264c-4265-a9b4-faee58bc3697] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:18:07,095: ERROR/MainProcess] Task soak.fail[699cc39c-960c-4d27-a4bc-95c7171120d4] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:18:10,109: ERROR/MainProcess] Task soak.fail[b1bfcbc0-7688-46ce-b6ac-441f29a450ad] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:18:13,123: ERROR/MainProcess] Task soak.fail[1ae29ed7-50de-4a50-8fac-a142489386f5] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:18:16,136: ERROR/MainProcess] Task soak.fail[bece3892-c1cf-40b8-9edb-4479ca40ec85] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:18:29,177: ERROR/MainProcess] Task soak.fail[454810ef-af66-4f00-a1d7-a3e287f2ccc4] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:18:32,190: ERROR/MainProcess] Task soak.fail[62444b90-c983-46c7-9d3e-e07515586b6c] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:18:35,206: ERROR/MainProcess] Task soak.fail[2d759a93-8403-4709-8c07-b4ae7cf48a86] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:18:38,217: ERROR/MainProcess] Task soak.fail[3aaf0d31-6d02-4b20-a59b-b8576edeebda] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:18:41,230: ERROR/MainProcess] Task soak.fail[25fb2bb3-a55a-4a4f-84fc-4bc6f66592a2] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:18:44,243: ERROR/MainProcess] Task soak.fail[c7dd139b-1ed6-4ae9-8a91-430cffae5f36] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:18:47,260: ERROR/MainProcess] Task soak.fail[dbe1b2bc-0425-439b-bcc9-4d32fb373c42] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:18:50,273: ERROR/MainProcess] Task soak.fail[3dfd5c7d-6df6-4acf-a25d-18e0bd24f0ed] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:18:53,284: ERROR/MainProcess] Task soak.fail[91c80dcd-8b08-4674-8b74-df5b41f9f290] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:18:56,296: ERROR/MainProcess] Task soak.fail[a28ffb96-de8b-428d-8989-c1a607e1c6da] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:19:09,339: ERROR/MainProcess] Task soak.fail[48f02ad3-4ea4-4920-8161-d0c71797ac43] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:19:12,353: ERROR/MainProcess] Task soak.fail[a886c138-14ea-4087-a685-560b98abc167] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:19:15,372: ERROR/MainProcess] Task soak.fail[d1ac081b-8491-48ed-8b8e-aeab28f58d56] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:19:18,382: ERROR/MainProcess] Task soak.fail[df84963b-0e13-4a31-90ea-94826728063b] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:19:21,394: ERROR/MainProcess] Task soak.fail[eb0e4431-c328-4914-9f65-0b348d10dfd4] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:19:24,411: ERROR/MainProcess] Task soak.fail[6f2d032d-da31-4116-acf1-f395ffba6383] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:19:27,419: ERROR/MainProcess] Task soak.fail[15b6158f-8999-4bc0-920a-320beb946b5e] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:19:30,435: ERROR/MainProcess] Task soak.fail[b95f0464-af80-49a5-97c9-7e30a13aefaf] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:19:33,448: ERROR/MainProcess] Task soak.fail[0470372c-2d86-421e-b7c0-ff5a0fdbbb6a] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:19:36,463: ERROR/MainProcess] Task soak.fail[a2fbd80b-144d-47c7-9e35-b0c1d6ebc210] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:19:49,505: ERROR/MainProcess] Task soak.fail[6332988e-aaef-41d3-93c8-3292e2c1874d] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:19:52,513: ERROR/MainProcess] Task soak.fail[9a5fcf8c-5e28-40c8-9f47-39379e284cac] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:19:55,527: ERROR/MainProcess] Task soak.fail[44fa40d4-dac4-4593-931f-ef9752130583] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:19:58,542: ERROR/MainProcess] Task soak.fail[04e2252e-9d30-48eb-8050-7b0f15d8a3c8] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:20:01,555: ERROR/MainProcess] Task soak.fail[9383b19b-1aaa-4d6d-a1ba-89cd857bd491] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:20:04,571: ERROR/MainProcess] Task soak.fail[8f9446fe-68ee-4a30-ac53-8b2ae7ebe11a] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:20:07,583: ERROR/MainProcess] Task soak.fail[22592b66-4e7b-4493-87ac-fb1896ed5b15] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:20:10,597: ERROR/MainProcess] Task soak.fail[0592fd39-9e09-4c46-9259-cde2680ab96b] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:20:13,607: ERROR/MainProcess] Task soak.fail[69a1091b-f328-4605-9573-b8282d0926c5] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:20:16,624: ERROR/MainProcess] Task soak.fail[99f9c826-76ab-43eb-a9da-f7ee054f91b3] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:20:29,668: ERROR/MainProcess] Task soak.fail[5d2e245e-563c-40bd-bb06-63b8a3c05e98] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:20:32,694: ERROR/MainProcess] Task soak.fail[8a46063e-81c7-448e-944c-63e3ee06a646] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:20:35,695: ERROR/MainProcess] Task soak.fail[5a1bf4ce-809c-4ea6-9660-0a016ec6bbb6] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:20:38,712: ERROR/MainProcess] Task soak.fail[c3e4c3f4-f2a1-499b-9d1c-edb54adf7f07] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:20:41,725: ERROR/MainProcess] Task soak.fail[f0a84a0c-ea5f-47e3-8a94-735c241c057e] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:20:44,736: ERROR/MainProcess] Task soak.fail[c03d33d9-43bd-4c0b-a7f2-0062d72e0e1b] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:20:47,751: ERROR/MainProcess] Task soak.fail[bba98d0d-b7c3-4499-9c0f-ff6779d9a2f2] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:20:50,767: ERROR/MainProcess] Task soak.fail[99664ec0-dfca-4a52-be3a-fa10c67860c5] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:20:53,779: ERROR/MainProcess] Task soak.fail[1ad786e1-2a90-4fef-823c-959de8c1c99f] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:20:56,792: ERROR/MainProcess] Task soak.fail[9204cd9a-6737-4653-a397-aaf340fecbb2] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:21:01,881: ERROR/MainProcess] consumer: Cannot connect to amqp://guest:**@127.0.0.1:5675//: [Errno 104] Connection reset by peer.
+Trying again in 2.00 seconds... (1/None)
+
+[2026-10-27 07:21:03,883: ERROR/MainProcess] consumer: Cannot connect to amqp://guest:**@127.0.0.1:5675//: [Errno 104] Connection reset by peer.
+Trying again in 4.00 seconds... (2/None)
+
+[2026-10-27 07:21:09,104: ERROR/MainProcess] Task soak.fail[cedc27a9-de4e-45ea-a276-610d32b431b6] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:21:22,140: ERROR/MainProcess] Task soak.fail[deae7bd4-2a59-49c6-a924-094a272017b7] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:21:25,152: ERROR/MainProcess] Task soak.fail[4fc5f9d4-f722-4326-afd2-3d974e83980e] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:21:28,166: ERROR/MainProcess] Task soak.fail[619fbfb4-683a-4669-b76d-8eef9a58b2ae] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:21:31,177: ERROR/MainProcess] Task soak.fail[310874ee-7ad1-4996-8b9c-1e83e1efc5c2] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:21:34,188: ERROR/MainProcess] Task soak.fail[ea9d456c-ab79-42dd-bd4c-8ab64fc7af2f] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:21:37,201: ERROR/MainProcess] Task soak.fail[6b0ce8cf-1ce7-4abf-add5-9b7f6bb1a1e1] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:21:40,215: ERROR/MainProcess] Task soak.fail[2e7afc26-e1d2-4079-9d06-63db435c4498] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:21:43,226: ERROR/MainProcess] Task soak.fail[1a744d62-deca-4de6-8dcf-d6e85a3921b9] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:21:46,242: ERROR/MainProcess] Task soak.fail[ab0258f6-a406-49e3-b19d-bcb4d46583af] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:21:49,253: ERROR/MainProcess] Task soak.fail[0bdd1e3a-a76f-45ae-9260-f1a65f3001c3] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:22:02,292: ERROR/MainProcess] Task soak.fail[585b2148-926d-4366-a946-eee27c97b99f] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:22:05,305: ERROR/MainProcess] Task soak.fail[ae9288f2-d2d4-4861-bab1-bff71436a157] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:22:08,325: ERROR/MainProcess] Task soak.fail[ad72e0d7-93fd-4f7e-8a8e-25df2a3d9df9] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:22:11,331: ERROR/MainProcess] Task soak.fail[af4cb359-bb79-476c-9251-c7d3a6a2848d] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:22:14,348: ERROR/MainProcess] Task soak.fail[fbdcde14-9834-43a7-a2ce-01065b2d10e0] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:22:17,352: ERROR/MainProcess] Task soak.fail[f28e0094-2692-4122-b353-59c790d786cc] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:22:20,367: ERROR/MainProcess] Task soak.fail[bdbe61b8-2628-468c-ab0a-5a28b2214ce3] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:22:23,381: ERROR/MainProcess] Task soak.fail[0e9667e3-0142-4634-b21d-5d165b5c79c8] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:22:26,392: ERROR/MainProcess] Task soak.fail[f0d900ad-1760-4a68-a5f2-0de2a8716260] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:22:29,405: ERROR/MainProcess] Task soak.fail[3a8124fb-e836-451f-b501-d6ad9c92cb6d] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:22:42,443: ERROR/MainProcess] Task soak.fail[a8e13507-9b40-432d-8010-3a0f6dd93f2d] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:22:45,459: ERROR/MainProcess] Task soak.fail[da8ad80c-a817-487d-aff8-cc237151434e] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:22:48,469: ERROR/MainProcess] Task soak.fail[7044a46a-cae2-425f-aeb1-49ab3eb6607b] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:22:51,483: ERROR/MainProcess] Task soak.fail[f92b7ce9-ef4e-4502-94b8-b360fa6b0e88] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:22:54,496: ERROR/MainProcess] Task soak.fail[5b21276f-3982-400e-a4e4-fe5a03fcc24c] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:22:57,505: ERROR/MainProcess] Task soak.fail[34001654-d33b-4f35-8775-60cb030c7980] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:23:00,520: ERROR/MainProcess] Task soak.fail[6573b893-03dd-4965-b84a-8f1487001214] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:23:03,534: ERROR/MainProcess] Task soak.fail[b9d924df-1183-464e-baa4-33eab4146439] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:23:06,550: ERROR/MainProcess] Task soak.fail[827d976c-fcd7-4640-a8f9-911c82027658] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:23:09,560: ERROR/MainProcess] Task soak.fail[c6b906cc-9201-4081-9520-bea7e5b5eba6] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:23:22,599: ERROR/MainProcess] Task soak.fail[54b614a2-fb58-4ba1-9d4f-449cdb5919ff] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:23:25,614: ERROR/MainProcess] Task soak.fail[4c185e7f-3515-45f9-8b37-7ccd0282f30b] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:23:28,625: ERROR/MainProcess] Task soak.fail[f99fb912-cb4b-4356-8490-89039b83b00b] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:23:31,638: ERROR/MainProcess] Task soak.fail[8ec637fe-45e2-4f12-b37e-9a3135d380f0] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:23:34,651: ERROR/MainProcess] Task soak.fail[df336598-4493-4237-a650-ec0805d5e394] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:23:37,664: ERROR/MainProcess] Task soak.fail[c6d007ab-ad1d-42fd-97fc-b6f269d3ad49] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:23:40,675: ERROR/MainProcess] Task soak.fail[f128a363-c4eb-43c9-8859-5c6ff69ad25a] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:23:43,692: ERROR/MainProcess] Task soak.fail[4e72d1db-d208-4b1c-9d4d-0bec43252998] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:23:46,705: ERROR/MainProcess] Task soak.fail[782f5923-c901-43a7-8243-72266415d3c2] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:23:49,720: ERROR/MainProcess] Task soak.fail[a5e8a72f-ad4b-44bc-b9e0-d21660c2523e] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:24:02,759: ERROR/MainProcess] Task soak.fail[cf2c704d-5293-40ba-939e-f6796af5acad] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:24:05,771: ERROR/MainProcess] Task soak.fail[a40076d2-b00c-481b-ba64-cd19d5a54351] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:24:08,789: ERROR/MainProcess] Task soak.fail[eda3dd5c-4044-4bd7-975b-90a4da33b24b] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:24:11,798: ERROR/MainProcess] Task soak.fail[132365e5-ef6b-44cf-8cab-f392a17535bb] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:24:14,820: ERROR/MainProcess] Task soak.fail[be7199e3-8934-4a1e-80ad-37eb0faa37ef] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:24:17,821: ERROR/MainProcess] Task soak.fail[41d41b26-dfa8-415d-b7cb-34bff893d4fe] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:24:20,834: ERROR/MainProcess] Task soak.fail[ab53d0d2-ccc6-47f7-89a3-7e6d2ac0b6f1] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:24:23,849: ERROR/MainProcess] Task soak.fail[447040ed-2e7b-4905-b967-7c1ee4d1d732] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:24:26,860: ERROR/MainProcess] Task soak.fail[f163aa96-39f8-466c-ba97-22f5ec2d957a] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:24:29,878: ERROR/MainProcess] Task soak.fail[ce9998b1-747b-4b2b-bb7a-574c57e11502] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:24:42,913: ERROR/MainProcess] Task soak.fail[8a2d4256-d497-410f-ae31-e1360eef87b6] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:24:45,928: ERROR/MainProcess] Task soak.fail[d8e1735a-6a85-405f-a4ec-4007271acb57] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:24:48,940: ERROR/MainProcess] Task soak.fail[dd32c66b-30b9-4576-bb8b-4ad604463297] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:24:51,951: ERROR/MainProcess] Task soak.fail[a358f84c-67b1-4cbf-bd1d-fbecc92df6ed] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:24:54,964: ERROR/MainProcess] Task soak.fail[34e629cf-1a55-4d2d-954c-95154f9b943b] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:24:57,978: ERROR/MainProcess] Task soak.fail[8b14669f-7a1a-4b52-a53c-92869de1891b] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:25:00,991: ERROR/MainProcess] Task soak.fail[7c8e7a0f-e826-45d5-87f3-9274fab95a9a] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:25:04,004: ERROR/MainProcess] Task soak.fail[cac66d13-770c-4580-b3e6-02feb5338c95] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:25:07,017: ERROR/MainProcess] Task soak.fail[d0b27961-7d7d-4830-b133-85aaa35c5930] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:25:10,031: ERROR/MainProcess] Task soak.fail[9878abc4-55ee-4c0b-aa08-6eea3e3ef0b8] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:25:23,068: ERROR/MainProcess] Task soak.fail[b096ed93-e996-49a1-b118-aecd00dc4b66] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:25:26,084: ERROR/MainProcess] Task soak.fail[a99579ca-2eb5-4d31-993b-e4dd057fc457] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:25:29,095: ERROR/MainProcess] Task soak.fail[000232cf-a508-4677-998c-8c4c287d0710] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:25:32,106: ERROR/MainProcess] Task soak.fail[9d3b85a8-b76d-4340-ac0d-88f767309979] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:25:35,122: ERROR/MainProcess] Task soak.fail[b920d944-30d4-4d1c-845a-f2caf8c69809] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:25:38,138: ERROR/MainProcess] Task soak.fail[36ac7d9f-f070-4ae3-9eb6-5633d0f48698] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:25:41,150: ERROR/MainProcess] Task soak.fail[a8cb9551-d6b8-4eb0-9ea5-0078c4e753dd] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:25:44,165: ERROR/MainProcess] Task soak.fail[d6a6e5be-a990-4a8a-bcb9-e86cb81b9b10] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:25:47,179: ERROR/MainProcess] Task soak.fail[306aa56b-c29e-4f00-9932-62ea8e52a3d2] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:25:50,191: ERROR/MainProcess] Task soak.fail[c1583863-d9d0-48df-864d-72fe2dcfc770] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:26:03,229: ERROR/MainProcess] Task soak.fail[f78e60c0-1d51-4044-b527-205b8d02af52] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:26:06,244: ERROR/MainProcess] Task soak.fail[cef98af1-99dc-4306-8f33-dfebc4155a03] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:26:09,254: ERROR/MainProcess] Task soak.fail[bef8ac10-defb-4b70-a801-06403f62faf9] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:26:12,267: ERROR/MainProcess] Task soak.fail[486f710d-35fd-4613-8467-f7ee991b7193] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:26:15,284: ERROR/MainProcess] Task soak.fail[070e8dc1-7aa3-46c6-be10-be4cffe110d7] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:26:18,292: ERROR/MainProcess] Task soak.fail[421bd0b6-205a-433b-b601-de9ce33553c8] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:26:21,304: ERROR/MainProcess] Task soak.fail[32de356b-e093-479c-adc9-511d770852b3] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:26:24,316: ERROR/MainProcess] Task soak.fail[2ac6ebf6-902a-4da9-8ce7-99bf48f73550] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:26:27,330: ERROR/MainProcess] Task soak.fail[03ced2ef-2ca7-4aaf-abf6-0cae493bc323] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:26:30,344: ERROR/MainProcess] Task soak.fail[f9018dc7-8dab-401a-891b-b1cd96bf9c59] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:26:43,385: ERROR/MainProcess] Task soak.fail[f5bb0685-017e-4149-8294-50a45f04f2b8] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:26:46,397: ERROR/MainProcess] Task soak.fail[59f0bc17-ca65-469b-9b3c-3d5c36506fa5] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:26:49,409: ERROR/MainProcess] Task soak.fail[ee94304a-7aab-4e1c-a953-d537a2468070] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:26:52,420: ERROR/MainProcess] Task soak.fail[fc0b94e1-8197-4595-9332-0be5351234a0] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:26:55,433: ERROR/MainProcess] Task soak.fail[e96d54b4-1c76-409e-b152-b2eb556681dd] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:26:58,445: ERROR/MainProcess] Task soak.fail[204ff100-72bb-4a17-b660-a5869bfe5ff2] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:27:01,458: ERROR/MainProcess] Task soak.fail[6d82b8e4-606b-45f4-b721-98568b182d82] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:27:04,468: ERROR/MainProcess] Task soak.fail[72d3d96b-d68b-4472-a735-8c732ddbb935] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:27:07,479: ERROR/MainProcess] Task soak.fail[15d41a05-b236-44ef-9d04-8707dff6cf4b] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:27:10,489: ERROR/MainProcess] Task soak.fail[d2158e06-15aa-4e56-ab4a-9b4ff32ad02c] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:27:23,528: ERROR/MainProcess] Task soak.fail[9019a8d4-34b8-4ca4-91d6-a6c9754e8588] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:27:26,547: ERROR/MainProcess] Task soak.fail[b51c4cf2-3cc7-4ea9-bae3-b1d93897aaaa] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:27:29,555: ERROR/MainProcess] Task soak.fail[17638cfb-34f3-4f26-96ea-2d151dcc2834] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:27:32,567: ERROR/MainProcess] Task soak.fail[98dd70ec-40a8-459e-aa75-420de1f43221] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:27:35,579: ERROR/MainProcess] Task soak.fail[c29bdf6c-171b-433f-b4c1-6d2a568ef4f8] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:27:38,589: ERROR/MainProcess] Task soak.fail[f350ad28-86c0-4709-abb6-46590d26c380] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:27:41,601: ERROR/MainProcess] Task soak.fail[ec54eeba-cf23-4773-a5d7-b936da913099] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:27:44,610: ERROR/MainProcess] Task soak.fail[d943de27-e9e9-4aa4-aec2-e5f8ac2b6659] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:27:47,623: ERROR/MainProcess] Task soak.fail[e6ac67af-ff8b-4dfc-963e-aafcee4604fa] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:27:50,633: ERROR/MainProcess] Task soak.fail[620561c0-0dae-4de0-9026-a17d92b421a4] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:28:03,671: ERROR/MainProcess] Task soak.fail[108099c0-7876-48e8-aab2-e2d898a61ceb] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:28:06,687: ERROR/MainProcess] Task soak.fail[ba7b7941-be1c-496f-8b21-bc238cc07681] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:28:09,695: ERROR/MainProcess] Task soak.fail[2fb1f52c-669d-4f8b-ad1b-860d48cb2257] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:28:12,707: ERROR/MainProcess] Task soak.fail[12eaf405-5d57-495f-a208-2501021f9209] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:28:15,719: ERROR/MainProcess] Task soak.fail[093545b7-3497-4779-a4b3-8e6a9ec6cf9f] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:28:18,735: ERROR/MainProcess] Task soak.fail[7ae946bd-b202-49db-bcd2-c210922d9493] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:28:21,751: ERROR/MainProcess] Task soak.fail[a69c95ae-0a3d-4db0-8021-6bde53889124] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:28:24,759: ERROR/MainProcess] Task soak.fail[9bad7eeb-514b-49f8-9551-d1974d66d854] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:28:27,772: ERROR/MainProcess] Task soak.fail[e91e4d46-a651-4bfe-bef8-a83e0900919d] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+[2026-10-27 07:28:30,782: ERROR/MainProcess] Task soak.fail[28062ec6-11fa-4e84-889a-f0e6c5a314c2] raised unexpected: ValueError('soak failure')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 585, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/app/trace.py", line 870, in __protected_call__
+    return self.run(*args, **kwargs)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak_app.py", line 32, in fail
+    raise ValueError('soak failure')
+ValueError: soak failure
+
+worker: Warm shutdown (MainProcess)
+
+worker: Warm shutdown (MainProcess)
+[2026-10-27 07:28:31,740: ERROR/MainProcess] Task handler raised error: WorkerLostError('Worker exited prematurely: exitcode 15 Job: 120954.')
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/concurrency/rs_prefork.py", line 197, in _exception_info
+    raise exc
+billiard.einfo.ExceptionWithTraceback: 
+"""
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/worker/worker.py", line 279, in start
+    self.blueprint.start(self)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/bootsteps.py", line 124, in start
+    step.start(parent)
+    ~~~~~~~~~~^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/bootsteps.py", line 373, in start
+    return self.obj.start()
+           ~~~~~~~~~~~~~~^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/worker/consumer/consumer.py", line 413, in start
+    blueprint.start(self)
+    ~~~~~~~~~~~~~~~^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/bootsteps.py", line 124, in start
+    step.start(parent)
+    ~~~~~~~~~~^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/worker/consumer/consumer.py", line 972, in start
+    loop(*c.loop_args())
+    ~~~~^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/worker/_rs_consumer.py", line 868, in rsloop
+    state.maybe_shutdown()
+    ~~~~~~~~~~~~~~~~~~~~^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/worker/state.py", line 162, in maybe_shutdown
+    raise WorkerShutdown(should_stop)
+celery.exceptions.WorkerShutdown: 0
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/python/celery/concurrency/rs_prefork.py", line 197, in _exception_info
+    raise exc
+billiard.exceptions.WorkerLostError: Worker exited prematurely: exitcode 15 Job: 120954.
+"""

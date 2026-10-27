@@ -1,0 +1,245 @@
+{"cycle": 0, "stats": {"soak-ref-amqp-62ffff7dbe@cluster": {"total": {"soak.pure": 410, "soak.fail": 1, "soak.retry": 2, "soak.add": 10, "soak.large": 1, "soak.total": 1}, "pid": 3980361, "clock": "4", "uptime": 5, "pool": {"implementation": "celery.concurrency.prefork:TaskPool", "max-concurrency": 10, "processes": [3980461, 3980526, 3980530, 3980532, 3980536, 3980538, 3980540, 3980542, 3980544, 3980549], "max-tasks-per-child": "N/A", "put-guarded-by-semaphore": false, "timeouts": [0, 0], "writes": {"total": 425, "avg": "0.10", "all": "0.75, 0.04, 0.05, 0.03, 0.04, 0.03, 0.03, 0.01, 0.01, 0.00", "raw": "320, 19, 21, 14, 16, 13, 11, 6, 3, 2", "strategy": "fair", "inqueues": {"total": 10, "active": 0}}}, "broker": {"hostname": "127.0.0.1", "userid": "guest", "virtual_host": "/", "port": 5674, "insist": false, "ssl": false, "transport": "amqp", "connect_timeout": 4, "transport_options": {}, "login_method": "PLAIN", "uri_prefix": null, "heartbeat": 120.0, "failover_strategy": "round-robin", "alternates": [], "credential_provider": null}, "prefetch_count": 10, "rusage": {"utime": 0.9109229999999999, "stime": 0.33819899999999997, "maxrss": 59744, "ixrss": 0, "idrss": 0, "isrss": 0, "minflt": 69923, "majflt": 0, "nswap": 0, "inblock": 0, "oublock": 32, "msgsnd": 0, "msgrcv": 0, "nsignals": 0, "nvcsw": 482, "nivcsw": 27}}}, "ping": [{"soak-ref-amqp-62ffff7dbe@cluster": {"ok": "pong"}}]}
+{"completed_cycle": 1, "monotonic": 302296.948757804}
+{"completed_cycle": 2, "monotonic": 302299.966668591}
+{"completed_cycle": 3, "monotonic": 302302.982759924}
+{"completed_cycle": 4, "monotonic": 302306.002400846}
+{"completed_cycle": 5, "monotonic": 302309.019407269}
+{"completed_cycle": 6, "monotonic": 302312.033440044}
+{"completed_cycle": 7, "monotonic": 302315.048847902}
+{"completed_cycle": 8, "monotonic": 302318.062679493}
+{"completed_cycle": 9, "monotonic": 302321.08171983}
+{"completed_cycle": 10, "monotonic": 302324.094837737}
+{"cycle": 10, "stats": {"soak-ref-amqp-62ffff7dbe@cluster": {"total": {"soak.pure": 5405, "soak.fail": 11, "soak.retry": 22, "soak.add": 100, "soak.large": 11, "soak.total": 11}, "pid": 3980361, "clock": "56", "uptime": 45, "pool": {"implementation": "celery.concurrency.prefork:TaskPool", "max-concurrency": 10, "processes": [3980461, 3980526, 3980530, 3980532, 3980536, 3980538, 3980540, 3980542, 3980544, 3980549], "max-tasks-per-child": "N/A", "put-guarded-by-semaphore": false, "timeouts": [0, 0], "writes": {"total": 5560, "avg": "0.10", "all": "0.93, 0.02, 0.01, 0.01, 0.01, 0.01, 0.00, 0.00, 0.00, 0.00", "raw": "5187, 128, 81, 50, 47, 32, 19, 9, 5, 2", "strategy": "fair", "inqueues": {"total": 10, "active": 0}}}, "broker": {"hostname": "127.0.0.1", "userid": "guest", "virtual_host": "/", "port": 5674, "insist": false, "ssl": false, "transport": "amqp", "connect_timeout": 4, "transport_options": {}, "login_method": "PLAIN", "uri_prefix": null, "heartbeat": 120.0, "failover_strategy": "round-robin", "alternates": [], "credential_provider": null}, "prefetch_count": 11, "rusage": {"utime": 5.021679, "stime": 0.9279179999999999, "maxrss": 59936, "ixrss": 0, "idrss": 0, "isrss": 0, "minflt": 71837, "majflt": 0, "nswap": 0, "inblock": 0, "oublock": 80, "msgsnd": 0, "msgrcv": 0, "nsignals": 0, "nvcsw": 8649, "nivcsw": 590}}}, "ping": [{"soak-ref-amqp-62ffff7dbe@cluster": {"ok": "pong"}}]}
+{"completed_cycle": 11, "monotonic": 302337.139534619}
+{"completed_cycle": 12, "monotonic": 302340.158392262}
+{"completed_cycle": 13, "monotonic": 302343.173349022}
+{"completed_cycle": 14, "monotonic": 302346.191712513}
+{"completed_cycle": 15, "monotonic": 302349.209019721}
+{"completed_cycle": 16, "monotonic": 302352.224837095}
+{"completed_cycle": 17, "monotonic": 302355.241798668}
+{"completed_cycle": 18, "monotonic": 302358.257283951}
+{"completed_cycle": 19, "monotonic": 302361.274091819}
+{"completed_cycle": 20, "monotonic": 302364.289422277}
+{"cycle": 20, "stats": {"soak-ref-amqp-62ffff7dbe@cluster": {"total": {"soak.pure": 10802, "soak.fail": 21, "soak.retry": 42, "soak.add": 190, "soak.large": 21, "soak.total": 21}, "pid": 3980361, "clock": "108", "uptime": 85, "pool": {"implementation": "celery.concurrency.prefork:TaskPool", "max-concurrency": 10, "processes": [3980461, 3980526, 3980530, 3980532, 3980536, 3980538, 3980540, 3980542, 3980544, 3980549], "max-tasks-per-child": "N/A", "put-guarded-by-semaphore": false, "timeouts": [0, 0], "writes": {"total": 11097, "avg": "0.10", "all": "0.94, 0.02, 0.01, 0.01, 0.01, 0.01, 0.00, 0.00, 0.00, 0.00", "raw": "10416, 245, 149, 92, 85, 59, 31, 11, 7, 2", "strategy": "fair", "inqueues": {"total": 10, "active": 0}}}, "broker": {"hostname": "127.0.0.1", "userid": "guest", "virtual_host": "/", "port": 5674, "insist": false, "ssl": false, "transport": "amqp", "connect_timeout": 4, "transport_options": {}, "login_method": "PLAIN", "uri_prefix": null, "heartbeat": 120.0, "failover_strategy": "round-robin", "alternates": [], "credential_provider": null}, "prefetch_count": 11, "rusage": {"utime": 9.420843, "stime": 1.5309629999999999, "maxrss": 59936, "ixrss": 0, "idrss": 0, "isrss": 0, "minflt": 71928, "majflt": 0, "nswap": 0, "inblock": 0, "oublock": 176, "msgsnd": 0, "msgrcv": 0, "nsignals": 0, "nvcsw": 17188, "nivcsw": 1320}}}, "ping": [{"soak-ref-amqp-62ffff7dbe@cluster": {"ok": "pong"}}]}
+{"completed_cycle": 21, "monotonic": 302377.34250581}
+{"completed_cycle": 22, "monotonic": 302380.359950392}
+{"completed_cycle": 23, "monotonic": 302383.376680972}
+{"completed_cycle": 24, "monotonic": 302386.392708083}
+{"completed_cycle": 25, "monotonic": 302389.407912207}
+{"completed_cycle": 26, "monotonic": 302392.422869436}
+{"completed_cycle": 27, "monotonic": 302395.444415007}
+{"completed_cycle": 28, "monotonic": 302398.457849315}
+{"completed_cycle": 29, "monotonic": 302401.475271384}
+{"completed_cycle": 30, "monotonic": 302404.487329999}
+{"cycle": 30, "stats": {"soak-ref-amqp-62ffff7dbe@cluster": {"total": {"soak.pure": 16080, "soak.fail": 31, "soak.retry": 62, "soak.add": 280, "soak.large": 31, "soak.total": 31}, "pid": 3980361, "clock": "160", "uptime": 126, "pool": {"implementation": "celery.concurrency.prefork:TaskPool", "max-concurrency": 10, "processes": [3980461, 3980526, 3980530, 3980532, 3980536, 3980538, 3980540, 3980542, 3980544, 3980549], "max-tasks-per-child": "N/A", "put-guarded-by-semaphore": false, "timeouts": [0, 0], "writes": {"total": 16515, "avg": "0.10", "all": "0.95, 0.02, 0.01, 0.01, 0.01, 0.00, 0.00, 0.00, 0.00, 0.00", "raw": "15658, 316, 188, 118, 106, 72, 36, 12, 7, 2", "strategy": "fair", "inqueues": {"total": 10, "active": 0}}}, "broker": {"hostname": "127.0.0.1", "userid": "guest", "virtual_host": "/", "port": 5674, "insist": false, "ssl": false, "transport": "amqp", "connect_timeout": 4, "transport_options": {}, "login_method": "PLAIN", "uri_prefix": null, "heartbeat": 120.0, "failover_strategy": "round-robin", "alternates": [], "credential_provider": null}, "prefetch_count": 10, "rusage": {"utime": 13.90242, "stime": 2.175091, "maxrss": 59936, "ixrss": 0, "idrss": 0, "isrss": 0, "minflt": 71978, "majflt": 0, "nswap": 0, "inblock": 0, "oublock": 232, "msgsnd": 0, "msgrcv": 0, "nsignals": 0, "nvcsw": 25371, "nivcsw": 2025}}}, "ping": [{"soak-ref-amqp-62ffff7dbe@cluster": {"ok": "pong"}}]}
+{"completed_cycle": 31, "monotonic": 302417.534740078}
+{"completed_cycle": 32, "monotonic": 302420.549284194}
+{"completed_cycle": 33, "monotonic": 302423.562373572}
+{"completed_cycle": 34, "monotonic": 302426.580565149}
+{"completed_cycle": 35, "monotonic": 302429.593878541}
+{"completed_cycle": 36, "monotonic": 302432.611152954}
+{"completed_cycle": 37, "monotonic": 302435.626073}
+{"completed_cycle": 38, "monotonic": 302438.640199386}
+{"completed_cycle": 39, "monotonic": 302441.654436248}
+{"completed_cycle": 40, "monotonic": 302444.668507655}
+{"cycle": 40, "stats": {"soak-ref-amqp-62ffff7dbe@cluster": {"total": {"soak.pure": 21395, "soak.fail": 41, "soak.retry": 82, "soak.add": 370, "soak.large": 41, "soak.total": 41}, "pid": 3980361, "clock": "214", "uptime": 166, "pool": {"implementation": "celery.concurrency.prefork:TaskPool", "max-concurrency": 10, "processes": [3980461, 3980526, 3980530, 3980532, 3980536, 3980538, 3980540, 3980542, 3980544, 3980549], "max-tasks-per-child": "N/A", "put-guarded-by-semaphore": false, "timeouts": [0, 0], "writes": {"total": 21970, "avg": "0.10", "all": "0.95, 0.02, 0.01, 0.01, 0.01, 0.00, 0.00, 0.00, 0.00, 0.00", "raw": "20953, 388, 226, 138, 119, 82, 42, 13, 7, 2", "strategy": "fair", "inqueues": {"total": 10, "active": 0}}}, "broker": {"hostname": "127.0.0.1", "userid": "guest", "virtual_host": "/", "port": 5674, "insist": false, "ssl": false, "transport": "amqp", "connect_timeout": 4, "transport_options": {}, "login_method": "PLAIN", "uri_prefix": null, "heartbeat": 120.0, "failover_strategy": "round-robin", "alternates": [], "credential_provider": null}, "prefetch_count": 11, "rusage": {"utime": 18.500816, "stime": 2.867732, "maxrss": 59936, "ixrss": 0, "idrss": 0, "isrss": 0, "minflt": 72014, "majflt": 0, "nswap": 0, "inblock": 0, "oublock": 304, "msgsnd": 0, "msgrcv": 0, "nsignals": 0, "nvcsw": 33757, "nivcsw": 2722}}}, "ping": [{"soak-ref-amqp-62ffff7dbe@cluster": {"ok": "pong"}}]}
+{"completed_cycle": 41, "monotonic": 302457.715172189}
+{"completed_cycle": 42, "monotonic": 302460.733197382}
+{"completed_cycle": 43, "monotonic": 302463.75035688}
+{"completed_cycle": 44, "monotonic": 302466.766464683}
+{"completed_cycle": 45, "monotonic": 302469.784372478}
+{"completed_cycle": 46, "monotonic": 302472.800536552}
+{"completed_cycle": 47, "monotonic": 302475.819142039}
+{"completed_cycle": 48, "monotonic": 302478.838575915}
+{"completed_cycle": 49, "monotonic": 302481.858921145}
+{"completed_cycle": 50, "monotonic": 302484.876312248}
+{"cycle": 50, "stats": {"soak-ref-amqp-62ffff7dbe@cluster": {"total": {"soak.pure": 26710, "soak.fail": 51, "soak.retry": 102, "soak.add": 460, "soak.large": 51, "soak.total": 51}, "pid": 3980361, "clock": "266", "uptime": 206, "pool": {"implementation": "celery.concurrency.prefork:TaskPool", "max-concurrency": 10, "processes": [3980461, 3980526, 3980530, 3980532, 3980536, 3980538, 3980540, 3980542, 3980544, 3980549], "max-tasks-per-child": "N/A", "put-guarded-by-semaphore": false, "timeouts": [0, 0], "writes": {"total": 27425, "avg": "0.10", "all": "0.96, 0.02, 0.01, 0.01, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00", "raw": "26270, 459, 264, 157, 125, 85, 43, 13, 7, 2", "strategy": "fair", "inqueues": {"total": 10, "active": 0}}}, "broker": {"hostname": "127.0.0.1", "userid": "guest", "virtual_host": "/", "port": 5674, "insist": false, "ssl": false, "transport": "amqp", "connect_timeout": 4, "transport_options": {}, "login_method": "PLAIN", "uri_prefix": null, "heartbeat": 120.0, "failover_strategy": "round-robin", "alternates": [], "credential_provider": null}, "prefetch_count": 11, "rusage": {"utime": 23.06382, "stime": 3.549989, "maxrss": 60128, "ixrss": 0, "idrss": 0, "isrss": 0, "minflt": 72039, "majflt": 0, "nswap": 0, "inblock": 0, "oublock": 368, "msgsnd": 0, "msgrcv": 0, "nsignals": 0, "nvcsw": 42069, "nivcsw": 3441}}}, "ping": [{"soak-ref-amqp-62ffff7dbe@cluster": {"ok": "pong"}}]}
+{"completed_cycle": 51, "monotonic": 302497.926247332}
+{"completed_cycle": 52, "monotonic": 302500.946141541}
+{"completed_cycle": 53, "monotonic": 302503.962920511}
+{"completed_cycle": 54, "monotonic": 302506.980641704}
+{"completed_cycle": 55, "monotonic": 302509.997500679}
+{"completed_cycle": 56, "monotonic": 302513.014346888}
+{"completed_cycle": 57, "monotonic": 302516.032022238}
+{"completed_cycle": 58, "monotonic": 302519.047163778}
+{"completed_cycle": 59, "monotonic": 302522.063238984}
+{"completed_cycle": 60, "monotonic": 302525.081247902}
+{"cycle": 60, "stats": {"soak-ref-amqp-62ffff7dbe@cluster": {"total": {"soak.pure": 31995, "soak.fail": 61, "soak.retry": 122, "soak.add": 550, "soak.large": 61, "soak.total": 61}, "pid": 3980361, "clock": "318", "uptime": 246, "pool": {"implementation": "celery.concurrency.prefork:TaskPool", "max-concurrency": 10, "processes": [3980461, 3980526, 3980530, 3980532, 3980536, 3980538, 3980540, 3980542, 3980544, 3980549], "max-tasks-per-child": "N/A", "put-guarded-by-semaphore": false, "timeouts": [0, 0], "writes": {"total": 32850, "avg": "0.10", "all": "0.96, 0.02, 0.01, 0.01, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00", "raw": "31507, 539, 313, 182, 145, 98, 44, 13, 7, 2", "strategy": "fair", "inqueues": {"total": 10, "active": 0}}}, "broker": {"hostname": "127.0.0.1", "userid": "guest", "virtual_host": "/", "port": 5674, "insist": false, "ssl": false, "transport": "amqp", "connect_timeout": 4, "transport_options": {}, "login_method": "PLAIN", "uri_prefix": null, "heartbeat": 120.0, "failover_strategy": "round-robin", "alternates": [], "credential_provider": null}, "prefetch_count": 11, "rusage": {"utime": 27.669015, "stime": 4.234755, "maxrss": 60320, "ixrss": 0, "idrss": 0, "isrss": 0, "minflt": 72053, "majflt": 0, "nswap": 0, "inblock": 0, "oublock": 432, "msgsnd": 0, "msgrcv": 0, "nsignals": 0, "nvcsw": 49868, "nivcsw": 3979}}}, "ping": [{"soak-ref-amqp-62ffff7dbe@cluster": {"ok": "pong"}}]}
+{"completed_cycle": 61, "monotonic": 302538.137108658}
+{"completed_cycle": 62, "monotonic": 302541.155544304}
+{"completed_cycle": 63, "monotonic": 302544.175437407}
+{"completed_cycle": 64, "monotonic": 302547.19324923}
+{"completed_cycle": 65, "monotonic": 302550.209458326}
+{"completed_cycle": 66, "monotonic": 302553.228269425}
+{"completed_cycle": 67, "monotonic": 302556.245566305}
+{"completed_cycle": 68, "monotonic": 302559.261878728}
+{"completed_cycle": 69, "monotonic": 302562.278558607}
+{"completed_cycle": 70, "monotonic": 302565.295038178}
+{"cycle": 70, "stats": {"soak-ref-amqp-62ffff7dbe@cluster": {"total": {"soak.pure": 37327, "soak.fail": 71, "soak.retry": 142, "soak.add": 640, "soak.large": 71, "soak.total": 71}, "pid": 3980361, "clock": "370", "uptime": 286, "pool": {"implementation": "celery.concurrency.prefork:TaskPool", "max-concurrency": 10, "processes": [3980461, 3980526, 3980530, 3980532, 3980536, 3980538, 3980540, 3980542, 3980544, 3980549], "max-tasks-per-child": "N/A", "put-guarded-by-semaphore": false, "timeouts": [0, 0], "writes": {"total": 38322, "avg": "0.10", "all": "0.96, 0.02, 0.01, 0.01, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00", "raw": "36776, 623, 359, 216, 165, 111, 50, 13, 7, 2", "strategy": "fair", "inqueues": {"total": 10, "active": 0}}}, "broker": {"hostname": "127.0.0.1", "userid": "guest", "virtual_host": "/", "port": 5674, "insist": false, "ssl": false, "transport": "amqp", "connect_timeout": 4, "transport_options": {}, "login_method": "PLAIN", "uri_prefix": null, "heartbeat": 120.0, "failover_strategy": "round-robin", "alternates": [], "credential_provider": null}, "prefetch_count": 10, "rusage": {"utime": 32.292857, "stime": 4.912223, "maxrss": 60512, "ixrss": 0, "idrss": 0, "isrss": 0, "minflt": 72092, "majflt": 0, "nswap": 0, "inblock": 0, "oublock": 496, "msgsnd": 0, "msgrcv": 0, "nsignals": 0, "nvcsw": 58282, "nivcsw": 4585}}}, "ping": [{"soak-ref-amqp-62ffff7dbe@cluster": {"ok": "pong"}}]}
+{"completed_cycle": 71, "monotonic": 302578.345135415}
+{"completed_cycle": 72, "monotonic": 302581.365316191}
+{"completed_cycle": 73, "monotonic": 302584.379805309}
+{"completed_cycle": 74, "monotonic": 302587.400410837}
+{"completed_cycle": 75, "monotonic": 302590.415885237}
+{"completed_cycle": 76, "monotonic": 302593.433083474}
+{"completed_cycle": 77, "monotonic": 302596.448074003}
+{"completed_cycle": 78, "monotonic": 302599.46322393}
+{"completed_cycle": 79, "monotonic": 302602.478299274}
+{"completed_cycle": 80, "monotonic": 302605.491081149}
+{"cycle": 80, "stats": {"soak-ref-amqp-62ffff7dbe@cluster": {"total": {"soak.pure": 42695, "soak.fail": 81, "soak.retry": 162, "soak.add": 730, "soak.large": 81, "soak.total": 81}, "pid": 3980361, "clock": "422", "uptime": 327, "pool": {"implementation": "celery.concurrency.prefork:TaskPool", "max-concurrency": 10, "processes": [3980461, 3980526, 3980530, 3980532, 3980536, 3980538, 3980540, 3980542, 3980544, 3980549], "max-tasks-per-child": "N/A", "put-guarded-by-semaphore": false, "timeouts": [0, 0], "writes": {"total": 43830, "avg": "0.10", "all": "0.96, 0.02, 0.01, 0.01, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00", "raw": "42027, 723, 414, 253, 198, 130, 62, 14, 7, 2", "strategy": "fair", "inqueues": {"total": 10, "active": 0}}}, "broker": {"hostname": "127.0.0.1", "userid": "guest", "virtual_host": "/", "port": 5674, "insist": false, "ssl": false, "transport": "amqp", "connect_timeout": 4, "transport_options": {}, "login_method": "PLAIN", "uri_prefix": null, "heartbeat": 120.0, "failover_strategy": "round-robin", "alternates": [], "credential_provider": null}, "prefetch_count": 10, "rusage": {"utime": 36.838838, "stime": 5.586803, "maxrss": 60512, "ixrss": 0, "idrss": 0, "isrss": 0, "minflt": 72109, "majflt": 0, "nswap": 0, "inblock": 0, "oublock": 560, "msgsnd": 0, "msgrcv": 0, "nsignals": 0, "nvcsw": 66410, "nivcsw": 5098}}}, "ping": [{"soak-ref-amqp-62ffff7dbe@cluster": {"ok": "pong"}}]}
+{"completed_cycle": 81, "monotonic": 302618.537980082}
+{"completed_cycle": 82, "monotonic": 302621.550062867}
+{"completed_cycle": 83, "monotonic": 302624.56127659}
+{"completed_cycle": 84, "monotonic": 302627.579324899}
+{"completed_cycle": 85, "monotonic": 302630.595734825}
+{"completed_cycle": 86, "monotonic": 302633.611697071}
+{"completed_cycle": 87, "monotonic": 302636.62728835}
+{"completed_cycle": 88, "monotonic": 302639.646106843}
+{"completed_cycle": 89, "monotonic": 302642.662608614}
+{"completed_cycle": 90, "monotonic": 302645.679170515}
+{"cycle": 90, "stats": {"soak-ref-amqp-62ffff7dbe@cluster": {"total": {"soak.pure": 48010, "soak.fail": 91, "soak.retry": 182, "soak.add": 820, "soak.large": 91, "soak.total": 91}, "pid": 3980361, "clock": "474", "uptime": 367, "pool": {"implementation": "celery.concurrency.prefork:TaskPool", "max-concurrency": 10, "processes": [3980461, 3980526, 3980530, 3980532, 3980536, 3980538, 3980540, 3980542, 3980544, 3980549], "max-tasks-per-child": "N/A", "put-guarded-by-semaphore": false, "timeouts": [0, 0], "writes": {"total": 49285, "avg": "0.10", "all": "0.96, 0.02, 0.01, 0.01, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00", "raw": "47293, 798, 459, 281, 219, 145, 66, 15, 7, 2", "strategy": "fair", "inqueues": {"total": 10, "active": 0}}}, "broker": {"hostname": "127.0.0.1", "userid": "guest", "virtual_host": "/", "port": 5674, "insist": false, "ssl": false, "transport": "amqp", "connect_timeout": 4, "transport_options": {}, "login_method": "PLAIN", "uri_prefix": null, "heartbeat": 120.0, "failover_strategy": "round-robin", "alternates": [], "credential_provider": null}, "prefetch_count": 11, "rusage": {"utime": 41.465966, "stime": 6.318623, "maxrss": 60512, "ixrss": 0, "idrss": 0, "isrss": 0, "minflt": 72177, "majflt": 0, "nswap": 0, "inblock": 0, "oublock": 624, "msgsnd": 0, "msgrcv": 0, "nsignals": 0, "nvcsw": 74252, "nivcsw": 5792}}}, "ping": [{"soak-ref-amqp-62ffff7dbe@cluster": {"ok": "pong"}}]}
+{"completed_cycle": 91, "monotonic": 302658.727550684}
+{"completed_cycle": 92, "monotonic": 302661.744498639}
+{"completed_cycle": 93, "monotonic": 302664.761241308}
+{"completed_cycle": 94, "monotonic": 302667.779262611}
+{"completed_cycle": 95, "monotonic": 302670.796976646}
+{"completed_cycle": 96, "monotonic": 302673.812356576}
+{"completed_cycle": 97, "monotonic": 302676.831936474}
+{"completed_cycle": 98, "monotonic": 302679.851041391}
+{"completed_cycle": 99, "monotonic": 302682.870120247}
+{"completed_cycle": 100, "monotonic": 302685.890311024}
+{"cycle": 100, "stats": {"soak-ref-amqp-62ffff7dbe@cluster": {"total": {"soak.pure": 53295, "soak.fail": 101, "soak.retry": 202, "soak.add": 910, "soak.large": 101, "soak.total": 101}, "pid": 3980361, "clock": "526", "uptime": 407, "pool": {"implementation": "celery.concurrency.prefork:TaskPool", "max-concurrency": 10, "processes": [3980461, 3980526, 3980530, 3980532, 3980536, 3980538, 3980540, 3980542, 3980544, 3980549], "max-tasks-per-child": "N/A", "put-guarded-by-semaphore": false, "timeouts": [0, 0], "writes": {"total": 54710, "avg": "0.10", "all": "0.96, 0.02, 0.01, 0.01, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00", "raw": "52591, 868, 492, 294, 226, 148, 67, 15, 7, 2", "strategy": "fair", "inqueues": {"total": 10, "active": 0}}}, "broker": {"hostname": "127.0.0.1", "userid": "guest", "virtual_host": "/", "port": 5674, "insist": false, "ssl": false, "transport": "amqp", "connect_timeout": 4, "transport_options": {}, "login_method": "PLAIN", "uri_prefix": null, "heartbeat": 120.0, "failover_strategy": "round-robin", "alternates": [], "credential_provider": null}, "prefetch_count": 11, "rusage": {"utime": 46.186621, "stime": 7.010936, "maxrss": 60512, "ixrss": 0, "idrss": 0, "isrss": 0, "minflt": 72204, "majflt": 0, "nswap": 0, "inblock": 0, "oublock": 680, "msgsnd": 0, "msgrcv": 0, "nsignals": 0, "nvcsw": 82878, "nivcsw": 6543}}}, "ping": [{"soak-ref-amqp-62ffff7dbe@cluster": {"ok": "pong"}}]}
+{"completed_cycle": 101, "monotonic": 302698.940133153}
+{"completed_cycle": 102, "monotonic": 302701.958681113}
+{"completed_cycle": 103, "monotonic": 302704.974435557}
+{"completed_cycle": 104, "monotonic": 302707.989042739}
+{"completed_cycle": 105, "monotonic": 302711.008080362}
+{"completed_cycle": 106, "monotonic": 302714.026049421}
+{"completed_cycle": 107, "monotonic": 302717.043296525}
+{"completed_cycle": 108, "monotonic": 302720.058609834}
+{"completed_cycle": 109, "monotonic": 302723.074603446}
+{"completed_cycle": 110, "monotonic": 302726.091683753}
+{"cycle": 110, "error": "ConnectionForced(320, \"CONNECTION_FORCED - broker forced connection closure with reason 'shutdown'\", (0, 0), '')"}
+{"cycle": 110, "error": "OperationalError('[Errno 104] Connection reset by peer')"}
+{"cycle": 110, "error": "OperationalError('[Errno 104] Connection reset by peer')"}
+{"cycle": 110, "stats": {"soak-ref-amqp-62ffff7dbe@cluster": {"total": {"soak.pure": 59581, "soak.fail": 112, "soak.retry": 224, "soak.add": 1009, "soak.large": 112, "soak.total": 112}, "pid": 3980361, "clock": "588", "uptime": 459, "pool": {"implementation": "celery.concurrency.prefork:TaskPool", "max-concurrency": 10, "processes": [3980461, 3980526, 3980530, 3980532, 3980536, 3980538, 3980540, 3980542, 3980544, 3980549], "max-tasks-per-child": "N/A", "put-guarded-by-semaphore": false, "timeouts": [0, 0], "writes": {"total": 61150, "avg": "0.10", "all": "0.96, 0.02, 0.01, 0.01, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00", "raw": "58467, 1011, 605, 387, 299, 201, 104, 45, 28, 3", "strategy": "fair", "inqueues": {"total": 10, "active": 0}}}, "broker": {"hostname": "127.0.0.1", "userid": "guest", "virtual_host": "/", "port": 5674, "insist": false, "ssl": false, "transport": "amqp", "connect_timeout": 4, "transport_options": {}, "login_method": "PLAIN", "uri_prefix": null, "heartbeat": 120.0, "failover_strategy": "round-robin", "alternates": [], "credential_provider": null}, "prefetch_count": 10, "rusage": {"utime": 51.534095, "stime": 7.828205, "maxrss": 60704, "ixrss": 0, "idrss": 0, "isrss": 0, "minflt": 73121, "majflt": 0, "nswap": 0, "inblock": 0, "oublock": 768, "msgsnd": 0, "msgrcv": 0, "nsignals": 0, "nvcsw": 92050, "nivcsw": 7227}}}, "ping": [{"soak-ref-amqp-62ffff7dbe@cluster": {"ok": "pong"}}]}
+{"completed_cycle": 111, "monotonic": 302751.050258387}
+{"completed_cycle": 112, "monotonic": 302754.067777281}
+{"completed_cycle": 113, "monotonic": 302757.086300716}
+{"completed_cycle": 114, "monotonic": 302760.104323962}
+{"completed_cycle": 115, "monotonic": 302763.121601098}
+{"completed_cycle": 116, "monotonic": 302766.13758508}
+{"completed_cycle": 117, "monotonic": 302769.155200718}
+{"completed_cycle": 118, "monotonic": 302772.173137877}
+{"completed_cycle": 119, "monotonic": 302775.192310349}
+{"completed_cycle": 120, "monotonic": 302778.207867215}
+{"cycle": 120, "stats": {"soak-ref-amqp-62ffff7dbe@cluster": {"total": {"soak.pure": 64864, "soak.fail": 122, "soak.retry": 244, "soak.add": 1099, "soak.large": 122, "soak.total": 122}, "pid": 3980361, "clock": "640", "uptime": 499, "pool": {"implementation": "celery.concurrency.prefork:TaskPool", "max-concurrency": 10, "processes": [3980461, 3980526, 3980530, 3980532, 3980536, 3980538, 3980540, 3980542, 3980544, 3980549], "max-tasks-per-child": "N/A", "put-guarded-by-semaphore": false, "timeouts": [0, 0], "writes": {"total": 66573, "avg": "0.10", "all": "0.96, 0.02, 0.01, 0.01, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00", "raw": "63648, 1121, 664, 421, 322, 211, 108, 47, 28, 3", "strategy": "fair", "inqueues": {"total": 10, "active": 0}}}, "broker": {"hostname": "127.0.0.1", "userid": "guest", "virtual_host": "/", "port": 5674, "insist": false, "ssl": false, "transport": "amqp", "connect_timeout": 4, "transport_options": {}, "login_method": "PLAIN", "uri_prefix": null, "heartbeat": 120.0, "failover_strategy": "round-robin", "alternates": [], "credential_provider": null}, "prefetch_count": 11, "rusage": {"utime": 55.788652, "stime": 8.504091, "maxrss": 60704, "ixrss": 0, "idrss": 0, "isrss": 0, "minflt": 73149, "majflt": 0, "nswap": 0, "inblock": 0, "oublock": 832, "msgsnd": 0, "msgrcv": 0, "nsignals": 0, "nvcsw": 100307, "nivcsw": 7823}}}, "ping": [{"soak-ref-amqp-62ffff7dbe@cluster": {"ok": "pong"}}]}
+{"completed_cycle": 121, "monotonic": 302791.255258211}
+{"completed_cycle": 122, "monotonic": 302794.268534246}
+{"completed_cycle": 123, "monotonic": 302797.28343875}
+{"completed_cycle": 124, "monotonic": 302800.300354372}
+{"completed_cycle": 125, "monotonic": 302803.315751216}
+{"completed_cycle": 126, "monotonic": 302806.332187728}
+{"completed_cycle": 127, "monotonic": 302809.345746164}
+{"completed_cycle": 128, "monotonic": 302812.36139668}
+{"completed_cycle": 129, "monotonic": 302815.379162227}
+{"completed_cycle": 130, "monotonic": 302818.394756825}
+{"cycle": 130, "stats": {"soak-ref-amqp-62ffff7dbe@cluster": {"total": {"soak.pure": 70166, "soak.fail": 132, "soak.retry": 264, "soak.add": 1189, "soak.large": 132, "soak.total": 132}, "pid": 3980361, "clock": "692", "uptime": 540, "pool": {"implementation": "celery.concurrency.prefork:TaskPool", "max-concurrency": 10, "processes": [3980461, 3980526, 3980530, 3980532, 3980536, 3980538, 3980540, 3980542, 3980544, 3980549], "max-tasks-per-child": "N/A", "put-guarded-by-semaphore": false, "timeouts": [0, 0], "writes": {"total": 72015, "avg": "0.10", "all": "0.96, 0.02, 0.01, 0.01, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00", "raw": "68874, 1207, 710, 453, 345, 230, 115, 49, 29, 3", "strategy": "fair", "inqueues": {"total": 10, "active": 0}}}, "broker": {"hostname": "127.0.0.1", "userid": "guest", "virtual_host": "/", "port": 5674, "insist": false, "ssl": false, "transport": "amqp", "connect_timeout": 4, "transport_options": {}, "login_method": "PLAIN", "uri_prefix": null, "heartbeat": 120.0, "failover_strategy": "round-robin", "alternates": [], "credential_provider": null}, "prefetch_count": 11, "rusage": {"utime": 60.306095, "stime": 9.162547, "maxrss": 60704, "ixrss": 0, "idrss": 0, "isrss": 0, "minflt": 73161, "majflt": 0, "nswap": 0, "inblock": 0, "oublock": 896, "msgsnd": 0, "msgrcv": 0, "nsignals": 0, "nvcsw": 108884, "nivcsw": 8278}}}, "ping": [{"soak-ref-amqp-62ffff7dbe@cluster": {"ok": "pong"}}]}
+{"completed_cycle": 131, "monotonic": 302831.444498947}
+{"completed_cycle": 132, "monotonic": 302834.460535035}
+{"completed_cycle": 133, "monotonic": 302837.476661883}
+{"completed_cycle": 134, "monotonic": 302840.49191973}
+{"completed_cycle": 135, "monotonic": 302843.504112864}
+{"completed_cycle": 136, "monotonic": 302846.520133277}
+{"completed_cycle": 137, "monotonic": 302849.532916895}
+{"completed_cycle": 138, "monotonic": 302852.550670604}
+{"completed_cycle": 139, "monotonic": 302855.569931956}
+{"completed_cycle": 140, "monotonic": 302858.588077878}
+{"cycle": 140, "stats": {"soak-ref-amqp-62ffff7dbe@cluster": {"total": {"soak.pure": 75541, "soak.fail": 142, "soak.retry": 284, "soak.add": 1279, "soak.large": 142, "soak.total": 142}, "pid": 3980361, "clock": "744", "uptime": 580, "pool": {"implementation": "celery.concurrency.prefork:TaskPool", "max-concurrency": 10, "processes": [3980461, 3980526, 3980530, 3980532, 3980536, 3980538, 3980540, 3980542, 3980544, 3980549], "max-tasks-per-child": "N/A", "put-guarded-by-semaphore": false, "timeouts": [0, 0], "writes": {"total": 77530, "avg": "0.10", "all": "0.96, 0.02, 0.01, 0.01, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00", "raw": "74238, 1280, 751, 475, 355, 234, 116, 49, 29, 3", "strategy": "fair", "inqueues": {"total": 10, "active": 0}}}, "broker": {"hostname": "127.0.0.1", "userid": "guest", "virtual_host": "/", "port": 5674, "insist": false, "ssl": false, "transport": "amqp", "connect_timeout": 4, "transport_options": {}, "login_method": "PLAIN", "uri_prefix": null, "heartbeat": 120.0, "failover_strategy": "round-robin", "alternates": [], "credential_provider": null}, "prefetch_count": 11, "rusage": {"utime": 65.085444, "stime": 9.885759, "maxrss": 60704, "ixrss": 0, "idrss": 0, "isrss": 0, "minflt": 73169, "majflt": 0, "nswap": 0, "inblock": 0, "oublock": 960, "msgsnd": 0, "msgrcv": 0, "nsignals": 0, "nvcsw": 117361, "nivcsw": 8884}}}, "ping": [{"soak-ref-amqp-62ffff7dbe@cluster": {"ok": "pong"}}]}
+{"completed_cycle": 141, "monotonic": 302871.631124089}
+{"completed_cycle": 142, "monotonic": 302874.650615685}
+{"completed_cycle": 143, "monotonic": 302877.669640155}
+{"completed_cycle": 144, "monotonic": 302880.686742452}
+{"completed_cycle": 145, "monotonic": 302883.703950064}
+{"completed_cycle": 146, "monotonic": 302886.718569446}
+{"completed_cycle": 147, "monotonic": 302889.736722428}
+{"completed_cycle": 148, "monotonic": 302892.751971979}
+{"completed_cycle": 149, "monotonic": 302895.769133391}
+{"completed_cycle": 150, "monotonic": 302898.782823767}
+{"cycle": 150, "stats": {"soak-ref-amqp-62ffff7dbe@cluster": {"total": {"soak.pure": 80766, "soak.fail": 152, "soak.retry": 304, "soak.add": 1369, "soak.large": 152, "soak.total": 152}, "pid": 3980361, "clock": "796", "uptime": 620, "pool": {"implementation": "celery.concurrency.prefork:TaskPool", "max-concurrency": 10, "processes": [3980461, 3980526, 3980530, 3980532, 3980536, 3980538, 3980540, 3980542, 3980544, 3980549], "max-tasks-per-child": "N/A", "put-guarded-by-semaphore": false, "timeouts": [0, 0], "writes": {"total": 82895, "avg": "0.10", "all": "0.96, 0.02, 0.01, 0.01, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00", "raw": "79444, 1348, 791, 500, 369, 242, 120, 49, 29, 3", "strategy": "fair", "inqueues": {"total": 10, "active": 0}}}, "broker": {"hostname": "127.0.0.1", "userid": "guest", "virtual_host": "/", "port": 5674, "insist": false, "ssl": false, "transport": "amqp", "connect_timeout": 4, "transport_options": {}, "login_method": "PLAIN", "uri_prefix": null, "heartbeat": 120.0, "failover_strategy": "round-robin", "alternates": [], "credential_provider": null}, "prefetch_count": 10, "rusage": {"utime": 69.690712, "stime": 10.511472, "maxrss": 60704, "ixrss": 0, "idrss": 0, "isrss": 0, "minflt": 73177, "majflt": 0, "nswap": 0, "inblock": 0, "oublock": 1024, "msgsnd": 0, "msgrcv": 0, "nsignals": 0, "nvcsw": 126418, "nivcsw": 9360}}}, "ping": [{"soak-ref-amqp-62ffff7dbe@cluster": {"ok": "pong"}}]}
+{"completed_cycle": 151, "monotonic": 302911.829237922}
+{"completed_cycle": 152, "monotonic": 302914.848853736}
+{"completed_cycle": 153, "monotonic": 302917.867574251}
+{"completed_cycle": 154, "monotonic": 302920.880024436}
+{"completed_cycle": 155, "monotonic": 302923.895111109}
+{"completed_cycle": 156, "monotonic": 302926.915113072}
+{"completed_cycle": 157, "monotonic": 302929.928050937}
+{"completed_cycle": 158, "monotonic": 302932.941666371}
+{"completed_cycle": 159, "monotonic": 302935.957787647}
+{"completed_cycle": 160, "monotonic": 302938.971728467}
+{"cycle": 160, "stats": {"soak-ref-amqp-62ffff7dbe@cluster": {"total": {"soak.pure": 86069, "soak.fail": 162, "soak.retry": 324, "soak.add": 1459, "soak.large": 162, "soak.total": 162}, "pid": 3980361, "clock": "848", "uptime": 660, "pool": {"implementation": "celery.concurrency.prefork:TaskPool", "max-concurrency": 10, "processes": [3980461, 3980526, 3980530, 3980532, 3980536, 3980538, 3980540, 3980542, 3980544, 3980549], "max-tasks-per-child": "N/A", "put-guarded-by-semaphore": false, "timeouts": [0, 0], "writes": {"total": 88338, "avg": "0.10", "all": "0.96, 0.02, 0.01, 0.01, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00", "raw": "84716, 1420, 831, 524, 386, 253, 125, 50, 30, 3", "strategy": "fair", "inqueues": {"total": 10, "active": 0}}}, "broker": {"hostname": "127.0.0.1", "userid": "guest", "virtual_host": "/", "port": 5674, "insist": false, "ssl": false, "transport": "amqp", "connect_timeout": 4, "transport_options": {}, "login_method": "PLAIN", "uri_prefix": null, "heartbeat": 120.0, "failover_strategy": "round-robin", "alternates": [], "credential_provider": null}, "prefetch_count": 11, "rusage": {"utime": 74.460717, "stime": 11.19079, "maxrss": 60704, "ixrss": 0, "idrss": 0, "isrss": 0, "minflt": 73197, "majflt": 0, "nswap": 0, "inblock": 0, "oublock": 1080, "msgsnd": 0, "msgrcv": 0, "nsignals": 0, "nvcsw": 134831, "nivcsw": 9911}}}, "ping": [{"soak-ref-amqp-62ffff7dbe@cluster": {"ok": "pong"}}]}
+{"completed_cycle": 161, "monotonic": 302952.02887078}
+{"completed_cycle": 162, "monotonic": 302955.047061289}
+{"completed_cycle": 163, "monotonic": 302958.064257544}
+{"completed_cycle": 164, "monotonic": 302961.07975748}
+{"completed_cycle": 165, "monotonic": 302964.095969929}
+{"completed_cycle": 166, "monotonic": 302967.112046623}
+{"completed_cycle": 167, "monotonic": 302970.130045578}
+{"completed_cycle": 168, "monotonic": 302973.144422656}
+{"completed_cycle": 169, "monotonic": 302976.160567565}
+{"completed_cycle": 170, "monotonic": 302979.179297967}
+{"cycle": 170, "stats": {"soak-ref-amqp-62ffff7dbe@cluster": {"total": {"soak.pure": 91386, "soak.fail": 172, "soak.retry": 344, "soak.add": 1549, "soak.large": 172, "soak.total": 172}, "pid": 3980361, "clock": "900", "uptime": 700, "pool": {"implementation": "celery.concurrency.prefork:TaskPool", "max-concurrency": 10, "processes": [3980461, 3980526, 3980530, 3980532, 3980536, 3980538, 3980540, 3980542, 3980544, 3980549], "max-tasks-per-child": "N/A", "put-guarded-by-semaphore": false, "timeouts": [0, 0], "writes": {"total": 93795, "avg": "0.10", "all": "0.96, 0.02, 0.01, 0.01, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00", "raw": "89985, 1502, 880, 555, 405, 260, 125, 50, 30, 3", "strategy": "fair", "inqueues": {"total": 10, "active": 0}}}, "broker": {"hostname": "127.0.0.1", "userid": "guest", "virtual_host": "/", "port": 5674, "insist": false, "ssl": false, "transport": "amqp", "connect_timeout": 4, "transport_options": {}, "login_method": "PLAIN", "uri_prefix": null, "heartbeat": 120.0, "failover_strategy": "round-robin", "alternates": [], "credential_provider": null}, "prefetch_count": 11, "rusage": {"utime": 79.179403, "stime": 11.886318, "maxrss": 60704, "ixrss": 0, "idrss": 0, "isrss": 0, "minflt": 73215, "majflt": 0, "nswap": 0, "inblock": 0, "oublock": 1144, "msgsnd": 0, "msgrcv": 0, "nsignals": 0, "nvcsw": 143490, "nivcsw": 10589}}}, "ping": [{"soak-ref-amqp-62ffff7dbe@cluster": {"ok": "pong"}}]}
+{"completed_cycle": 171, "monotonic": 302992.231103665}
+{"completed_cycle": 172, "monotonic": 302995.249660547}
+{"completed_cycle": 173, "monotonic": 302998.262568123}
+{"completed_cycle": 174, "monotonic": 303001.279143711}
+{"completed_cycle": 175, "monotonic": 303004.293863451}
+{"completed_cycle": 176, "monotonic": 303007.30833259}
+{"completed_cycle": 177, "monotonic": 303010.324180982}
+{"completed_cycle": 178, "monotonic": 303013.341688193}
+{"completed_cycle": 179, "monotonic": 303016.358121589}
+{"completed_cycle": 180, "monotonic": 303019.376480283}
+{"cycle": 180, "stats": {"soak-ref-amqp-62ffff7dbe@cluster": {"total": {"soak.pure": 96721, "soak.fail": 182, "soak.retry": 364, "soak.add": 1639, "soak.large": 182, "soak.total": 182}, "pid": 3980361, "clock": "952", "uptime": 741, "pool": {"implementation": "celery.concurrency.prefork:TaskPool", "max-concurrency": 10, "processes": [3980461, 3980526, 3980530, 3980532, 3980536, 3980538, 3980540, 3980542, 3980544, 3980549], "max-tasks-per-child": "N/A", "put-guarded-by-semaphore": false, "timeouts": [0, 0], "writes": {"total": 99270, "avg": "0.10", "all": "0.96, 0.02, 0.01, 0.01, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00", "raw": "95263, 1579, 929, 585, 425, 275, 130, 51, 30, 3", "strategy": "fair", "inqueues": {"total": 10, "active": 0}}}, "broker": {"hostname": "127.0.0.1", "userid": "guest", "virtual_host": "/", "port": 5674, "insist": false, "ssl": false, "transport": "amqp", "connect_timeout": 4, "transport_options": {}, "login_method": "PLAIN", "uri_prefix": null, "heartbeat": 120.0, "failover_strategy": "round-robin", "alternates": [], "credential_provider": null}, "prefetch_count": 10, "rusage": {"utime": 83.905139, "stime": 12.57123, "maxrss": 60704, "ixrss": 0, "idrss": 0, "isrss": 0, "minflt": 73228, "majflt": 0, "nswap": 0, "inblock": 0, "oublock": 1208, "msgsnd": 0, "msgrcv": 0, "nsignals": 0, "nvcsw": 152090, "nivcsw": 11248}}}, "ping": [{"soak-ref-amqp-62ffff7dbe@cluster": {"ok": "pong"}}]}
+{"completed_cycle": 181, "monotonic": 303032.422657962}
+{"completed_cycle": 182, "monotonic": 303035.44009817}
+{"completed_cycle": 183, "monotonic": 303038.457606915}
+{"completed_cycle": 184, "monotonic": 303041.474749263}
+{"completed_cycle": 185, "monotonic": 303044.489330661}
+{"completed_cycle": 186, "monotonic": 303047.503989104}
+{"completed_cycle": 187, "monotonic": 303050.521123724}
+{"completed_cycle": 188, "monotonic": 303053.532854429}
+{"completed_cycle": 189, "monotonic": 303056.550461173}
+{"completed_cycle": 190, "monotonic": 303059.564109318}
+{"cycle": 190, "stats": {"soak-ref-amqp-62ffff7dbe@cluster": {"total": {"soak.pure": 102074, "soak.fail": 192, "soak.retry": 384, "soak.add": 1729, "soak.large": 192, "soak.total": 192}, "pid": 3980361, "clock": "1004", "uptime": 781, "pool": {"implementation": "celery.concurrency.prefork:TaskPool", "max-concurrency": 10, "processes": [3980461, 3980526, 3980530, 3980532, 3980536, 3980538, 3980540, 3980542, 3980544, 3980549], "max-tasks-per-child": "N/A", "put-guarded-by-semaphore": false, "timeouts": [0, 0], "writes": {"total": 104763, "avg": "0.10", "all": "0.96, 0.02, 0.01, 0.01, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00", "raw": "100511, 1678, 986, 623, 455, 292, 134, 51, 30, 3", "strategy": "fair", "inqueues": {"total": 10, "active": 0}}}, "broker": {"hostname": "127.0.0.1", "userid": "guest", "virtual_host": "/", "port": 5674, "insist": false, "ssl": false, "transport": "amqp", "connect_timeout": 4, "transport_options": {}, "login_method": "PLAIN", "uri_prefix": null, "heartbeat": 120.0, "failover_strategy": "round-robin", "alternates": [], "credential_provider": null}, "prefetch_count": 11, "rusage": {"utime": 88.59805, "stime": 13.247949, "maxrss": 60704, "ixrss": 0, "idrss": 0, "isrss": 0, "minflt": 73265, "majflt": 0, "nswap": 0, "inblock": 0, "oublock": 1272, "msgsnd": 0, "msgrcv": 0, "nsignals": 0, "nvcsw": 160912, "nivcsw": 11872}}}, "ping": [{"soak-ref-amqp-62ffff7dbe@cluster": {"ok": "pong"}}]}
+{"completed_cycle": 191, "monotonic": 303072.616188045}
+{"completed_cycle": 192, "monotonic": 303075.633922362}
+{"completed_cycle": 193, "monotonic": 303078.651066323}
+{"completed_cycle": 194, "monotonic": 303081.669395974}
+{"completed_cycle": 195, "monotonic": 303084.683568706}
+{"completed_cycle": 196, "monotonic": 303087.701040298}
+{"completed_cycle": 197, "monotonic": 303090.71606821}
+{"completed_cycle": 198, "monotonic": 303093.73410516}
+{"completed_cycle": 199, "monotonic": 303096.750057032}
+{"completed_cycle": 200, "monotonic": 303099.767076534}
+{"cycle": 200, "stats": {"soak-ref-amqp-62ffff7dbe@cluster": {"total": {"soak.pure": 107486, "soak.fail": 202, "soak.retry": 404, "soak.add": 1819, "soak.large": 202, "soak.total": 202}, "pid": 3980361, "clock": "1056", "uptime": 821, "pool": {"implementation": "celery.concurrency.prefork:TaskPool", "max-concurrency": 10, "processes": [3980461, 3980526, 3980530, 3980532, 3980536, 3980538, 3980540, 3980542, 3980544, 3980549], "max-tasks-per-child": "N/A", "put-guarded-by-semaphore": false, "timeouts": [0, 0], "writes": {"total": 110315, "avg": "0.10", "all": "0.96, 0.02, 0.01, 0.01, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00", "raw": "105906, 1753, 1028, 646, 469, 295, 134, 51, 30, 3", "strategy": "fair", "inqueues": {"total": 10, "active": 0}}}, "broker": {"hostname": "127.0.0.1", "userid": "guest", "virtual_host": "/", "port": 5674, "insist": false, "ssl": false, "transport": "amqp", "connect_timeout": 4, "transport_options": {}, "login_method": "PLAIN", "uri_prefix": null, "heartbeat": 120.0, "failover_strategy": "round-robin", "alternates": [], "credential_provider": null}, "prefetch_count": 11, "rusage": {"utime": 93.415888, "stime": 13.977419, "maxrss": 60704, "ixrss": 0, "idrss": 0, "isrss": 0, "minflt": 73288, "majflt": 0, "nswap": 0, "inblock": 0, "oublock": 1336, "msgsnd": 0, "msgrcv": 0, "nsignals": 0, "nvcsw": 169391, "nivcsw": 12465}}}, "ping": [{"soak-ref-amqp-62ffff7dbe@cluster": {"ok": "pong"}}]}
+{"completed_cycle": 201, "monotonic": 303112.815435075}
+{"completed_cycle": 202, "monotonic": 303115.832388348}
+{"completed_cycle": 203, "monotonic": 303118.847677182}
+{"completed_cycle": 204, "monotonic": 303121.865126444}
+{"completed_cycle": 205, "monotonic": 303124.880989162}
+{"completed_cycle": 206, "monotonic": 303127.899052173}
+{"completed_cycle": 207, "monotonic": 303130.917246007}
+{"completed_cycle": 208, "monotonic": 303133.93472963}
+{"completed_cycle": 209, "monotonic": 303136.948874146}
+{"completed_cycle": 210, "monotonic": 303139.96810417}
+{"cycle": 210, "stats": {"soak-ref-amqp-62ffff7dbe@cluster": {"total": {"soak.pure": 112711, "soak.fail": 212, "soak.retry": 424, "soak.add": 1909, "soak.large": 212, "soak.total": 212}, "pid": 3980361, "clock": "1108", "uptime": 861, "pool": {"implementation": "celery.concurrency.prefork:TaskPool", "max-concurrency": 10, "processes": [3980461, 3980526, 3980530, 3980532, 3980536, 3980538, 3980540, 3980542, 3980544, 3980549], "max-tasks-per-child": "N/A", "put-guarded-by-semaphore": false, "timeouts": [0, 0], "writes": {"total": 115680, "avg": "0.10", "all": "0.96, 0.02, 0.01, 0.01, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00", "raw": "111117, 1820, 1068, 669, 485, 301, 136, 51, 30, 3", "strategy": "fair", "inqueues": {"total": 10, "active": 0}}}, "broker": {"hostname": "127.0.0.1", "userid": "guest", "virtual_host": "/", "port": 5674, "insist": false, "ssl": false, "transport": "amqp", "connect_timeout": 4, "transport_options": {}, "login_method": "PLAIN", "uri_prefix": null, "heartbeat": 120.0, "failover_strategy": "round-robin", "alternates": [], "credential_provider": null}, "prefetch_count": 11, "rusage": {"utime": 98.063989, "stime": 14.674223, "maxrss": 60704, "ixrss": 0, "idrss": 0, "isrss": 0, "minflt": 73305, "majflt": 0, "nswap": 0, "inblock": 0, "oublock": 1400, "msgsnd": 0, "msgrcv": 0, "nsignals": 0, "nvcsw": 178300, "nivcsw": 13205}}}, "ping": [{"soak-ref-amqp-62ffff7dbe@cluster": {"ok": "pong"}}]}
+{"completed_cycle": 211, "monotonic": 303153.019242377}
+{"completed_cycle": 212, "monotonic": 303156.034622293}
+{"completed_cycle": 213, "monotonic": 303159.051784247}
+{"completed_cycle": 214, "monotonic": 303162.068604701}
+{"completed_cycle": 215, "monotonic": 303165.085073035}
+{"completed_cycle": 216, "monotonic": 303168.100465341}
+{"completed_cycle": 217, "monotonic": 303171.119686091}
+{"completed_cycle": 218, "monotonic": 303174.139456539}
+{"completed_cycle": 219, "monotonic": 303177.158264173}
+{"completed_cycle": 220, "monotonic": 303180.175396307}

@@ -128,9 +128,13 @@ def load():
             time.sleep(2)
 
 
+def interpreter(impl):
+    return str(ROOT / f'.venv-{impl}/bin/python')
+
+
 def run(args):
     if os.environ.get('CELERY_RS_BROKER_LOCKED') != '1':
-        return subprocess.call([str(ROOT / 'tools/dev/with-brokers'), sys.executable,
+        return subprocess.call([str(ROOT / 'tools/dev/with-brokers'), interpreter(args.impl),
                                 __file__, *sys.argv[1:]])
     token = f'{args.impl}-{args.broker}-{uuid.uuid4().hex[:10]}'
     redis = os.environ['CELERY_RS_REDIS_URL']
@@ -156,7 +160,7 @@ def run(args):
             for label, command in zip(('worker', 'beat', 'load'), commands):
                 logfile = path.with_suffix(f'.{label}.log').open('w')
                 logs.append(logfile)
-                processes.append(subprocess.Popen([sys.executable, *command], cwd=ROOT / 'bench',
+                processes.append(subprocess.Popen([interpreter(args.impl), *command], cwd=ROOT / 'bench',
                                                    env=env, stdout=logfile, stderr=subprocess.STDOUT,
                                                    start_new_session=True))
             next_sample = start
@@ -230,7 +234,7 @@ def compare(args):
         for broker in ('redis', 'amqp'):
             log = (OUT / f'soak-{impl}-{broker}-runner.log').open('w')
             command = [str(ROOT / 'tools/dev/with-brokers'),
-                       str(ROOT / f'.venv-{impl}/bin/python'), __file__, '--impl', impl,
+                       interpreter(impl), __file__, '--impl', impl,
                        '--broker', broker, '--minutes', str(args.minutes),
                        '--sample-seconds', str(args.sample_seconds)]
             jobs.append((subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT), log))

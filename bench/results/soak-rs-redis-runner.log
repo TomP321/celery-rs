@@ -1,2 +1,4 @@
-corsia 3: /home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/.venv-rs/bin/python /home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/bench/soak.py --impl rs --broker redis --minutes 60.0 --sample-seconds 30
-/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/bench/results/soak-20261027-010658-rs-redis-aec22fd5c8.json
+corsia 3: /home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/.venv-rs/bin/python /home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak.py --impl rs --broker redis --minutes 15.0 --sample-seconds 30
+ Container celery-rs-lane-3-redis-1  Restarting
+ Container celery-rs-lane-3-redis-1  Started
+/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/results/soak-20261027-081422-rs-redis-9b24ba4a55.json
