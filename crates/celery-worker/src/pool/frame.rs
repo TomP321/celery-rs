@@ -30,6 +30,8 @@ pub enum FrameKind {
     Ack,
     /// Figlio → master: risultato (payload: `u8` successo + pickle).
     Ready,
+    /// Master → figlio: scarta i socket del backend sul broker riavviato.
+    ResetBackend,
 }
 
 impl FrameKind {
@@ -38,6 +40,7 @@ impl FrameKind {
             Self::Task => 1,
             Self::Ack => 2,
             Self::Ready => 3,
+            Self::ResetBackend => 4,
         }
     }
 
@@ -46,6 +49,7 @@ impl FrameKind {
             1 => Ok(Self::Task),
             2 => Ok(Self::Ack),
             3 => Ok(Self::Ready),
+            4 => Ok(Self::ResetBackend),
             other => Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!("tipo di frame sconosciuto: {other}"),
@@ -143,6 +147,22 @@ mod tests {
         assert_eq!(decoded.job, 42);
         assert_eq!(&decoded.payload[..], b"ciao");
         assert!(read_frame(&mut cursor).expect("io").is_none());
+    }
+
+    #[test]
+    fn reset_backend_roundtrip() {
+        let frame = Frame::new(
+            FrameKind::ResetBackend,
+            0,
+            Bytes::from_static(b"redis://host/1"),
+        );
+        let encoded = frame.encode();
+        let decoded = read_frame(&mut Cursor::new(&encoded[..]))
+            .expect("io")
+            .expect("frame");
+        assert_eq!(decoded.kind, FrameKind::ResetBackend);
+        assert_eq!(decoded.job, 0);
+        assert_eq!(decoded.payload, frame.payload);
     }
 
     #[test]

@@ -29,6 +29,27 @@ __all__ = (
 #: Variabile d'ambiente per tornare al client redis-py.
 ENV_DISABLE = 'CELERY_RS_BACKEND'
 
+
+def _reset_on_broker_restart(app, broker):
+    from urllib.parse import urlsplit
+
+    backend = app._backend
+    client = backend.__dict__.get('client') if backend is not None else None
+    if type(client) is not RsRedis:
+        return False
+    url = urlsplit(broker)
+    params = client._params
+    if (url.scheme not in ('redis', 'rediss') or client._unix
+            or (url.scheme == 'rediss') != client._ssl
+            or url.hostname != (params.get('host') or 'localhost')
+            or (url.port or 6379) != int(params.get('port') or 6379)):
+        return False
+    # I socket inattivi sono del server riavviato; redis-py li scarta
+    # prima del comando, senza trasformare il primo GET in un errore del task.
+    client.reset()
+    return True
+
+
 #: Contatori interni (i test verificano che il backend usi davvero Rust).
 _STATS = {
     'clients': 0,

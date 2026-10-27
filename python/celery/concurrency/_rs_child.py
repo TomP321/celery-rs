@@ -20,6 +20,7 @@ import pickle
 import signal
 import socket
 import struct
+import sys
 import time
 import traceback
 
@@ -48,6 +49,7 @@ child process exiting after exceeding memory limit ({0}KiB / {1}KiB)
 TASK = 1
 ACK = 2
 READY = 3
+RESET_BACKEND = 4
 
 _META = struct.Struct('>BQ')
 
@@ -138,6 +140,12 @@ def child_main(fd, app, hostname, maxtasks=0, max_memory_per_child=0):
             if body is None:
                 raise EOFError('frame troncato')
             kind, job = _META.unpack_from(body)
+            if kind == RESET_BACKEND:
+                backend = sys.modules.get('celery.backends._rs_redis')
+                if backend is not None:
+                    backend._reset_on_broker_restart(
+                        app, body[_META.size:].decode())
+                continue
             if kind != TASK:
                 continue
             target, args, kwargs = pickle.loads(memoryview(body)[_META.size:])

@@ -9,6 +9,7 @@ Per ogni venv e broker (Redis, RabbitMQ) avvia un interprete pulito e misura la 
 """
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import signal
@@ -67,9 +68,11 @@ print(json.dumps(out))
 '''
 
 
-def run(venv, broker, workdir):
+def run(venv, broker, workdir, source=None):
     env = {**{k: v for k, v in os.environ.items() if not k.startswith('PYTHON')},
-           'PYTHONPATH': str(workdir), 'PYTHONHASHSEED': '0'}
+           'PYTHONPATH': os.pathsep.join(filter(None, (
+               source if venv == 'rs' else None, str(workdir)))),
+           'PYTHONHASHSEED': '0'}
     py = str(ROOT / f'.venv-{venv}' / 'bin' / 'python')
     out = subprocess.run([py, '-c', PROBE % (WATCH,)], cwd=workdir, env=env,
                          capture_output=True, text=True, timeout=120)
@@ -79,6 +82,12 @@ def run(venv, broker, workdir):
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--source', type=Path,
+                        help='sorgente rs alternativo per confrontare la baseline')
+    parser.add_argument('--label', help='suffisso del file client-<label>.json')
+    args = parser.parse_args()
+    source = str(args.source.resolve()) if args.source else None
     results = {}
     for bname, broker in BROKERS.items():
         with tempfile.TemporaryDirectory() as tmp:
@@ -93,13 +102,14 @@ def main():
             try:
                 time.sleep(4)
                 for venv in VENVS:
-                    results[f'{venv}-{bname}'] = run(venv, broker, tmp)
+                    results[f'{venv}-{bname}'] = run(venv, broker, tmp, source)
             finally:
                 os.killpg(worker.pid, signal.SIGTERM)
                 worker.wait(30)
 
     (HERE / 'results').mkdir(exist_ok=True)
-    (HERE / 'results' / 'client.json').write_text(json.dumps(results, indent=1))
+    name = f'client-{args.label}.json' if args.label else 'client.json'
+    (HERE / 'results' / name).write_text(json.dumps(results, indent=1))
     for bname in BROKERS:
         print(f'== {bname}')
         ref, rs = results[f'ref-{bname}'], results[f'rs-{bname}']

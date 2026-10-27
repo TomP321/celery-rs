@@ -23,7 +23,6 @@ from celery.app import trace
 from celery.loaders.app import AppLoader
 from celery.platforms import EX_FAILURE, EX_OK, check_privileges, isatty
 from celery.utils import static, term
-from celery.utils.debug import cry
 from celery.utils.imports import qualname
 from celery.utils.log import get_logger, in_sighandler, set_in_sighandler
 from celery.utils.text import pluralize
@@ -33,6 +32,19 @@ from celery.worker import WorkController
 from celery.worker.worker import SHUTDOWN_SOCKET_TIMEOUT
 
 __all__ = ('Worker',)
+
+
+def __getattr__(name):
+    if name != 'cry':
+        raise AttributeError(f'module {__name__!r} has no attribute {name!r}')
+    from celery.utils.debug import cry
+    globals()[name] = cry
+    return cry
+
+
+def __dir__():
+    return sorted(set(globals()) | {'cry'})
+
 
 logger = get_logger(__name__)
 is_jython = sys.platform.startswith('java')
@@ -553,6 +565,7 @@ def install_cry_handler(sig='SIGUSR1'):
 
     def cry_handler(*args):
         """Signal handler logging the stack-trace of all active threads."""
+        from celery.apps.worker import cry
         with in_sighandler():
             safe_say(cry())
     platforms.signals[sig] = cry_handler

@@ -207,7 +207,7 @@ def pss_kb(pid):
     return 0
 
 
-def beat_pss(venv, broker_name, entries, directory):
+def beat_pss(venv, broker_name, entries, directory, source=None):
     """PSS del processo beat dopo l'avvio, con `entries` voci in schedule."""
     app_path = Path(directory) / 'bench_beat_app.py'
     app_path.write_text(BEAT_APP)
@@ -219,7 +219,7 @@ def beat_pss(venv, broker_name, entries, directory):
     }
     env.update(BENCH_BROKER=BROKERS[broker_name],
                BENCH_ENTRIES=str(entries),
-               PYTHONPATH=str(Path(directory)))
+               PYTHONPATH=os.pathsep.join(filter(None, (source, str(Path(directory))))))
     log_path = workdir / 'beat.log'
     with open(log_path, 'w') as log:
         process = subprocess.Popen(
@@ -247,16 +247,18 @@ def beat_pss(venv, broker_name, entries, directory):
             process.wait()
 
 
-def measure(venv, brokers, workers=False):
+def measure(venv, brokers, workers=False, source=None):
     env = {key: value for key, value in os.environ.items()
            if not key.startswith('PYTHON') and not key.startswith('CELERY_')}
+    if source:
+        env['PYTHONPATH'] = source
     out = {'micro': child(venv, MICROBENCH, env), 'brokers': {}}
     with tempfile.TemporaryDirectory(prefix='bench-beat-') as directory:
         for name in brokers:
             broker_env = dict(env, BENCH_BROKER=BROKERS[name])
             result = {
-                'pss_3_kb': beat_pss(venv, name, 3, directory),
-                'pss_1000_kb': beat_pss(venv, name, 1000, directory),
+                'pss_3_kb': beat_pss(venv, name, 3, directory, source),
+                'pss_1000_kb': beat_pss(venv, name, 1000, directory, source),
                 'tick': child(venv, TICK, broker_env),
                 'sends': child(venv, SENDS, broker_env),
             }
@@ -313,13 +315,16 @@ def main(argv=None):
     parser.add_argument('--broker', nargs='+', default=['redis', 'amqp'],
                         choices=list(BROKERS))
     parser.add_argument('--compare', nargs=2, metavar=('A', 'B'))
+    parser.add_argument('--source', type=Path,
+                        help='sorgente alternativo per confrontare la baseline')
     args = parser.parse_args(argv)
     if args.compare:
         compare(args.compare)
         return 0
     if not (args.venv and args.label):
         parser.error('servono --venv e --label (oppure --compare A B)')
-    data = measure(args.venv, args.broker)
+    data = measure(args.venv, args.broker,
+                   source=str(args.source.resolve()) if args.source else None)
     data['label'] = args.label
     RESULTS.mkdir(parents=True, exist_ok=True)
     path = RESULTS / f'beat-{args.label}.json'
