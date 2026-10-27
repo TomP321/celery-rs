@@ -1,0 +1,2 @@
+corsia 2: /home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/.venv-rs/bin/python /home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/bench/soak.py --impl rs --broker amqp --minutes 60.0 --sample-seconds 30
+/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/bench/results/soak-20261027-010658-rs-amqp-da88a10c6f.json

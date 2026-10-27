@@ -5,6 +5,8 @@
 //! rilasciato per tutta la durata delle chiamate (`py.detach`), e il runtime
 //! tokio è quello condiviso di `transport.rs` (stesso fork safety).
 
+use crate::fork::ForkSafe;
+
 use std::future::Future;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -102,7 +104,7 @@ fn reply_to_py(py: Python<'_>, reply: Reply) -> PyResult<Py<PyAny>> {
 /// Comando singolo: un wrapper sottile su [`Command`].
 #[pyclass(module = "_celery_rs")]
 pub struct RedisClient {
-    inner: Arc<Client>,
+    inner: ForkSafe<Arc<Client>>,
 }
 
 impl RedisClient {
@@ -165,7 +167,7 @@ impl RedisClient {
         };
         let client = Client::open(config).map_err(redis_error)?;
         Ok(Self {
-            inner: Arc::new(client),
+            inner: ForkSafe::new(Arc::new(client)),
         })
     }
 
@@ -179,7 +181,10 @@ impl RedisClient {
     }
 
     fn mget(&self, py: Python<'_>, keys: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-        let keys = keys.try_iter()?.map(|item| bytes_arg(&item?)).collect::<PyResult<Vec<_>>>()?;
+        let keys = keys
+            .try_iter()?
+            .map(|item| bytes_arg(&item?))
+            .collect::<PyResult<Vec<_>>>()?;
         self.command(py, Command::MGet { keys })
     }
 
@@ -219,7 +224,10 @@ impl RedisClient {
     }
 
     fn delete(&self, py: Python<'_>, keys: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-        let keys = keys.try_iter()?.map(|item| bytes_arg(&item?)).collect::<PyResult<Vec<_>>>()?;
+        let keys = keys
+            .try_iter()?
+            .map(|item| bytes_arg(&item?))
+            .collect::<PyResult<Vec<_>>>()?;
         self.command(py, Command::Delete { keys })
     }
 
@@ -239,12 +247,7 @@ impl RedisClient {
         )
     }
 
-    fn expire(
-        &self,
-        py: Python<'_>,
-        key: &Bound<'_, PyAny>,
-        seconds: i64,
-    ) -> PyResult<Py<PyAny>> {
+    fn expire(&self, py: Python<'_>, key: &Bound<'_, PyAny>, seconds: i64) -> PyResult<Py<PyAny>> {
         self.command(
             py,
             Command::Expire {
@@ -255,7 +258,12 @@ impl RedisClient {
     }
 
     fn ttl(&self, py: Python<'_>, key: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-        self.command(py, Command::Ttl { key: bytes_arg(key)? })
+        self.command(
+            py,
+            Command::Ttl {
+                key: bytes_arg(key)?,
+            },
+        )
     }
 
     fn publish(
@@ -379,7 +387,7 @@ impl RedisClient {
     #[pyo3(signature = (transaction=true))]
     fn pipeline(&self, transaction: bool) -> RedisPipeline {
         RedisPipeline {
-            client: Arc::clone(&self.inner),
+            client: ForkSafe::new(Arc::clone(&self.inner)),
             state: Mutex::new(Pipeline::new(transaction)),
         }
     }
@@ -387,7 +395,7 @@ impl RedisClient {
     fn pubsub(&self, py: Python<'_>) -> PyResult<RedisPubSub> {
         let inner = py.detach(|| block(self.inner.pubsub()))?;
         Ok(RedisPubSub {
-            inner: Arc::new(inner),
+            inner: ForkSafe::new(Arc::new(inner)),
             closed: Mutex::new(false),
         })
     }
@@ -400,7 +408,7 @@ impl RedisClient {
 
 #[pyclass(module = "_celery_rs")]
 pub struct RedisPipeline {
-    client: Arc<Client>,
+    client: ForkSafe<Arc<Client>>,
     state: Mutex<Pipeline>,
 }
 
@@ -445,11 +453,7 @@ impl RedisPipeline {
         Ok(())
     }
 
-    fn publish(
-        &self,
-        channel: &Bound<'_, PyAny>,
-        message: &Bound<'_, PyAny>,
-    ) -> PyResult<()> {
+    fn publish(&self, channel: &Bound<'_, PyAny>, message: &Bound<'_, PyAny>) -> PyResult<()> {
         self.push(Command::Publish {
             channel: bytes_arg(channel)?,
             message: bytes_arg(message)?,
@@ -458,7 +462,10 @@ impl RedisPipeline {
     }
 
     fn delete(&self, keys: &Bound<'_, PyAny>) -> PyResult<()> {
-        let keys = keys.try_iter()?.map(|item| bytes_arg(&item?)).collect::<PyResult<Vec<_>>>()?;
+        let keys = keys
+            .try_iter()?
+            .map(|item| bytes_arg(&item?))
+            .collect::<PyResult<Vec<_>>>()?;
         self.push(Command::Delete { keys });
         Ok(())
     }
@@ -556,7 +563,10 @@ impl RedisPipeline {
     }
 
     fn mget(&self, keys: &Bound<'_, PyAny>) -> PyResult<()> {
-        let keys = keys.try_iter()?.map(|item| bytes_arg(&item?)).collect::<PyResult<Vec<_>>>()?;
+        let keys = keys
+            .try_iter()?
+            .map(|item| bytes_arg(&item?))
+            .collect::<PyResult<Vec<_>>>()?;
         self.push(Command::MGet { keys });
         Ok(())
     }
@@ -587,7 +597,7 @@ impl RedisPipeline {
 
 #[pyclass(module = "_celery_rs")]
 pub struct RedisPubSub {
-    inner: Arc<PubSubConnection>,
+    inner: ForkSafe<Arc<PubSubConnection>>,
     closed: Mutex<bool>,
 }
 
@@ -644,7 +654,10 @@ mod tests {
     #[test]
     fn timeouts_reject_negative() {
         assert!(timeouts(Some(-1.0)).is_err());
-        assert_eq!(timeouts(Some(0.5)).expect("ok"), Some(Duration::from_millis(500)));
+        assert_eq!(
+            timeouts(Some(0.5)).expect("ok"),
+            Some(Duration::from_millis(500))
+        );
         assert_eq!(timeouts(None).expect("ok"), None);
     }
 }

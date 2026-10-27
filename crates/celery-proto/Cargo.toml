@@ -14,3 +14,6 @@ ryu.workspace = true
 thiserror.workspace = true
 xz2.workspace = true
 zstd.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true

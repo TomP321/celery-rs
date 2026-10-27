@@ -1,6 +1,7 @@
 //! Binding del worker master: [`Waker`] condiviso dal loop,
 //! [`WorkerConsumer`] del broker e pool di processi.
 
+use crate::fork::ForkSafe;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -22,11 +23,16 @@ use crate::transport::{
     transport_error,
 };
 
+#[pyfunction]
+pub(crate) fn _release_task_memory() {
+    celery_backend::redis::release_task_memory();
+}
+
 /// `_celery_rs.Waker`: il loop Python dorme in `wait` finché un componente
 /// Rust (consumer, pool) non chiama `notify`.
 #[pyclass(name = "Waker", module = "_celery_rs", frozen)]
 pub struct PyWaker {
-    pub inner: RustWaker,
+    pub(crate) inner: ForkSafe<RustWaker>,
 }
 
 #[pymethods]
@@ -34,7 +40,7 @@ impl PyWaker {
     #[new]
     fn new() -> Self {
         Self {
-            inner: RustWaker::new(),
+            inner: ForkSafe::new(RustWaker::new()),
         }
     }
 
@@ -79,7 +85,7 @@ fn timeout_from_py(timeout: Option<f64>) -> PyResult<Option<Duration>> {
 /// alla connessione persa e alla chiusura.
 #[pyclass(name = "WorkerConsumer", module = "_celery_rs")]
 pub struct PyWorkerConsumer {
-    inner: WorkerConsumer,
+    inner: ForkSafe<WorkerConsumer>,
     virtual_transport: bool,
     body_encoding: CompactString,
 }
@@ -88,8 +94,9 @@ fn options_from_py(
     dict: Option<&Bound<'_, PyDict>>,
 ) -> PyResult<(TransportOptions, CompactString)> {
     let options = match dict {
-        Some(dict) => TransportOptions::from_headers(&py_to_headers(dict)?)
-            .map_err(transport_error)?,
+        Some(dict) => {
+            TransportOptions::from_headers(&py_to_headers(dict)?).map_err(transport_error)?
+        }
         None => TransportOptions::default(),
     };
     let body_encoding = options.body_encoding.clone();
@@ -122,7 +129,7 @@ impl PyWorkerConsumer {
             ))
         })?;
         Ok(Self {
-            inner: WorkerConsumer::new(transport, waker, 0),
+            inner: ForkSafe::new(WorkerConsumer::new(transport, waker, 0)),
             virtual_transport,
             body_encoding,
         })
@@ -228,7 +235,7 @@ impl PyWorkerConsumer {
     /// Un consumer ausiliario (pidbox/gossip) che condivide questa connessione.
     fn aux_consumer(&self) -> PyWorkerConsumer {
         PyWorkerConsumer {
-            inner: self.inner.aux(0),
+            inner: ForkSafe::new(self.inner.aux(0)),
             virtual_transport: self.virtual_transport,
             body_encoding: self.body_encoding.clone(),
         }
@@ -466,11 +473,7 @@ fn event(py: Python<'_>, event: pool_impl::PoolEvent) -> PyPoolEvent {
             payload: Some(PyBytes::new(py, &payload).unbind()),
             message: None,
         },
-        E::WorkerLost {
-            job,
-            pid,
-            exitcode,
-        } => PyPoolEvent {
+        E::WorkerLost { job, pid, exitcode } => PyPoolEvent {
             kind: "worker-lost",
             job,
             pid,
@@ -481,11 +484,7 @@ fn event(py: Python<'_>, event: pool_impl::PoolEvent) -> PyPoolEvent {
             payload: None,
             message: None,
         },
-        E::Terminated {
-            job,
-            pid,
-            exitcode,
-        } => PyPoolEvent {
+        E::Terminated { job, pid, exitcode } => PyPoolEvent {
             kind: "terminated",
             job,
             pid,
@@ -546,7 +545,7 @@ fn event(py: Python<'_>, event: pool_impl::PoolEvent) -> PyPoolEvent {
 /// `_celery_rs.Pool`: supervisore dei figli Python.
 #[pyclass(name = "Pool", module = "_celery_rs")]
 pub struct PyPool {
-    inner: Arc<pool_impl::Pool>,
+    inner: ForkSafe<Arc<pool_impl::Pool>>,
 }
 
 #[pymethods]
@@ -569,12 +568,10 @@ impl PyPool {
             max_memory_per_child,
         )
         .map_err(|error| PyOSError::new_err(error.to_string()))?;
-        let waker = waker
-            .map(|waker| waker.inner.clone())
-            .unwrap_or_default();
+        let waker = waker.map(|waker| waker.inner.clone()).unwrap_or_default();
         let pool = pool_impl::Pool::new(Config::new(processes), Arc::new(spawner), waker);
         Ok(Self {
-            inner: Arc::new(pool),
+            inner: ForkSafe::new(Arc::new(pool)),
         })
     }
 

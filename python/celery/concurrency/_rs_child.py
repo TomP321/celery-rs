@@ -23,6 +23,8 @@ import struct
 import time
 import traceback
 
+from _celery_rs import _release_task_memory
+
 from billiard.common import (
     clear_terminate_handler_fired,
     reset_signals,
@@ -140,6 +142,9 @@ def child_main(fd, app, hostname, maxtasks=0, max_memory_per_child=0):
                 exitcode = EX_RECYCLE
                 retire = True
             _write_ready(sock, job, result, retire=retire)
+            # Il figlio inattivo non deve trattenere l'ultimo job e i suoi buffer.
+            del result, target, args, kwargs, body
+            _release_task_memory()
             if retire:
                 break
     except SystemExit as exc:

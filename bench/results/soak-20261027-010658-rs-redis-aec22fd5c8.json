@@ -1,0 +1,43 @@
+{
+  "implementation": "rs",
+  "broker": "redis",
+  "minutes": 60.0,
+  "warmup_seconds": 300,
+  "sample_seconds": 30.0,
+  "lane": "3",
+  "samples": [
+    {
+      "seconds": 0.003149781026877463,
+      "processes": [
+        {
+          "pid": 1267873,
+          "parent": null,
+          "start": "27663781",
+          "pss_kib": 892,
+          "fds": 3,
+          "threads": 1,
+          "children": [],
+          "role": "worker"
+        },
+        {
+          "pid": 1267874,
+          "parent": null,
+          "start": "27663781",
+          "pss_kib": 318,
+          "fds": 3,
+          "threads": 1,
+          "children": [],
+          "role": "beat"
+        }
+      ]
+    }
+  ],
+  "events": [],
+  "complete": false,
+  "error": "RuntimeError('worker exited: 1')",
+  "completed_cycles": 0,
+  "load_recovered_after_restart": false,
+  "topology_valid": true,
+  "analysis": [],
+  "passed": false
+}

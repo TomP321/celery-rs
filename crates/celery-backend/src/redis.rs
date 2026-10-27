@@ -154,6 +154,15 @@ pub enum Command {
 }
 
 impl Command {
+    fn has_large_payload(&self) -> bool {
+        let payload = match self {
+            Self::Set { value, .. } | Self::SetEx { value, .. } => value,
+            Self::Publish { message, .. } => message,
+            _ => return false,
+        };
+        payload.len() >= 1024 * 1024
+    }
+
     /// Tipo di risposta atteso, per convertire il risultato come redis-py.
     fn is_set(&self) -> bool {
         matches!(self, Command::Set { .. } | Command::SetEx { .. })
@@ -298,6 +307,48 @@ impl Pipeline {
 
     pub fn clear(&mut self) {
         self.commands.clear();
+    }
+}
+
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+thread_local! {
+    static RECLAIM_PENDING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    static LARGE_TASK_IO: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+fn release_scratch_pages(large: bool) {
+    // I buffer RESP temporanei superano di molte volte il body; glibc ne
+    // trattiene le pagine libere nelle arene anche dopo il Drop. Il future
+    // interno deve essere già distrutto, inclusi comandi e pipeline packed.
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
+    {
+        if large {
+            LARGE_TASK_IO.set(true);
+        }
+        if RECLAIM_PENDING.replace(large) || large {
+            // Recupera anche le copie Python liberate dopo il comando precedente.
+            trim_free_pages();
+        }
+    }
+    #[cfg(not(all(target_os = "linux", target_env = "gnu")))]
+    let _ = large;
+}
+
+/// Rilascia le pagine temporanee quando il figlio ha finito il task grande.
+pub fn release_task_memory() {
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
+    if LARGE_TASK_IO.replace(false) {
+        RECLAIM_PENDING.set(false);
+        trim_free_pages();
+    }
+}
+
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+fn trim_free_pages() {
+    // SAFETY: malloc_trim è thread-safe, non conserva puntatori e opera
+    // solo su pagine libere dell'allocatore di sistema.
+    unsafe {
+        libc::malloc_trim(0);
     }
 }
 
@@ -462,6 +513,13 @@ impl Client {
 
     /// Esegue un comando su una connessione del pool.
     pub async fn execute(&self, command: Command) -> Result<Reply, Error> {
+        let large = command.has_large_payload();
+        let reply = self.execute_inner(command).await;
+        release_scratch_pages(large);
+        reply
+    }
+
+    async fn execute_inner(&self, command: Command) -> Result<Reply, Error> {
         let mut connection = self.acquire().await?;
         self.check_health(&mut connection).await?;
         let mut pipeline = ::redis::pipe();
@@ -481,6 +539,13 @@ impl Client {
     /// Esegue la pipeline in un solo round trip; con `transaction` la racchiude
     /// in MULTI/EXEC come il `Pipeline` di redis-py.
     pub async fn execute_pipeline(&self, pipeline: Pipeline) -> Result<Vec<Reply>, Error> {
+        let large = pipeline.commands.iter().any(Command::has_large_payload);
+        let reply = self.execute_pipeline_inner(pipeline).await;
+        release_scratch_pages(large);
+        reply
+    }
+
+    async fn execute_pipeline_inner(&self, pipeline: Pipeline) -> Result<Vec<Reply>, Error> {
         if pipeline.commands.is_empty() {
             return Ok(Vec::new());
         }
