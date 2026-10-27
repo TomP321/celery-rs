@@ -45,11 +45,14 @@ from pathlib import Path
 from celery.concurrency._rs_memory_probe import MemoryProbe
 probe = MemoryProbe(sys.argv[1])
 probe.sample(1)
-record = json.loads(next(Path(sys.argv[1]).glob('*.jsonl')).read_text())
+records = [json.loads(line) for line in next(Path(sys.argv[1]).glob('*.jsonl')).read_text().splitlines()]
+assert [record['completed'] for record in records] == [0, 1]
+record = records[-1]
 assert record['completed'] == 1
 assert record['memory_kib']['Rss'] > 0
 assert len(record['python_bytes']) == 2
 assert record['uss_kib'] > 0
+assert record['mappings_kib']['heap']['Private_Dirty'] > 0
 assert next(Path(sys.argv[1]).glob('*.snapshot')).stat().st_size > 0
 assert next(Path(sys.argv[1]).glob('*.malloc.xml')).read_text().startswith('<malloc')
 '''

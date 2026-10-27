@@ -343,6 +343,12 @@ pub fn release_task_memory() {
     }
 }
 
+/// Restituisce le pagine libere prima del fork o dopo il riscaldamento del figlio.
+pub fn release_idle_memory() {
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
+    trim_free_pages();
+}
+
 #[cfg(all(target_os = "linux", target_env = "gnu"))]
 fn trim_free_pages() {
     // SAFETY: malloc_trim è thread-safe, non conserva puntatori e opera

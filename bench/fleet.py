@@ -35,6 +35,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--venv', required=True)
     ap.add_argument('--label')
+    ap.add_argument('--source', type=Path)
     ap.add_argument('--concurrency', type=int, default=10)
     ap.add_argument('--budget-mb', type=float, default=8192)
     ap.add_argument('--max-workers', type=int, default=200)
@@ -44,7 +45,9 @@ def main():
     done_file = Path(f'/tmp/fleet-{label}-{os.getpid()}.done')
     done_file.unlink(missing_ok=True)
     env = {**{k: v for k, v in os.environ.items() if not k.startswith('PYTHON')},
-           'PYTHONPATH': str(HERE), 'BENCH_BROKER': REDIS + '/0', 'BENCH_BACKEND': REDIS + '/1',
+           'PYTHONPATH': os.pathsep.join(filter(None, (
+               str(args.source.resolve()) if args.source else None, str(HERE)))),
+           'BENCH_BROKER': REDIS + '/0', 'BENCH_BACKEND': REDIS + '/1',
            'BENCH_QUEUE': f'fleet-{label}', 'BENCH_PURE_DONE': str(done_file)}
     python = str(Path(args.venv).resolve() / 'bin' / 'python')
     subprocess.run([python, '-c', 'import redis,os; redis.Redis.from_url(os.environ["BENCH_BROKER"]).flushdb()'],
@@ -64,8 +67,12 @@ def main():
             expected = args.concurrency + 1
             deadline = time.time() + 60
             while time.time() < deadline and len(tree(proc.pid)) < expected:
+                if proc.poll() is not None:
+                    raise RuntimeError(f'worker {n} terminato: {proc.returncode}')
                 time.sleep(0.2)
             time.sleep(1.5)
+            if any(worker.poll() is not None for worker in workers):
+                raise RuntimeError('un worker della flotta è terminato')
             pids = [w.pid for w in workers]
             total = total_pss_mb(pids)
             series.append({'workers': len(workers), 'pss_mb': round(total, 1),
@@ -87,11 +94,16 @@ def main():
             time.sleep(0.5)
         elapsed = time.time() - t0
         time.sleep(3)
+        if any(worker.poll() is not None for worker in workers):
+            raise RuntimeError('un worker è terminato durante il carico')
+        if not done_file.exists() or done_file.stat().st_size != args.tasks:
+            raise RuntimeError('carico della flotta incompleto')
         pids = [w.pid for w in workers]
         loaded_total = total_pss_mb(pids)
         per_worker_loaded = loaded_total / len(workers)
         result = {
             'label': label, 'venv': args.venv, 'concurrency': args.concurrency,
+            'source': str(args.source.resolve()) if args.source else None,
             'budget_mb': args.budget_mb, 'series': series,
             'workers_fit_idle': fit_idle,
             'idle_total_mb': idle_total, 'idle_per_worker_mb': round(idle_total / len(workers), 1),

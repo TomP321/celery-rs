@@ -22,6 +22,7 @@ celery-transport.workspace = true
 celery-worker.workspace = true
 compact_str.workspace = true
 futures-core.workspace = true
+libc.workspace = true
 pyo3.workspace = true
 tokio = { workspace = true, features = ["rt", "time"] }
 

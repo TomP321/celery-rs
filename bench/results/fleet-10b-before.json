@@ -1,0 +1,132 @@
+{
+ "label": "10b-before",
+ "venv": ".venv-rs",
+ "concurrency": 10,
+ "budget_mb": 2048.0,
+ "series": [
+  {
+   "workers": 1,
+   "pss_mb": 94.5,
+   "processes": 12
+  },
+  {
+   "workers": 2,
+   "pss_mb": 186.6,
+   "processes": 24
+  },
+  {
+   "workers": 3,
+   "pss_mb": 278.2,
+   "processes": 36
+  },
+  {
+   "workers": 4,
+   "pss_mb": 370.8,
+   "processes": 48
+  },
+  {
+   "workers": 5,
+   "pss_mb": 460.0,
+   "processes": 60
+  },
+  {
+   "workers": 6,
+   "pss_mb": 552.5,
+   "processes": 72
+  },
+  {
+   "workers": 7,
+   "pss_mb": 644.0,
+   "processes": 84
+  },
+  {
+   "workers": 8,
+   "pss_mb": 734.5,
+   "processes": 96
+  },
+  {
+   "workers": 9,
+   "pss_mb": 824.9,
+   "processes": 108
+  },
+  {
+   "workers": 10,
+   "pss_mb": 916.0,
+   "processes": 120
+  },
+  {
+   "workers": 11,
+   "pss_mb": 1007.2,
+   "processes": 132
+  },
+  {
+   "workers": 12,
+   "pss_mb": 1098.0,
+   "processes": 144
+  },
+  {
+   "workers": 13,
+   "pss_mb": 1189.2,
+   "processes": 156
+  },
+  {
+   "workers": 14,
+   "pss_mb": 1280.3,
+   "processes": 168
+  },
+  {
+   "workers": 15,
+   "pss_mb": 1370.6,
+   "processes": 180
+  },
+  {
+   "workers": 16,
+   "pss_mb": 1460.4,
+   "processes": 192
+  },
+  {
+   "workers": 17,
+   "pss_mb": 1551.2,
+   "processes": 204
+  },
+  {
+   "workers": 18,
+   "pss_mb": 1642.1,
+   "processes": 216
+  },
+  {
+   "workers": 19,
+   "pss_mb": 1732.4,
+   "processes": 228
+  },
+  {
+   "workers": 20,
+   "pss_mb": 1822.4,
+   "processes": 240
+  },
+  {
+   "workers": 21,
+   "pss_mb": 1912.9,
+   "processes": 252
+  },
+  {
+   "workers": 22,
+   "pss_mb": 2004.0,
+   "processes": 264
+  },
+  {
+   "workers": 23,
+   "pss_mb": 2094.7,
+   "processes": 276
+  }
+ ],
+ "workers_fit_idle": 22,
+ "idle_total_mb": 2094.7,
+ "idle_per_worker_mb": 91.1,
+ "loaded_total_mb": 2251.5,
+ "loaded_per_worker_mb": 97.9,
+ "workers_fit_loaded": 20,
+ "tasks": 10000,
+ "tasks_completed": 10000,
+ "tasks_per_s": 2186.8
+}

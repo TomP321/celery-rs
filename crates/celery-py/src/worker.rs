@@ -24,8 +24,30 @@ use crate::transport::{
 };
 
 #[pyfunction]
-pub(crate) fn _release_task_memory() {
-    celery_backend::redis::release_task_memory();
+pub(crate) fn _set_pdeathsig(signum: i32) -> PyResult<()> {
+    #[cfg(target_os = "linux")]
+    {
+        // SAFETY: prctl riceve solo interi, non conserva puntatori e modifica
+        // esclusivamente il segnale di morte del padre del chiamante.
+        // Billiard ignora il valore di ritorno anche per segnali non validi.
+        unsafe { libc::prctl(libc::PR_SET_PDEATHSIG, signum, 0, 0, 0) };
+        Ok(())
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = signum;
+        Err(PyOSError::new_err("pdeathsig is only supported on linux"))
+    }
+}
+
+#[pyfunction]
+#[pyo3(signature = (force=false))]
+pub(crate) fn _release_task_memory(force: bool) {
+    if force {
+        celery_backend::redis::release_idle_memory();
+    } else {
+        celery_backend::redis::release_task_memory();
+    }
 }
 
 /// `_celery_rs.Waker`: il loop Python dorme in `wait` finché un componente
@@ -707,3 +729,20 @@ fn pool_error(error: PoolError) -> PyErr {
 /// Evita il warning "trait inutilizzato" se `Spawner` serve solo ai test.
 #[allow(dead_code)]
 fn _assert_spawner(_: &dyn Spawner) {}
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests {
+    use super::_set_pdeathsig;
+
+    #[test]
+    fn pdeathsig_matches_billiard_return_value() {
+        assert!(_set_pdeathsig(libc::SIGKILL).is_ok());
+        let mut signal: libc::c_int = 0;
+        // SAFETY: signal è un intero scrivibile, valido per tutta la syscall.
+        let result = unsafe { libc::prctl(libc::PR_GET_PDEATHSIG, &mut signal, 0, 0, 0) };
+        assert!(_set_pdeathsig(0).is_ok());
+        assert_eq!(result, 0);
+        assert_eq!(signal, libc::SIGKILL);
+        assert!(_set_pdeathsig(-1).is_ok());
+    }
+}
