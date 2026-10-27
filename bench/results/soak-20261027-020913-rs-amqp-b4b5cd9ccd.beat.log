@@ -1,0 +1,875 @@
+[2026-10-27 02:39:13,923: ERROR/MainProcess] Message Error: Couldn't apply scheduled task entry-16: [Errno 104] Connection reset by peer
+['  File "<frozen runpy>", line 198, in _run_module_as_main\n', '  File "<frozen runpy>", line 88, in _run_code\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/__main__.py", line 19, in <module>\n    main()\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/__main__.py", line 15, in main\n    sys.exit(_main())\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/bin/celery.py", line 291, in main\n    return celery(auto_envvar_prefix="CELERY")\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/.venv-rs/lib/python3.13/site-packages/click/core.py", line 1631, in __call__\n    return self.main(*args, **kwargs)\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/.venv-rs/lib/python3.13/site-packages/click/core.py", line 1552, in main\n    rv = self.invoke(ctx)\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/.venv-rs/lib/python3.13/site-packages/click/core.py", line 2032, in invoke\n    return _process_result(sub_ctx.command.invoke(sub_ctx))\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/.venv-rs/lib/python3.13/site-packages/click/core.py", line 1415, in invoke\n    return ctx.invoke(self.callback, **ctx.params)\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/.venv-rs/lib/python3.13/site-packages/click/core.py", line 910, in invoke\n    return callback(*args, **kwargs)\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/.venv-rs/lib/python3.13/site-packages/click/decorators.py", line 34, in new_func\n    return f(get_current_context(), *args, **kwargs)\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/bin/base.py", line 225, in caller\n    return f(ctx, *args, **kwargs)\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/bin/beat.py", line 87, in beat\n    return beat().run()\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/apps/beat.py", line 88, in run\n    self.start_scheduler()\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/apps/beat.py", line 119, in start_scheduler\n    service.start()\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/beat.py", line 1079, in start\n    interval = self.scheduler.tick()\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/beat.py", line 384, in tick\n    self.apply_entry(entry, producer=self.producer)\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/beat.py", line 296, in apply_entry\n    exc, traceback.format_stack(), exc_info=True)\n']
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 764, in _ensure
+    return self._call(fun)
+           ~~~~~~~~~~^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 745, in _call
+    return fun()
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 895, in <lambda>
+    return self._ensure(lambda: self._publish_native(*args), retry_policy)
+                                ~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 804, in _publish_native
+    _, entry = self._native()
+               ~~~~~~~~~~~~^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 625, in _native
+    return connection, self._entry()
+                       ~~~~~~~~~~~^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 616, in _entry
+    entry = _native_entry(self.connection, key)
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 454, in _native_entry
+    fresh = _NativeEntry(_celery_rs.Connection(
+                         ~~~~~~~~~~~~~~~~~~~~~^
+        key[0], options, retry_policy={'enabled': False}))
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ConnectionError: [Errno 104] Connection reset by peer
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/beat.py", line 449, in apply_async
+    return task.apply_async(entry_args, entry_kwargs,
+           ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+                            producer=producer,
+                            ^^^^^^^^^^^^^^^^^^
+                            **options)
+                            ^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/task.py", line 732, in apply_async
+    return app.send_task(
+           ~~~~~~~~~~~~~^
+        self.name, args, kwargs, task_id=task_id, producer=producer,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+        **options
+        ^^^^^^^^^
+    )
+    ^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/base.py", line 1225, in send_task
+    amqp.send_task_message(P, name, message, **options)
+    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/amqp.py", line 606, in send_task_message
+    ret = producer.publish(
+        body,
+    ...<8 lines>...
+        **properties
+    )
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 895, in publish
+    return self._ensure(lambda: self._publish_native(*args), retry_policy)
+           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 767, in _ensure
+    raise OperationalError(str(exc)) from exc
+kombu.exceptions.OperationalError: [Errno 104] Connection reset by peer
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/beat.py", line 293, in apply_entry
+    result = self.apply_async(entry, producer=producer, advance=False)
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/beat.py", line 457, in apply_async
+    reraise(SchedulingError, SchedulingError(
+    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        "Couldn't apply scheduled task {0.name}: {exc}".format(
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            entry, exc=exc)), sys.exc_info()[2])
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/exceptions.py", line 188, in reraise
+    raise value.with_traceback(tb)
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/beat.py", line 449, in apply_async
+    return task.apply_async(entry_args, entry_kwargs,
+           ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+                            producer=producer,
+                            ^^^^^^^^^^^^^^^^^^
+                            **options)
+                            ^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/task.py", line 732, in apply_async
+    return app.send_task(
+           ~~~~~~~~~~~~~^
+        self.name, args, kwargs, task_id=task_id, producer=producer,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+        **options
+        ^^^^^^^^^
+    )
+    ^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/base.py", line 1225, in send_task
+    amqp.send_task_message(P, name, message, **options)
+    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/amqp.py", line 606, in send_task_message
+    ret = producer.publish(
+        body,
+    ...<8 lines>...
+        **properties
+    )
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 895, in publish
+    return self._ensure(lambda: self._publish_native(*args), retry_policy)
+           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 767, in _ensure
+    raise OperationalError(str(exc)) from exc
+celery.beat.SchedulingError: Couldn't apply scheduled task entry-16: [Errno 104] Connection reset by peer
+[2026-10-27 02:39:14,538: ERROR/MainProcess] Message Error: Couldn't apply scheduled task entry-54: [Errno 111] Connection refused
+['  File "<frozen runpy>", line 198, in _run_module_as_main\n', '  File "<frozen runpy>", line 88, in _run_code\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/__main__.py", line 19, in <module>\n    main()\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/__main__.py", line 15, in main\n    sys.exit(_main())\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/bin/celery.py", line 291, in main\n    return celery(auto_envvar_prefix="CELERY")\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/.venv-rs/lib/python3.13/site-packages/click/core.py", line 1631, in __call__\n    return self.main(*args, **kwargs)\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/.venv-rs/lib/python3.13/site-packages/click/core.py", line 1552, in main\n    rv = self.invoke(ctx)\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/.venv-rs/lib/python3.13/site-packages/click/core.py", line 2032, in invoke\n    return _process_result(sub_ctx.command.invoke(sub_ctx))\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/.venv-rs/lib/python3.13/site-packages/click/core.py", line 1415, in invoke\n    return ctx.invoke(self.callback, **ctx.params)\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/.venv-rs/lib/python3.13/site-packages/click/core.py", line 910, in invoke\n    return callback(*args, **kwargs)\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/.venv-rs/lib/python3.13/site-packages/click/decorators.py", line 34, in new_func\n    return f(get_current_context(), *args, **kwargs)\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/bin/base.py", line 225, in caller\n    return f(ctx, *args, **kwargs)\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/bin/beat.py", line 87, in beat\n    return beat().run()\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/apps/beat.py", line 88, in run\n    self.start_scheduler()\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/apps/beat.py", line 119, in start_scheduler\n    service.start()\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/beat.py", line 1079, in start\n    interval = self.scheduler.tick()\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/beat.py", line 384, in tick\n    self.apply_entry(entry, producer=self.producer)\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/beat.py", line 296, in apply_entry\n    exc, traceback.format_stack(), exc_info=True)\n']
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 764, in _ensure
+    return self._call(fun)
+           ~~~~~~~~~~^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 745, in _call
+    return fun()
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 895, in <lambda>
+    return self._ensure(lambda: self._publish_native(*args), retry_policy)
+                                ~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 804, in _publish_native
+    _, entry = self._native()
+               ~~~~~~~~~~~~^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 625, in _native
+    return connection, self._entry()
+                       ~~~~~~~~~~~^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 616, in _entry
+    entry = _native_entry(self.connection, key)
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 454, in _native_entry
+    fresh = _NativeEntry(_celery_rs.Connection(
+                         ~~~~~~~~~~~~~~~~~~~~~^
+        key[0], options, retry_policy={'enabled': False}))
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ConnectionError: [Errno 111] Connection refused
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/beat.py", line 449, in apply_async
+    return task.apply_async(entry_args, entry_kwargs,
+           ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+                            producer=producer,
+                            ^^^^^^^^^^^^^^^^^^
+                            **options)
+                            ^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/task.py", line 732, in apply_async
+    return app.send_task(
+           ~~~~~~~~~~~~~^
+        self.name, args, kwargs, task_id=task_id, producer=producer,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+        **options
+        ^^^^^^^^^
+    )
+    ^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/base.py", line 1225, in send_task
+    amqp.send_task_message(P, name, message, **options)
+    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/amqp.py", line 606, in send_task_message
+    ret = producer.publish(
+        body,
+    ...<8 lines>...
+        **properties
+    )
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 895, in publish
+    return self._ensure(lambda: self._publish_native(*args), retry_policy)
+           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 767, in _ensure
+    raise OperationalError(str(exc)) from exc
+kombu.exceptions.OperationalError: [Errno 111] Connection refused
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/beat.py", line 293, in apply_entry
+    result = self.apply_async(entry, producer=producer, advance=False)
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/beat.py", line 457, in apply_async
+    reraise(SchedulingError, SchedulingError(
+    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        "Couldn't apply scheduled task {0.name}: {exc}".format(
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            entry, exc=exc)), sys.exc_info()[2])
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/exceptions.py", line 188, in reraise
+    raise value.with_traceback(tb)
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/beat.py", line 449, in apply_async
+    return task.apply_async(entry_args, entry_kwargs,
+           ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+                            producer=producer,
+                            ^^^^^^^^^^^^^^^^^^
+                            **options)
+                            ^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/task.py", line 732, in apply_async
+    return app.send_task(
+           ~~~~~~~~~~~~~^
+        self.name, args, kwargs, task_id=task_id, producer=producer,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+        **options
+        ^^^^^^^^^
+    )
+    ^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/base.py", line 1225, in send_task
+    amqp.send_task_message(P, name, message, **options)
+    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/amqp.py", line 606, in send_task_message
+    ret = producer.publish(
+        body,
+    ...<8 lines>...
+        **properties
+    )
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 895, in publish
+    return self._ensure(lambda: self._publish_native(*args), retry_policy)
+           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 767, in _ensure
+    raise OperationalError(str(exc)) from exc
+celery.beat.SchedulingError: Couldn't apply scheduled task entry-54: [Errno 111] Connection refused
+[2026-10-27 02:39:15,149: ERROR/MainProcess] Message Error: Couldn't apply scheduled task entry-98: [Errno 104] Connection reset by peer
+['  File "<frozen runpy>", line 198, in _run_module_as_main\n', '  File "<frozen runpy>", line 88, in _run_code\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/__main__.py", line 19, in <module>\n    main()\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/__main__.py", line 15, in main\n    sys.exit(_main())\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/bin/celery.py", line 291, in main\n    return celery(auto_envvar_prefix="CELERY")\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/.venv-rs/lib/python3.13/site-packages/click/core.py", line 1631, in __call__\n    return self.main(*args, **kwargs)\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/.venv-rs/lib/python3.13/site-packages/click/core.py", line 1552, in main\n    rv = self.invoke(ctx)\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/.venv-rs/lib/python3.13/site-packages/click/core.py", line 2032, in invoke\n    return _process_result(sub_ctx.command.invoke(sub_ctx))\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/.venv-rs/lib/python3.13/site-packages/click/core.py", line 1415, in invoke\n    return ctx.invoke(self.callback, **ctx.params)\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/.venv-rs/lib/python3.13/site-packages/click/core.py", line 910, in invoke\n    return callback(*args, **kwargs)\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/.venv-rs/lib/python3.13/site-packages/click/decorators.py", line 34, in new_func\n    return f(get_current_context(), *args, **kwargs)\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/bin/base.py", line 225, in caller\n    return f(ctx, *args, **kwargs)\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/bin/beat.py", line 87, in beat\n    return beat().run()\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/apps/beat.py", line 88, in run\n    self.start_scheduler()\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/apps/beat.py", line 119, in start_scheduler\n    service.start()\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/beat.py", line 1079, in start\n    interval = self.scheduler.tick()\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/beat.py", line 384, in tick\n    self.apply_entry(entry, producer=self.producer)\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/beat.py", line 296, in apply_entry\n    exc, traceback.format_stack(), exc_info=True)\n']
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 764, in _ensure
+    return self._call(fun)
+           ~~~~~~~~~~^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 745, in _call
+    return fun()
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 895, in <lambda>
+    return self._ensure(lambda: self._publish_native(*args), retry_policy)
+                                ~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 804, in _publish_native
+    _, entry = self._native()
+               ~~~~~~~~~~~~^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 625, in _native
+    return connection, self._entry()
+                       ~~~~~~~~~~~^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 616, in _entry
+    entry = _native_entry(self.connection, key)
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 454, in _native_entry
+    fresh = _NativeEntry(_celery_rs.Connection(
+                         ~~~~~~~~~~~~~~~~~~~~~^
+        key[0], options, retry_policy={'enabled': False}))
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ConnectionError: [Errno 104] Connection reset by peer
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/beat.py", line 449, in apply_async
+    return task.apply_async(entry_args, entry_kwargs,
+           ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+                            producer=producer,
+                            ^^^^^^^^^^^^^^^^^^
+                            **options)
+                            ^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/task.py", line 732, in apply_async
+    return app.send_task(
+           ~~~~~~~~~~~~~^
+        self.name, args, kwargs, task_id=task_id, producer=producer,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+        **options
+        ^^^^^^^^^
+    )
+    ^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/base.py", line 1225, in send_task
+    amqp.send_task_message(P, name, message, **options)
+    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/amqp.py", line 606, in send_task_message
+    ret = producer.publish(
+        body,
+    ...<8 lines>...
+        **properties
+    )
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 895, in publish
+    return self._ensure(lambda: self._publish_native(*args), retry_policy)
+           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 767, in _ensure
+    raise OperationalError(str(exc)) from exc
+kombu.exceptions.OperationalError: [Errno 104] Connection reset by peer
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/beat.py", line 293, in apply_entry
+    result = self.apply_async(entry, producer=producer, advance=False)
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/beat.py", line 457, in apply_async
+    reraise(SchedulingError, SchedulingError(
+    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        "Couldn't apply scheduled task {0.name}: {exc}".format(
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            entry, exc=exc)), sys.exc_info()[2])
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/exceptions.py", line 188, in reraise
+    raise value.with_traceback(tb)
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/beat.py", line 449, in apply_async
+    return task.apply_async(entry_args, entry_kwargs,
+           ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+                            producer=producer,
+                            ^^^^^^^^^^^^^^^^^^
+                            **options)
+                            ^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/task.py", line 732, in apply_async
+    return app.send_task(
+           ~~~~~~~~~~~~~^
+        self.name, args, kwargs, task_id=task_id, producer=producer,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+        **options
+        ^^^^^^^^^
+    )
+    ^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/base.py", line 1225, in send_task
+    amqp.send_task_message(P, name, message, **options)
+    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/amqp.py", line 606, in send_task_message
+    ret = producer.publish(
+        body,
+    ...<8 lines>...
+        **properties
+    )
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 895, in publish
+    return self._ensure(lambda: self._publish_native(*args), retry_policy)
+           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 767, in _ensure
+    raise OperationalError(str(exc)) from exc
+celery.beat.SchedulingError: Couldn't apply scheduled task entry-98: [Errno 104] Connection reset by peer
+[2026-10-27 02:39:15,767: ERROR/MainProcess] Message Error: Couldn't apply scheduled task entry-94: [Errno 104] Connection reset by peer
+['  File "<frozen runpy>", line 198, in _run_module_as_main\n', '  File "<frozen runpy>", line 88, in _run_code\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/__main__.py", line 19, in <module>\n    main()\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/__main__.py", line 15, in main\n    sys.exit(_main())\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/bin/celery.py", line 291, in main\n    return celery(auto_envvar_prefix="CELERY")\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/.venv-rs/lib/python3.13/site-packages/click/core.py", line 1631, in __call__\n    return self.main(*args, **kwargs)\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/.venv-rs/lib/python3.13/site-packages/click/core.py", line 1552, in main\n    rv = self.invoke(ctx)\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/.venv-rs/lib/python3.13/site-packages/click/core.py", line 2032, in invoke\n    return _process_result(sub_ctx.command.invoke(sub_ctx))\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/.venv-rs/lib/python3.13/site-packages/click/core.py", line 1415, in invoke\n    return ctx.invoke(self.callback, **ctx.params)\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/.venv-rs/lib/python3.13/site-packages/click/core.py", line 910, in invoke\n    return callback(*args, **kwargs)\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/.venv-rs/lib/python3.13/site-packages/click/decorators.py", line 34, in new_func\n    return f(get_current_context(), *args, **kwargs)\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/bin/base.py", line 225, in caller\n    return f(ctx, *args, **kwargs)\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/bin/beat.py", line 87, in beat\n    return beat().run()\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/apps/beat.py", line 88, in run\n    self.start_scheduler()\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/apps/beat.py", line 119, in start_scheduler\n    service.start()\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/beat.py", line 1079, in start\n    interval = self.scheduler.tick()\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/beat.py", line 384, in tick\n    self.apply_entry(entry, producer=self.producer)\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/beat.py", line 296, in apply_entry\n    exc, traceback.format_stack(), exc_info=True)\n']
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 764, in _ensure
+    return self._call(fun)
+           ~~~~~~~~~~^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 745, in _call
+    return fun()
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 895, in <lambda>
+    return self._ensure(lambda: self._publish_native(*args), retry_policy)
+                                ~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 804, in _publish_native
+    _, entry = self._native()
+               ~~~~~~~~~~~~^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 625, in _native
+    return connection, self._entry()
+                       ~~~~~~~~~~~^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 616, in _entry
+    entry = _native_entry(self.connection, key)
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 454, in _native_entry
+    fresh = _NativeEntry(_celery_rs.Connection(
+                         ~~~~~~~~~~~~~~~~~~~~~^
+        key[0], options, retry_policy={'enabled': False}))
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ConnectionError: [Errno 104] Connection reset by peer
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/beat.py", line 449, in apply_async
+    return task.apply_async(entry_args, entry_kwargs,
+           ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+                            producer=producer,
+                            ^^^^^^^^^^^^^^^^^^
+                            **options)
+                            ^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/task.py", line 732, in apply_async
+    return app.send_task(
+           ~~~~~~~~~~~~~^
+        self.name, args, kwargs, task_id=task_id, producer=producer,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+        **options
+        ^^^^^^^^^
+    )
+    ^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/base.py", line 1225, in send_task
+    amqp.send_task_message(P, name, message, **options)
+    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/amqp.py", line 606, in send_task_message
+    ret = producer.publish(
+        body,
+    ...<8 lines>...
+        **properties
+    )
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 895, in publish
+    return self._ensure(lambda: self._publish_native(*args), retry_policy)
+           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 767, in _ensure
+    raise OperationalError(str(exc)) from exc
+kombu.exceptions.OperationalError: [Errno 104] Connection reset by peer
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/beat.py", line 293, in apply_entry
+    result = self.apply_async(entry, producer=producer, advance=False)
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/beat.py", line 457, in apply_async
+    reraise(SchedulingError, SchedulingError(
+    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        "Couldn't apply scheduled task {0.name}: {exc}".format(
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            entry, exc=exc)), sys.exc_info()[2])
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/exceptions.py", line 188, in reraise
+    raise value.with_traceback(tb)
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/beat.py", line 449, in apply_async
+    return task.apply_async(entry_args, entry_kwargs,
+           ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+                            producer=producer,
+                            ^^^^^^^^^^^^^^^^^^
+                            **options)
+                            ^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/task.py", line 732, in apply_async
+    return app.send_task(
+           ~~~~~~~~~~~~~^
+        self.name, args, kwargs, task_id=task_id, producer=producer,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+        **options
+        ^^^^^^^^^
+    )
+    ^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/base.py", line 1225, in send_task
+    amqp.send_task_message(P, name, message, **options)
+    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/amqp.py", line 606, in send_task_message
+    ret = producer.publish(
+        body,
+    ...<8 lines>...
+        **properties
+    )
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 895, in publish
+    return self._ensure(lambda: self._publish_native(*args), retry_policy)
+           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 767, in _ensure
+    raise OperationalError(str(exc)) from exc
+celery.beat.SchedulingError: Couldn't apply scheduled task entry-94: [Errno 104] Connection reset by peer
+[2026-10-27 02:39:16,381: ERROR/MainProcess] Message Error: Couldn't apply scheduled task entry-3: [Errno 104] Connection reset by peer
+['  File "<frozen runpy>", line 198, in _run_module_as_main\n', '  File "<frozen runpy>", line 88, in _run_code\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/__main__.py", line 19, in <module>\n    main()\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/__main__.py", line 15, in main\n    sys.exit(_main())\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/bin/celery.py", line 291, in main\n    return celery(auto_envvar_prefix="CELERY")\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/.venv-rs/lib/python3.13/site-packages/click/core.py", line 1631, in __call__\n    return self.main(*args, **kwargs)\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/.venv-rs/lib/python3.13/site-packages/click/core.py", line 1552, in main\n    rv = self.invoke(ctx)\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/.venv-rs/lib/python3.13/site-packages/click/core.py", line 2032, in invoke\n    return _process_result(sub_ctx.command.invoke(sub_ctx))\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/.venv-rs/lib/python3.13/site-packages/click/core.py", line 1415, in invoke\n    return ctx.invoke(self.callback, **ctx.params)\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/.venv-rs/lib/python3.13/site-packages/click/core.py", line 910, in invoke\n    return callback(*args, **kwargs)\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/.venv-rs/lib/python3.13/site-packages/click/decorators.py", line 34, in new_func\n    return f(get_current_context(), *args, **kwargs)\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/bin/base.py", line 225, in caller\n    return f(ctx, *args, **kwargs)\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/bin/beat.py", line 87, in beat\n    return beat().run()\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/apps/beat.py", line 88, in run\n    self.start_scheduler()\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/apps/beat.py", line 119, in start_scheduler\n    service.start()\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/beat.py", line 1079, in start\n    interval = self.scheduler.tick()\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/beat.py", line 384, in tick\n    self.apply_entry(entry, producer=self.producer)\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/beat.py", line 296, in apply_entry\n    exc, traceback.format_stack(), exc_info=True)\n']
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 764, in _ensure
+    return self._call(fun)
+           ~~~~~~~~~~^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 745, in _call
+    return fun()
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 895, in <lambda>
+    return self._ensure(lambda: self._publish_native(*args), retry_policy)
+                                ~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 804, in _publish_native
+    _, entry = self._native()
+               ~~~~~~~~~~~~^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 625, in _native
+    return connection, self._entry()
+                       ~~~~~~~~~~~^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 616, in _entry
+    entry = _native_entry(self.connection, key)
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 454, in _native_entry
+    fresh = _NativeEntry(_celery_rs.Connection(
+                         ~~~~~~~~~~~~~~~~~~~~~^
+        key[0], options, retry_policy={'enabled': False}))
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ConnectionError: [Errno 104] Connection reset by peer
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/beat.py", line 449, in apply_async
+    return task.apply_async(entry_args, entry_kwargs,
+           ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+                            producer=producer,
+                            ^^^^^^^^^^^^^^^^^^
+                            **options)
+                            ^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/task.py", line 732, in apply_async
+    return app.send_task(
+           ~~~~~~~~~~~~~^
+        self.name, args, kwargs, task_id=task_id, producer=producer,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+        **options
+        ^^^^^^^^^
+    )
+    ^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/base.py", line 1225, in send_task
+    amqp.send_task_message(P, name, message, **options)
+    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/amqp.py", line 606, in send_task_message
+    ret = producer.publish(
+        body,
+    ...<8 lines>...
+        **properties
+    )
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 895, in publish
+    return self._ensure(lambda: self._publish_native(*args), retry_policy)
+           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 767, in _ensure
+    raise OperationalError(str(exc)) from exc
+kombu.exceptions.OperationalError: [Errno 104] Connection reset by peer
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/beat.py", line 293, in apply_entry
+    result = self.apply_async(entry, producer=producer, advance=False)
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/beat.py", line 457, in apply_async
+    reraise(SchedulingError, SchedulingError(
+    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        "Couldn't apply scheduled task {0.name}: {exc}".format(
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            entry, exc=exc)), sys.exc_info()[2])
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/exceptions.py", line 188, in reraise
+    raise value.with_traceback(tb)
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/beat.py", line 449, in apply_async
+    return task.apply_async(entry_args, entry_kwargs,
+           ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+                            producer=producer,
+                            ^^^^^^^^^^^^^^^^^^
+                            **options)
+                            ^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/task.py", line 732, in apply_async
+    return app.send_task(
+           ~~~~~~~~~~~~~^
+        self.name, args, kwargs, task_id=task_id, producer=producer,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+        **options
+        ^^^^^^^^^
+    )
+    ^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/base.py", line 1225, in send_task
+    amqp.send_task_message(P, name, message, **options)
+    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/amqp.py", line 606, in send_task_message
+    ret = producer.publish(
+        body,
+    ...<8 lines>...
+        **properties
+    )
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 895, in publish
+    return self._ensure(lambda: self._publish_native(*args), retry_policy)
+           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 767, in _ensure
+    raise OperationalError(str(exc)) from exc
+celery.beat.SchedulingError: Couldn't apply scheduled task entry-3: [Errno 104] Connection reset by peer
+[2026-10-27 02:39:16,993: ERROR/MainProcess] Message Error: Couldn't apply scheduled task entry-76: [Errno 104] Connection reset by peer
+['  File "<frozen runpy>", line 198, in _run_module_as_main\n', '  File "<frozen runpy>", line 88, in _run_code\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/__main__.py", line 19, in <module>\n    main()\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/__main__.py", line 15, in main\n    sys.exit(_main())\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/bin/celery.py", line 291, in main\n    return celery(auto_envvar_prefix="CELERY")\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/.venv-rs/lib/python3.13/site-packages/click/core.py", line 1631, in __call__\n    return self.main(*args, **kwargs)\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/.venv-rs/lib/python3.13/site-packages/click/core.py", line 1552, in main\n    rv = self.invoke(ctx)\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/.venv-rs/lib/python3.13/site-packages/click/core.py", line 2032, in invoke\n    return _process_result(sub_ctx.command.invoke(sub_ctx))\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/.venv-rs/lib/python3.13/site-packages/click/core.py", line 1415, in invoke\n    return ctx.invoke(self.callback, **ctx.params)\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/.venv-rs/lib/python3.13/site-packages/click/core.py", line 910, in invoke\n    return callback(*args, **kwargs)\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/.venv-rs/lib/python3.13/site-packages/click/decorators.py", line 34, in new_func\n    return f(get_current_context(), *args, **kwargs)\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/bin/base.py", line 225, in caller\n    return f(ctx, *args, **kwargs)\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/bin/beat.py", line 87, in beat\n    return beat().run()\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/apps/beat.py", line 88, in run\n    self.start_scheduler()\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/apps/beat.py", line 119, in start_scheduler\n    service.start()\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/beat.py", line 1079, in start\n    interval = self.scheduler.tick()\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/beat.py", line 384, in tick\n    self.apply_entry(entry, producer=self.producer)\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/beat.py", line 296, in apply_entry\n    exc, traceback.format_stack(), exc_info=True)\n']
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 764, in _ensure
+    return self._call(fun)
+           ~~~~~~~~~~^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 745, in _call
+    return fun()
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 895, in <lambda>
+    return self._ensure(lambda: self._publish_native(*args), retry_policy)
+                                ~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 804, in _publish_native
+    _, entry = self._native()
+               ~~~~~~~~~~~~^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 625, in _native
+    return connection, self._entry()
+                       ~~~~~~~~~~~^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 616, in _entry
+    entry = _native_entry(self.connection, key)
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 454, in _native_entry
+    fresh = _NativeEntry(_celery_rs.Connection(
+                         ~~~~~~~~~~~~~~~~~~~~~^
+        key[0], options, retry_policy={'enabled': False}))
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ConnectionError: [Errno 104] Connection reset by peer
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/beat.py", line 449, in apply_async
+    return task.apply_async(entry_args, entry_kwargs,
+           ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+                            producer=producer,
+                            ^^^^^^^^^^^^^^^^^^
+                            **options)
+                            ^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/task.py", line 732, in apply_async
+    return app.send_task(
+           ~~~~~~~~~~~~~^
+        self.name, args, kwargs, task_id=task_id, producer=producer,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+        **options
+        ^^^^^^^^^
+    )
+    ^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/base.py", line 1225, in send_task
+    amqp.send_task_message(P, name, message, **options)
+    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/amqp.py", line 606, in send_task_message
+    ret = producer.publish(
+        body,
+    ...<8 lines>...
+        **properties
+    )
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 895, in publish
+    return self._ensure(lambda: self._publish_native(*args), retry_policy)
+           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 767, in _ensure
+    raise OperationalError(str(exc)) from exc
+kombu.exceptions.OperationalError: [Errno 104] Connection reset by peer
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/beat.py", line 293, in apply_entry
+    result = self.apply_async(entry, producer=producer, advance=False)
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/beat.py", line 457, in apply_async
+    reraise(SchedulingError, SchedulingError(
+    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        "Couldn't apply scheduled task {0.name}: {exc}".format(
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            entry, exc=exc)), sys.exc_info()[2])
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/exceptions.py", line 188, in reraise
+    raise value.with_traceback(tb)
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/beat.py", line 449, in apply_async
+    return task.apply_async(entry_args, entry_kwargs,
+           ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+                            producer=producer,
+                            ^^^^^^^^^^^^^^^^^^
+                            **options)
+                            ^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/task.py", line 732, in apply_async
+    return app.send_task(
+           ~~~~~~~~~~~~~^
+        self.name, args, kwargs, task_id=task_id, producer=producer,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+        **options
+        ^^^^^^^^^
+    )
+    ^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/base.py", line 1225, in send_task
+    amqp.send_task_message(P, name, message, **options)
+    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/amqp.py", line 606, in send_task_message
+    ret = producer.publish(
+        body,
+    ...<8 lines>...
+        **properties
+    )
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 895, in publish
+    return self._ensure(lambda: self._publish_native(*args), retry_policy)
+           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 767, in _ensure
+    raise OperationalError(str(exc)) from exc
+celery.beat.SchedulingError: Couldn't apply scheduled task entry-76: [Errno 104] Connection reset by peer
+[2026-10-27 02:39:17,603: ERROR/MainProcess] Message Error: Couldn't apply scheduled task entry-31: [Errno 104] Connection reset by peer
+['  File "<frozen runpy>", line 198, in _run_module_as_main\n', '  File "<frozen runpy>", line 88, in _run_code\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/__main__.py", line 19, in <module>\n    main()\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/__main__.py", line 15, in main\n    sys.exit(_main())\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/bin/celery.py", line 291, in main\n    return celery(auto_envvar_prefix="CELERY")\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/.venv-rs/lib/python3.13/site-packages/click/core.py", line 1631, in __call__\n    return self.main(*args, **kwargs)\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/.venv-rs/lib/python3.13/site-packages/click/core.py", line 1552, in main\n    rv = self.invoke(ctx)\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/.venv-rs/lib/python3.13/site-packages/click/core.py", line 2032, in invoke\n    return _process_result(sub_ctx.command.invoke(sub_ctx))\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/.venv-rs/lib/python3.13/site-packages/click/core.py", line 1415, in invoke\n    return ctx.invoke(self.callback, **ctx.params)\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/.venv-rs/lib/python3.13/site-packages/click/core.py", line 910, in invoke\n    return callback(*args, **kwargs)\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/.venv-rs/lib/python3.13/site-packages/click/decorators.py", line 34, in new_func\n    return f(get_current_context(), *args, **kwargs)\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/bin/base.py", line 225, in caller\n    return f(ctx, *args, **kwargs)\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/bin/beat.py", line 87, in beat\n    return beat().run()\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/apps/beat.py", line 88, in run\n    self.start_scheduler()\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/apps/beat.py", line 119, in start_scheduler\n    service.start()\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/beat.py", line 1079, in start\n    interval = self.scheduler.tick()\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/beat.py", line 384, in tick\n    self.apply_entry(entry, producer=self.producer)\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/beat.py", line 296, in apply_entry\n    exc, traceback.format_stack(), exc_info=True)\n']
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 764, in _ensure
+    return self._call(fun)
+           ~~~~~~~~~~^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 745, in _call
+    return fun()
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 895, in <lambda>
+    return self._ensure(lambda: self._publish_native(*args), retry_policy)
+                                ~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 804, in _publish_native
+    _, entry = self._native()
+               ~~~~~~~~~~~~^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 625, in _native
+    return connection, self._entry()
+                       ~~~~~~~~~~~^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 616, in _entry
+    entry = _native_entry(self.connection, key)
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 454, in _native_entry
+    fresh = _NativeEntry(_celery_rs.Connection(
+                         ~~~~~~~~~~~~~~~~~~~~~^
+        key[0], options, retry_policy={'enabled': False}))
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ConnectionError: [Errno 104] Connection reset by peer
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/beat.py", line 449, in apply_async
+    return task.apply_async(entry_args, entry_kwargs,
+           ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+                            producer=producer,
+                            ^^^^^^^^^^^^^^^^^^
+                            **options)
+                            ^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/task.py", line 732, in apply_async
+    return app.send_task(
+           ~~~~~~~~~~~~~^
+        self.name, args, kwargs, task_id=task_id, producer=producer,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+        **options
+        ^^^^^^^^^
+    )
+    ^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/base.py", line 1225, in send_task
+    amqp.send_task_message(P, name, message, **options)
+    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/amqp.py", line 606, in send_task_message
+    ret = producer.publish(
+        body,
+    ...<8 lines>...
+        **properties
+    )
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 895, in publish
+    return self._ensure(lambda: self._publish_native(*args), retry_policy)
+           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 767, in _ensure
+    raise OperationalError(str(exc)) from exc
+kombu.exceptions.OperationalError: [Errno 104] Connection reset by peer
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/beat.py", line 293, in apply_entry
+    result = self.apply_async(entry, producer=producer, advance=False)
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/beat.py", line 457, in apply_async
+    reraise(SchedulingError, SchedulingError(
+    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        "Couldn't apply scheduled task {0.name}: {exc}".format(
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            entry, exc=exc)), sys.exc_info()[2])
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/exceptions.py", line 188, in reraise
+    raise value.with_traceback(tb)
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/beat.py", line 449, in apply_async
+    return task.apply_async(entry_args, entry_kwargs,
+           ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+                            producer=producer,
+                            ^^^^^^^^^^^^^^^^^^
+                            **options)
+                            ^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/task.py", line 732, in apply_async
+    return app.send_task(
+           ~~~~~~~~~~~~~^
+        self.name, args, kwargs, task_id=task_id, producer=producer,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+        **options
+        ^^^^^^^^^
+    )
+    ^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/base.py", line 1225, in send_task
+    amqp.send_task_message(P, name, message, **options)
+    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/amqp.py", line 606, in send_task_message
+    ret = producer.publish(
+        body,
+    ...<8 lines>...
+        **properties
+    )
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 895, in publish
+    return self._ensure(lambda: self._publish_native(*args), retry_policy)
+           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 767, in _ensure
+    raise OperationalError(str(exc)) from exc
+celery.beat.SchedulingError: Couldn't apply scheduled task entry-31: [Errno 104] Connection reset by peer
+[2026-10-27 02:39:18,216: ERROR/MainProcess] Message Error: Couldn't apply scheduled task entry-43: [Errno 104] Connection reset by peer
+['  File "<frozen runpy>", line 198, in _run_module_as_main\n', '  File "<frozen runpy>", line 88, in _run_code\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/__main__.py", line 19, in <module>\n    main()\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/__main__.py", line 15, in main\n    sys.exit(_main())\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/bin/celery.py", line 291, in main\n    return celery(auto_envvar_prefix="CELERY")\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/.venv-rs/lib/python3.13/site-packages/click/core.py", line 1631, in __call__\n    return self.main(*args, **kwargs)\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/.venv-rs/lib/python3.13/site-packages/click/core.py", line 1552, in main\n    rv = self.invoke(ctx)\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/.venv-rs/lib/python3.13/site-packages/click/core.py", line 2032, in invoke\n    return _process_result(sub_ctx.command.invoke(sub_ctx))\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/.venv-rs/lib/python3.13/site-packages/click/core.py", line 1415, in invoke\n    return ctx.invoke(self.callback, **ctx.params)\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/.venv-rs/lib/python3.13/site-packages/click/core.py", line 910, in invoke\n    return callback(*args, **kwargs)\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/.venv-rs/lib/python3.13/site-packages/click/decorators.py", line 34, in new_func\n    return f(get_current_context(), *args, **kwargs)\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/bin/base.py", line 225, in caller\n    return f(ctx, *args, **kwargs)\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/bin/beat.py", line 87, in beat\n    return beat().run()\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/apps/beat.py", line 88, in run\n    self.start_scheduler()\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/apps/beat.py", line 119, in start_scheduler\n    service.start()\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/beat.py", line 1079, in start\n    interval = self.scheduler.tick()\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/beat.py", line 384, in tick\n    self.apply_entry(entry, producer=self.producer)\n', '  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/beat.py", line 296, in apply_entry\n    exc, traceback.format_stack(), exc_info=True)\n']
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 764, in _ensure
+    return self._call(fun)
+           ~~~~~~~~~~^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 745, in _call
+    return fun()
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 895, in <lambda>
+    return self._ensure(lambda: self._publish_native(*args), retry_policy)
+                                ~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 804, in _publish_native
+    _, entry = self._native()
+               ~~~~~~~~~~~~^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 625, in _native
+    return connection, self._entry()
+                       ~~~~~~~~~~~^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 616, in _entry
+    entry = _native_entry(self.connection, key)
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 454, in _native_entry
+    fresh = _NativeEntry(_celery_rs.Connection(
+                         ~~~~~~~~~~~~~~~~~~~~~^
+        key[0], options, retry_policy={'enabled': False}))
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ConnectionError: [Errno 104] Connection reset by peer
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/beat.py", line 449, in apply_async
+    return task.apply_async(entry_args, entry_kwargs,
+           ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+                            producer=producer,
+                            ^^^^^^^^^^^^^^^^^^
+                            **options)
+                            ^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/task.py", line 732, in apply_async
+    return app.send_task(
+           ~~~~~~~~~~~~~^
+        self.name, args, kwargs, task_id=task_id, producer=producer,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+        **options
+        ^^^^^^^^^
+    )
+    ^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/base.py", line 1225, in send_task
+    amqp.send_task_message(P, name, message, **options)
+    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/amqp.py", line 606, in send_task_message
+    ret = producer.publish(
+        body,
+    ...<8 lines>...
+        **properties
+    )
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 895, in publish
+    return self._ensure(lambda: self._publish_native(*args), retry_policy)
+           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 767, in _ensure
+    raise OperationalError(str(exc)) from exc
+kombu.exceptions.OperationalError: [Errno 104] Connection reset by peer
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/beat.py", line 293, in apply_entry
+    result = self.apply_async(entry, producer=producer, advance=False)
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/beat.py", line 457, in apply_async
+    reraise(SchedulingError, SchedulingError(
+    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        "Couldn't apply scheduled task {0.name}: {exc}".format(
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            entry, exc=exc)), sys.exc_info()[2])
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/exceptions.py", line 188, in reraise
+    raise value.with_traceback(tb)
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/beat.py", line 449, in apply_async
+    return task.apply_async(entry_args, entry_kwargs,
+           ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+                            producer=producer,
+                            ^^^^^^^^^^^^^^^^^^
+                            **options)
+                            ^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/task.py", line 732, in apply_async
+    return app.send_task(
+           ~~~~~~~~~~~~~^
+        self.name, args, kwargs, task_id=task_id, producer=producer,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+        **options
+        ^^^^^^^^^
+    )
+    ^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/base.py", line 1225, in send_task
+    amqp.send_task_message(P, name, message, **options)
+    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/amqp.py", line 606, in send_task_message
+    ret = producer.publish(
+        body,
+    ...<8 lines>...
+        **properties
+    )
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 895, in publish
+    return self._ensure(lambda: self._publish_native(*args), retry_policy)
+           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/python/celery/app/_rs_producer.py", line 767, in _ensure
+    raise OperationalError(str(exc)) from exc
+celery.beat.SchedulingError: Couldn't apply scheduled task entry-43: [Errno 104] Connection reset by peer
+celery beat v5.7.0rc1 (collider) is starting.
+__    -    ... __   -        _
+LocalTime -> 2026-10-27 02:09:13
+Configuration ->
+    . broker -> amqp://guest:**@127.0.0.1:5674//
+    . loader -> celery.loaders.app.AppLoader
+    . scheduler -> celery.beat.PersistentScheduler
+    . db -> /tmp/celery-soak-qywyptji/schedule
+    . logfile -> [stderr]@%ERROR
+    . maxinterval -> 5.00 minutes (300s)
+
