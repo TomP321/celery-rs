@@ -1,0 +1,84 @@
+{
+ "label": "scale-ref-c1-bench-toplevel",
+ "venv": ".venv-ref",
+ "pool": "prefork",
+ "concurrency": 1,
+ "n": 20000,
+ "prefill": true,
+ "completed_tasks": 20000,
+ "completed_before_resume": 0,
+ "worker_tasks_per_s": 883.7387697462078,
+ "broker": "redis://127.0.0.1:6390/0",
+ "idle_processes": [
+  {
+   "pid": 3982869,
+   "ppid": 3982865,
+   "pss_kb": 34121,
+   "private_dirty_kb": 14160,
+   "role": "master"
+  },
+  {
+   "pid": 3982878,
+   "ppid": 3982869,
+   "pss_kb": 30767,
+   "private_dirty_kb": 14592,
+   "role": "child"
+  }
+ ],
+ "after_processes": [
+  {
+   "pid": 3982869,
+   "ppid": 3982865,
+   "pss_kb": 34774,
+   "private_dirty_kb": 15440,
+   "role": "master"
+  },
+  {
+   "pid": 3982878,
+   "ppid": 3982869,
+   "pss_kb": 31819,
+   "private_dirty_kb": 15888,
+   "role": "child"
+  }
+ ],
+ "throughput_processes": [
+  {
+   "pid": 3982869,
+   "ppid": 3982865,
+   "pss_kb": 34657,
+   "private_dirty_kb": 15160,
+   "role": "master"
+  },
+  {
+   "pid": 3982878,
+   "ppid": 3982869,
+   "pss_kb": 31605,
+   "private_dirty_kb": 15576,
+   "role": "child"
+  }
+ ],
+ "pss_idle_kb": 64888,
+ "pss_idle_per_process_kb": [
+  34121,
+  30767
+ ],
+ "pss_peak_kb": 66593,
+ "pss_after_kb": 66593,
+ "pss_after_per_process_kb": [
+  34774,
+  31819
+ ],
+ "client_publish_per_s": 1784.6439539439214,
+ "client_maxrss_kb": 45008,
+ "end_to_end_s": 22.631122097023763,
+ "end_to_end_tasks_per_s": 883.7387697462078,
+ "drain_after_publish_s": 22.631122097023763,
+ "latency_ms": {
+  "p50": 2.595577505417168,
+  "p99": 3.5785739892162383,
+  "max": 4.29992499994114
+ },
+ "python": "3.13.9",
+ "task": "bench-toplevel",
+ "include": null
+}

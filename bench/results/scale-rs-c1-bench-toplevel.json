@@ -1,0 +1,107 @@
+{
+ "label": "scale-rs-c1-bench-toplevel",
+ "venv": ".venv-rs",
+ "pool": "prefork",
+ "concurrency": 1,
+ "n": 20000,
+ "prefill": true,
+ "completed_tasks": 20000,
+ "completed_before_resume": 0,
+ "worker_tasks_per_s": 2183.242509064287,
+ "broker": "redis://127.0.0.1:6390/0",
+ "idle_processes": [
+  {
+   "pid": 3987581,
+   "ppid": 3987513,
+   "pss_kb": 25260,
+   "private_dirty_kb": 10472,
+   "role": "master"
+  },
+  {
+   "pid": 3987652,
+   "ppid": 3987581,
+   "pss_kb": 16698,
+   "private_dirty_kb": 4256,
+   "role": "zygote"
+  },
+  {
+   "pid": 3987653,
+   "ppid": 3987652,
+   "pss_kb": 16763,
+   "private_dirty_kb": 4712,
+   "role": "child"
+  }
+ ],
+ "after_processes": [
+  {
+   "pid": 3987581,
+   "ppid": 3987513,
+   "pss_kb": 25045,
+   "private_dirty_kb": 11408,
+   "role": "master"
+  },
+  {
+   "pid": 3987652,
+   "ppid": 3987581,
+   "pss_kb": 18721,
+   "private_dirty_kb": 7668,
+   "role": "zygote"
+  },
+  {
+   "pid": 3987653,
+   "ppid": 3987652,
+   "pss_kb": 21514,
+   "private_dirty_kb": 10132,
+   "role": "child"
+  }
+ ],
+ "throughput_processes": [
+  {
+   "pid": 3987581,
+   "ppid": 3987513,
+   "pss_kb": 26218,
+   "private_dirty_kb": 11400,
+   "role": "master"
+  },
+  {
+   "pid": 3987652,
+   "ppid": 3987581,
+   "pss_kb": 18434,
+   "private_dirty_kb": 7152,
+   "role": "zygote"
+  },
+  {
+   "pid": 3987653,
+   "ppid": 3987652,
+   "pss_kb": 19782,
+   "private_dirty_kb": 9388,
+   "role": "child"
+  }
+ ],
+ "pss_idle_kb": 58721,
+ "pss_idle_per_process_kb": [
+  25260,
+  16698,
+  16763
+ ],
+ "pss_peak_kb": 65280,
+ "pss_after_kb": 65280,
+ "pss_after_per_process_kb": [
+  25045,
+  18721,
+  21514
+ ],
+ "client_publish_per_s": 2976.241650699278,
+ "client_maxrss_kb": 44752,
+ "end_to_end_s": 9.160686418006662,
+ "end_to_end_tasks_per_s": 2183.242509064287,
+ "drain_after_publish_s": 9.160686418006662,
+ "latency_ms": {
+  "p50": 1.946847012732178,
+  "p99": 2.926082001067698,
+  "max": 3.278052026871592
+ },
+ "python": "3.13.9",
+ "task": "bench-toplevel",
+ "include": null
+}

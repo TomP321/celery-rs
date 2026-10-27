@@ -1,0 +1,107 @@
+{
+ "label": "scale-rs-c1-pure",
+ "venv": ".venv-rs",
+ "pool": "prefork",
+ "concurrency": 1,
+ "n": 20000,
+ "prefill": true,
+ "completed_tasks": 20000,
+ "completed_before_resume": 0,
+ "worker_tasks_per_s": 2126.660615913851,
+ "broker": "redis://127.0.0.1:6390/0",
+ "idle_processes": [
+  {
+   "pid": 3979617,
+   "ppid": 3979612,
+   "pss_kb": 23398,
+   "private_dirty_kb": 12876,
+   "role": "master"
+  },
+  {
+   "pid": 3979640,
+   "ppid": 3979617,
+   "pss_kb": 17889,
+   "private_dirty_kb": 4388,
+   "role": "zygote"
+  },
+  {
+   "pid": 3979715,
+   "ppid": 3979640,
+   "pss_kb": 17753,
+   "private_dirty_kb": 4824,
+   "role": "child"
+  }
+ ],
+ "after_processes": [
+  {
+   "pid": 3979617,
+   "ppid": 3979612,
+   "pss_kb": 23778,
+   "private_dirty_kb": 13228,
+   "role": "master"
+  },
+  {
+   "pid": 3979640,
+   "ppid": 3979617,
+   "pss_kb": 19316,
+   "private_dirty_kb": 5628,
+   "role": "zygote"
+  },
+  {
+   "pid": 3979715,
+   "ppid": 3979640,
+   "pss_kb": 20521,
+   "private_dirty_kb": 6428,
+   "role": "child"
+  }
+ ],
+ "throughput_processes": [
+  {
+   "pid": 3979617,
+   "ppid": 3979612,
+   "pss_kb": 24992,
+   "private_dirty_kb": 13228,
+   "role": "master"
+  },
+  {
+   "pid": 3979640,
+   "ppid": 3979617,
+   "pss_kb": 18909,
+   "private_dirty_kb": 4860,
+   "role": "zygote"
+  },
+  {
+   "pid": 3979715,
+   "ppid": 3979640,
+   "pss_kb": 18612,
+   "private_dirty_kb": 5432,
+   "role": "child"
+  }
+ ],
+ "pss_idle_kb": 59040,
+ "pss_idle_per_process_kb": [
+  23398,
+  17889,
+  17753
+ ],
+ "pss_peak_kb": 63615,
+ "pss_after_kb": 63615,
+ "pss_after_per_process_kb": [
+  23778,
+  19316,
+  20521
+ ],
+ "client_publish_per_s": 2830.0213944166485,
+ "client_maxrss_kb": 35936,
+ "end_to_end_s": 9.404415472003166,
+ "end_to_end_tasks_per_s": 2126.660615913851,
+ "drain_after_publish_s": 9.404415472003166,
+ "latency_ms": {
+  "p50": 1.815892494050786,
+  "p99": 2.5757260154932737,
+  "max": 3.527618944644928
+ },
+ "python": "3.13.9",
+ "task": "pure",
+ "include": null
+}
