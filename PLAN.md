@@ -165,5 +165,5 @@ Superficie API in scope: 137 moduli, 750 nomi pubblici, 207 impostazioni, 34 seg
 
 ## Fase 10 — RAM oltre il piano iniziale (priorità del proprietario: meno RAM possibile)
 - 10a ✅ salto al riavvio del broker (Redis +44 → +2,2 MB, AMQP +3,7 MB, 0 task falliti: reset dei socket backend chiusi); master c10 22 → 18,3 MB (asynpool/billiard pigri, `TaskPool.Pool/BlockingPool` tra le differenze accettate di `compat api`); build delle dipendenze `opt-level=s` con crontab a 3 (p50 2,01 ms vs 2,48 ref). Aperti: master ≤ 13 MB, beat ≤ 22 MB (heap Python e moduli di base).
-- 10b: RAM dei figli prefork sotto carico (`specs/10b-child-memory.md`).
+- 10b ✅ RAM dei figli sotto carico: `prctl(PR_SET_PDEATHSIG)` nativo invece di cffi in ogni figlio, rilascio mirato delle pagine libere; figlio c10 pure 9,97 → 8,09 MB, c10 bench-toplevel 12,42 → 11,38 MB, c50 5,88 / 9,39 MB.
 - Misure di riferimento: `bench/fleet.py` (8 GB: ref 27 worker c10, rs 89), `bench/results/scale-*` (c1–c100).
