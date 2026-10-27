@@ -441,6 +441,11 @@ pub fn json_loads(
         match reader.next_event() {
             Ok(Some(event)) => builder.handle(event)?,
             Ok(None) => break,
+            Err(err) if err.message == "Maximum JSON depth exceeded" => {
+                return Err(pyo3::exceptions::PyRecursionError::new_err(
+                    "maximum recursion depth exceeded while decoding a JSON value",
+                ));
+            }
             Err(err) => return Err(json_error(py, err.message, err.pos, &doc)),
         }
     }

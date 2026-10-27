@@ -1,0 +1,4 @@
+corsia 1: /home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/.venv-ref/bin/python /home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/bench/soak.py --impl ref --broker amqp --minutes 60.0 --sample-seconds 30
+ Container celery-rs-lane-1-rabbitmq-1  Restarting
+ Container celery-rs-lane-1-rabbitmq-1  Started
+/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/bench/results/soak-20261027-010658-ref-amqp-bbf29d4905.json

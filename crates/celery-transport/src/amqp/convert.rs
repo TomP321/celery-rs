@@ -383,3 +383,42 @@ mod tests {
         ));
     }
 }
+
+#[cfg(test)]
+#[path = "../../../../tools/fuzz/support.rs"]
+mod fuzz_support;
+
+#[cfg(test)]
+#[test]
+#[ignore = "campagna di almeno dieci minuti: tools/fuzz/run"]
+fn fuzz_amqp_properties() {
+    let seeds = [vec![0; 256], (0..=255).collect(), vec![255; 1024]];
+    fuzz_support::campaign(&seeds, |bytes| {
+        if let Ok((_, properties)) = lapin::protocol::basic::parse_properties::<&[u8]>(bytes) {
+            let _ = message_from_amqp(Vec::new(), &properties);
+        }
+        let mut headers = Headers::new();
+        for (index, chunk) in bytes.chunks(16).take(64).enumerate() {
+            let value = match chunk.first().copied().unwrap_or(0) % 6 {
+                0 => HeaderValue::Bytes(Bytes::copy_from_slice(chunk)),
+                1 => HeaderValue::Str(String::from_utf8_lossy(chunk).as_ref().into()),
+                2 => HeaderValue::Int(i64::from(chunk[0]) - 128),
+                3 => HeaderValue::List(
+                    chunk
+                        .iter()
+                        .map(|n| HeaderValue::Int(i64::from(*n)))
+                        .collect(),
+                ),
+                4 => HeaderValue::Bool(chunk[0] & 1 != 0),
+                _ => HeaderValue::Null,
+            };
+            headers.insert(format!("h{index}"), value);
+        }
+        let mut message = Message::new(Bytes::copy_from_slice(bytes));
+        message.headers = headers;
+        if let Ok(properties) = message_to_properties(&message) {
+            let decoded = message_from_amqp(bytes.to_vec(), &properties);
+            assert_eq!(decoded.body.as_ref(), bytes);
+        }
+    });
+}

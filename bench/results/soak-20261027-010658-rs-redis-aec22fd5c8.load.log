@@ -1,0 +1,7 @@
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/bench/soak.py", line 253, in <module>
+    load()
+    ~~~~^^
+  File "/home/ubuntu/HDD/celery-rs-wt/09b-soak-fuzz/bench/soak.py", line 95, in load
+    from celery import chord, group
+ModuleNotFoundError: No module named 'celery'

@@ -84,38 +84,58 @@ pub fn compress(name: &str, data: &[u8]) -> Result<(Vec<u8>, &'static str), Comp
     Ok((out, content_type))
 }
 
+/// Limite del body decompresso e della memoria del decoder (64 MiB).
+pub const MAX_DECOMPRESSED_SIZE: usize = 64 * 1024 * 1024;
+
 /// Decomprime `data` secondo il content type (o alias).
 pub fn decompress(content_type: &str, data: &[u8]) -> Result<Vec<u8>, CompressionError> {
-    let (method, _) = method(content_type)
-        .ok_or_else(|| CompressionError::UnknownMethod(content_type.to_string()))?;
-    let mut out = Vec::with_capacity(data.len().saturating_mul(2).min(1 << 20));
-    match method {
-        Method::Zlib => {
-            let mut dec = flate2::read::ZlibDecoder::new(data);
-            dec.read_to_end(&mut out)
-                .map_err(|e| CompressionError::Codec(e.to_string()))?;
-        }
-        Method::Bzip2 => {
-            let mut dec = bzip2::read::BzDecoder::new(data);
-            dec.read_to_end(&mut out)
-                .map_err(|e| CompressionError::Codec(e.to_string()))?;
-        }
-        Method::Lzma => {
-            let mut dec = xz2::read::XzDecoder::new(data);
-            dec.read_to_end(&mut out)
-                .map_err(|e| CompressionError::Codec(e.to_string()))?;
-        }
-        Method::Brotli => {
-            let mut dec = brotli::Decompressor::new(data, 4096);
-            dec.read_to_end(&mut out)
-                .map_err(|e| CompressionError::Codec(e.to_string()))?;
-        }
-        Method::Zstd => {
-            out = zstd::stream::decode_all(data)
-                .map_err(|e| CompressionError::Codec(e.to_string()))?;
-        }
+    decompress_limited(content_type, data, MAX_DECOMPRESSED_SIZE)
+}
+
+fn read_limited(reader: impl Read, limit: usize) -> Result<Vec<u8>, CompressionError> {
+    let mut out = Vec::new();
+    reader
+        .take(limit as u64 + 1)
+        .read_to_end(&mut out)
+        .map_err(|e| CompressionError::Codec(e.to_string()))?;
+    if out.len() > limit {
+        return Err(CompressionError::Codec(
+            "decompressed body exceeds limit".into(),
+        ));
     }
     Ok(out)
+}
+
+fn decompress_limited(
+    content_type: &str,
+    data: &[u8],
+    limit: usize,
+) -> Result<Vec<u8>, CompressionError> {
+    let (method, _) = method(content_type)
+        .ok_or_else(|| CompressionError::UnknownMethod(content_type.to_string()))?;
+    if data.len() > MAX_DECOMPRESSED_SIZE {
+        return Err(CompressionError::Codec(
+            "compressed body exceeds limit".into(),
+        ));
+    }
+    match method {
+        Method::Zlib => read_limited(flate2::read::ZlibDecoder::new(data), limit),
+        Method::Bzip2 => read_limited(bzip2::read::BzDecoder::new(data), limit),
+        Method::Lzma => {
+            let stream = xz2::stream::Stream::new_stream_decoder(MAX_DECOMPRESSED_SIZE as u64, 0)
+                .map_err(|e| CompressionError::Codec(e.to_string()))?;
+            read_limited(xz2::read::XzDecoder::new_stream(data, stream), limit)
+        }
+        Method::Brotli => read_limited(brotli::Decompressor::new(data, 4096), limit),
+        Method::Zstd => {
+            let mut decoder = zstd::stream::read::Decoder::new(data)
+                .map_err(|e| CompressionError::Codec(e.to_string()))?;
+            decoder
+                .window_log_max(26)
+                .map_err(|e| CompressionError::Codec(e.to_string()))?;
+            read_limited(decoder, limit)
+        }
+    }
 }
 
 #[cfg(test)]
@@ -149,6 +169,15 @@ mod tests {
                 let back = decompress(ct, &compressed).unwrap();
                 assert_eq!(back, payload, "algoritmo {name}");
             }
+        }
+    }
+
+    #[test]
+    fn decompression_bombs_are_bounded() {
+        for name in ["gzip", "bzip2", "xz", "brotli", "zstd"] {
+            let (data, _) = compress(name, &[0; 8192]).unwrap();
+            assert!(decompress_limited(name, &data, 1024).is_err(), "{name}");
+            assert_eq!(decompress_limited(name, &data, 8192).unwrap().len(), 8192);
         }
     }
 

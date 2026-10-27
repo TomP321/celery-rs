@@ -99,15 +99,22 @@ pub struct Reader<'a> {
     i: usize,
     stack: Vec<Ctx>,
     root_done: bool,
+    max_depth: usize,
 }
 
 impl<'a> Reader<'a> {
     pub fn new(src: &'a [u8]) -> Self {
+        Self::with_max_depth(src, 9_997)
+    }
+
+    /// Limite separato per i consumer ricorsivi degli envelope.
+    pub fn with_max_depth(src: &'a [u8], max_depth: usize) -> Self {
         Self {
             src,
             i: 0,
             stack: Vec::with_capacity(8),
             root_done: false,
+            max_depth,
         }
     }
 
@@ -266,6 +273,9 @@ impl<'a> Reader<'a> {
         let Some(b) = self.peek() else {
             return Err(self.error("Expecting value", start));
         };
+        if matches!(b, b'[' | b'{') && self.stack.len() >= self.max_depth {
+            return Err(self.error("Maximum JSON depth exceeded", start));
+        }
         match b {
             b'[' => {
                 self.i += 1;
@@ -578,6 +588,19 @@ mod tests {
             out.push(ev);
         }
         Ok(out)
+    }
+
+    #[test]
+    fn nesting_limit_is_checked_before_growing_stack() {
+        let input = [vec![b'['; 100_000], vec![b']'; 100_000]].concat();
+        let mut reader = Reader::with_max_depth(&input, 64);
+        for _ in 0..64 {
+            assert!(reader.next_event().unwrap().is_some());
+        }
+        assert_eq!(
+            reader.next_event().unwrap_err().message,
+            "Maximum JSON depth exceeded"
+        );
     }
 
     #[test]

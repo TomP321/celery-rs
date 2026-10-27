@@ -4,6 +4,7 @@
 //! convertiti in tipi Rust prima di entrare nel runtime tokio, e i risultati
 //! sono riconvertiti solo alla fine.
 
+use crate::fork::ForkSafe;
 use std::future::Future;
 use std::ptr;
 use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
@@ -460,11 +461,11 @@ const DRAIN_BATCH_LIMIT: usize = 1000;
 /// Connessione a un broker: stessa API per tutti i trasporti di `connect`.
 #[pyclass(module = "_celery_rs")]
 pub struct Connection {
-    transport: Box<dyn Transport>,
+    transport: ForkSafe<Box<dyn Transport>>,
     /// Trasporto virtuale: aggiunge `delivery_info`/`body_encoding`/`delivery_tag`.
     virtual_transport: bool,
     body_encoding: CompactString,
-    stream: Mutex<Option<StreamState>>,
+    stream: ForkSafe<Mutex<Option<StreamState>>>,
     closed: AtomicBool,
 }
 
@@ -711,9 +712,9 @@ fn reply_route_from_py(dict: &Bound<'_, PyDict>) -> PyResult<ReplyRoute> {
     let kind = ExchangeType::parse(&text("exchange_type")?).map_err(transport_error)?;
     let arguments = match dict.get_item("arguments")? {
         Some(value) if !value.is_none() => {
-            let arguments = value.cast::<PyDict>().map_err(|_| {
-                PyTypeError::new_err("reply['arguments'] deve essere un dict")
-            })?;
+            let arguments = value
+                .cast::<PyDict>()
+                .map_err(|_| PyTypeError::new_err("reply['arguments'] deve essere un dict"))?;
             py_to_headers(arguments)?
         }
         _ => Headers::new(),
@@ -782,10 +783,10 @@ impl Connection {
             ))
         })?;
         Ok(Self {
-            transport,
+            transport: ForkSafe::new(transport),
             virtual_transport,
             body_encoding,
-            stream: Mutex::new(None),
+            stream: ForkSafe::new(Mutex::new(None)),
             closed: AtomicBool::new(false),
         })
     }
@@ -911,9 +912,21 @@ impl Connection {
                 for (key, value) in dict.iter() {
                     let key = key.extract::<&str>()?;
                     // py-amqp ignora le proprietà sconosciute senza convertirne i valori.
-                    if matches!(key, "delivery_mode" | "priority" | "correlation_id"
-                        | "reply_to" | "expiration" | "message_id" | "timestamp"
-                        | "type" | "user_id" | "app_id" | "cluster_id") && !value.is_none() {
+                    if matches!(
+                        key,
+                        "delivery_mode"
+                            | "priority"
+                            | "correlation_id"
+                            | "reply_to"
+                            | "expiration"
+                            | "message_id"
+                            | "timestamp"
+                            | "type"
+                            | "user_id"
+                            | "app_id"
+                            | "cluster_id"
+                    ) && !value.is_none()
+                    {
                         properties.insert(key, py_to_value(&value)?);
                     }
                 }

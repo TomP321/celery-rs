@@ -33,6 +33,7 @@ mimalloc = { version = "0.1", default-features = false }
 # tenerlo qui impedisce a `cargo test` di linkare libpython nei binari di test.
 pyo3 = { version = "0.30", features = ["abi3-py310"] }
 pyo3-build-config = "0.30"
+proptest = "1"
 redis = { version = "1.8", default-features = false, features = ["tokio-comp", "aio", "script", "streams", "tokio-rustls-comp"] }
 # Provider crittografico esplicito per `rediss://`: senza una feature di rustls
 # il client va in panico alla creazione della configurazione TLS.

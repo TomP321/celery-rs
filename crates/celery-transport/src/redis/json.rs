@@ -111,7 +111,10 @@ pub fn encode(
 /// Aggiunge `redelivered: true` a header e `delivery_info`, come
 /// `Redis._do_restore_message`, preservando ordine e formattazione.
 pub fn mark_redelivered(raw: &[u8]) -> Result<Vec<u8>> {
-    let mut reader = Reader::new(raw);
+    if raw.len() > 64 * 1024 * 1024 {
+        return Err(invalid("envelope exceeds 64 MiB"));
+    }
+    let mut reader = Reader::with_max_depth(raw, 64);
     let Some(event) = next(&mut reader)? else {
         return Err(invalid("envelope vuoto"));
     };
@@ -120,6 +123,7 @@ pub fn mark_redelivered(raw: &[u8]) -> Result<Vec<u8>> {
         _ => return Err(invalid("envelope non è un oggetto")),
     };
 
+    next(&mut reader)?;
     if let Some(HeaderValue::Map(headers)) = envelope.get_mut("headers") {
         headers.insert("redelivered", HeaderValue::Bool(true));
     }
@@ -136,7 +140,10 @@ pub fn mark_redelivered(raw: &[u8]) -> Result<Vec<u8>> {
 
 /// Decodifica un envelope di kombu.
 pub fn decode(raw: &[u8]) -> Result<Envelope> {
-    let mut reader = Reader::new(raw);
+    if raw.len() > 64 * 1024 * 1024 {
+        return Err(invalid("envelope exceeds 64 MiB"));
+    }
+    let mut reader = Reader::with_max_depth(raw, 64);
     let Some(event) = next(&mut reader)? else {
         return Err(invalid("envelope vuoto"));
     };
@@ -145,6 +152,7 @@ pub fn decode(raw: &[u8]) -> Result<Envelope> {
         _ => return Err(invalid("envelope non è un oggetto")),
     };
 
+    next(&mut reader)?;
     let content_type = envelope.get_str("content-type").map(CompactString::from);
     let content_encoding = envelope
         .get_str("content-encoding")
@@ -214,11 +222,15 @@ pub fn decode(raw: &[u8]) -> Result<Envelope> {
 
 /// Estrae `[payload, exchange, routing_key]` dal valore dell'hash `unacked`.
 pub fn split_unacked(raw: &[u8]) -> Result<(Vec<u8>, CompactString, CompactString)> {
-    let mut reader = Reader::new(raw);
+    if raw.len() > 64 * 1024 * 1024 {
+        return Err(invalid("envelope exceeds 64 MiB"));
+    }
+    let mut reader = Reader::with_max_depth(raw, 64);
     let Some(event) = next(&mut reader)? else {
         return Err(invalid("unacked vuoto"));
     };
     let value = parse_value(&mut reader, event)?;
+    next(&mut reader)?;
     let HeaderValue::List(items) = value else {
         return Err(invalid("unacked non è una lista"));
     };
