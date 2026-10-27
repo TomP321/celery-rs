@@ -1,4 +1,4 @@
 corsia 1: /home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/.venv-ref/bin/python /home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/soak.py --impl ref --broker amqp --minutes 15.0 --sample-seconds 30
  Container celery-rs-lane-1-rabbitmq-1  Restarting
  Container celery-rs-lane-1-rabbitmq-1  Started
-/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/results/soak-20261027-072920-ref-amqp-115a3bb3e1.json
+/home/ubuntu/HDD/celery-rs-wt/09c-memory-growth/bench/results/soak-20261027-081422-ref-amqp-62ffff7dbe.json
