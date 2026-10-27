@@ -47,11 +47,16 @@ tracing = "0.1"
 uuid = { version = "1", features = ["v4", "fast-rng"] }
 
 [profile.release]
-opt-level = 3
+# Compatta il codice residente; la latenza viene verificata nei benchmark.
+opt-level = "s"
 lto = "fat"
 codegen-units = 1
 panic = "abort"
 strip = "symbols"
+
+[profile.release.package.celery-beat]
+# Il calcolo delle scadenze resta caldo; il resto privilegia le pagine residenti.
+opt-level = 3
 
 # Profilo per profiling/bench: come release ma con simboli e panic=unwind (serve a PyO3 nei test).
 [profile.profiling]

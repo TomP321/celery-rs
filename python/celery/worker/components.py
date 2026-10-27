@@ -89,6 +89,10 @@ class Hub(bootsteps.StartStopStep):
     def _patch_thread_primitives(self, w):
         # make clock use dummy lock
         w.app.clock.mutex = DummyLock()
+        from celery.worker import _rs_consumer
+        # RsApplyResult non usa il lock di billiard: il pool serve solo ai figli.
+        if _rs_consumer.use_rs_pool(w):
+            return
         # multiprocessing's ApplyResult uses this lock.
         try:
             from billiard import pool

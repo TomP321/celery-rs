@@ -1,6 +1,9 @@
 # 10a — risultato e limiti
 
-La spec **resta aperta**: il salto Redis è corretto e verificato; gli obiettivi
+Rapporto storico del commit `a9b80be`. La decisione successiva del proprietario
+e la configurazione adottata sono in [10a-owner-memory.md](10a-owner-memory.md).
+
+Al termine di quel commit la spec **restava aperta**: il salto Redis è corretto e verificato; gli obiettivi
 assoluti di master ≤13 MiB e beat ≤22 MiB non sono raggiunti. Nessuna nuova
 dipendenza. `celery/`, i test upstream e il codice di `tools/compat/` sono invariati.
 

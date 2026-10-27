@@ -8,8 +8,6 @@ import time
 
 from billiard import forking_enable, get_start_method, set_start_method
 from billiard.common import REMAP_SIGTERM, TERM_SIGNAME
-from billiard.pool import CLOSE, RUN
-from billiard.pool import Pool as BlockingPool
 from kombu.asynchronous import get_event_loop
 from kombu.message import Message
 
@@ -21,7 +19,45 @@ from celery.concurrency.base import BasePool
 from celery.utils.functional import noop
 from celery.utils.log import get_logger
 
-from .asynpool import AsynPool
+
+_LAZY_IMPORTS = {
+    'AsynPool': ('celery.concurrency.asynpool', 'AsynPool'),
+    'BlockingPool': ('billiard.pool', 'Pool'),
+    'CLOSE': ('billiard.pool', 'CLOSE'),
+    'RUN': ('billiard.pool', 'RUN'),
+}
+
+
+def __getattr__(name):
+    try:
+        module, attribute = _LAZY_IMPORTS[name]
+    except KeyError:
+        raise AttributeError(f'module {__name__!r} has no attribute {name!r}') from None
+    from importlib import import_module
+    value = getattr(import_module(module), attribute)
+    globals()[name] = value
+    return value
+
+
+def __dir__():
+    return sorted(set(globals()) | _LAZY_IMPORTS.keys())
+
+
+class _PoolImplementation:
+    # Il master Rust risolve TaskPool ma non usa i pool tradizionali.
+    # Al primo accesso si conserva la classe vera anche per le sottoclassi.
+    def __init__(self, attribute):
+        self.attribute = attribute
+
+    def __set_name__(self, owner, name):
+        self.owner, self.name = owner, name
+
+    def __get__(self, instance, owner=None):
+        value = globals().get(self.attribute)
+        if value is None:
+            value = __getattr__(self.attribute)
+        setattr(self.owner, self.name, value)
+        return value
 
 __all__ = ('TaskPool', 'process_initializer', 'process_destructor')
 
@@ -149,8 +185,8 @@ def _run_ready_callbacks(hub):
 class TaskPool(BasePool):
     """Multiprocessing Pool implementation."""
 
-    Pool = AsynPool
-    BlockingPool = BlockingPool
+    Pool = _PoolImplementation('AsynPool')
+    BlockingPool = _PoolImplementation('BlockingPool')
 
     uses_semaphore = True
     write_stats = None
@@ -211,6 +247,7 @@ class TaskPool(BasePool):
 
     def on_stop(self):
         """Gracefully stop the pool."""
+        from billiard.pool import CLOSE, RUN
         if self._pool is not None and self._pool._state in (RUN, CLOSE):
             self._pool.close()
 
@@ -275,6 +312,7 @@ class TaskPool(BasePool):
             self._pool = None
 
     def on_close(self):
+        from billiard.pool import RUN
         if self._pool is not None and self._pool._state == RUN:
             self._pool.close()
 

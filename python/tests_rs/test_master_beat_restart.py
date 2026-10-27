@@ -24,12 +24,34 @@ def test_worker_imports_do_not_load_unused_pool_or_diagnostics():
     code = '''
 import json, sys
 from celery.apps.worker import Worker
+from celery.concurrency.prefork import TaskPool
 from celery.concurrency.rs_prefork import RsTaskPool
 for name in ('celery.concurrency.asynpool', 'billiard.pool',
              'billiard.queues', 'celery.utils.debug', 'psutil'):
     assert name not in sys.modules, name
 print(json.dumps(True))
 '''
+    assert run('rs', code)
+
+
+@pytest.mark.parametrize('first', ['class', 'instance'])
+def test_lazy_pool_classes_are_real_objects_from_class_and_instance(first):
+    code = '''
+import json, sys
+from celery.concurrency.prefork import TaskPool
+assert 'celery.concurrency.asynpool' not in sys.modules
+assert 'billiard.pool' not in sys.modules
+instance = TaskPool(1)
+target = TaskPool if FIRST == 'class' else instance
+asynchronous, blocking = target.Pool, target.BlockingPool
+from celery.concurrency.asynpool import AsynPool
+from billiard.pool import Pool
+assert asynchronous is AsynPool
+assert blocking is Pool
+assert TaskPool.Pool is instance.Pool is AsynPool
+assert TaskPool.BlockingPool is instance.BlockingPool is Pool
+print(json.dumps(True))
+'''.replace('FIRST', repr(first))
     assert run('rs', code)
 
 
@@ -130,6 +152,9 @@ def test_restart_pss_is_bounded(broker, tmp_path):
     assert report['task_errors'] == 0
     assert 'psutil' not in initial['modules']
     assert 'celery.utils.debug' not in initial['modules']
+    assert 'celery.concurrency.asynpool' not in initial['modules']
+    assert not any(name == 'billiard.pool' or name == 'billiard.queues'
+                   for name in initial['modules'])
     previous = initial
     for sample in report['samples'][1:]:
         assert sample['total_kib'] - previous['total_kib'] <= 5 * 1024

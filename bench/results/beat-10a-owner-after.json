@@ -1,0 +1,41 @@
+{
+ "micro": {
+  "remaining_estimate_simple_ns": 3743.680749903433,
+  "is_due_simple_ns": 8676.245450624265,
+  "remaining_estimate_mixed_ns": 3996.757449931465,
+  "is_due_mixed_ns": 9333.508150302805
+ },
+ "brokers": {
+  "redis": {
+   "pss_3_kb": 29265,
+   "pss_1000_kb": 33669,
+   "tick": {
+    "tick_us": 1080.8790614999998,
+    "tick_wall_us": 1080.9397524863016,
+    "entries": 1000
+   },
+   "sends": {
+    "sends": 1894,
+    "seconds": 3.0014217870193534,
+    "sends_s": 631.0342678897158,
+    "cpu_sends_s": 732.825011675781
+   }
+  },
+  "amqp": {
+   "pss_3_kb": 29347,
+   "pss_1000_kb": 34011,
+   "tick": {
+    "tick_us": 978.2539045,
+    "tick_wall_us": 978.2665990060194,
+    "entries": 1000
+   },
+   "sends": {
+    "sends": 2097,
+    "seconds": 3.0010476100142114,
+    "sends_s": 698.7559920750706,
+    "cpu_sends_s": 708.0847521530904
+   }
+  }
+ },
+ "label": "10a-owner-after"
+}
