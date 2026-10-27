@@ -119,16 +119,18 @@ def child_main(fd, app, hostname, maxtasks=0, max_memory_per_child=0):
     sock.setblocking(True)
     pid = os.getpid()
     exitcode = EX_OK
+    probe = None
+    if os.environ.get('CELERY_RS_MEMORY_PROBE'):
+        from celery.concurrency._rs_memory_probe import MemoryProbe
+        probe = MemoryProbe(os.environ['CELERY_RS_MEMORY_PROBE'])
     # Billiard azzera il flag ereditato dal padre prima dell'initializer.
     clear_terminate_handler_fired()
     process_initializer(app, hostname)
     reset_signals(full=True)
     signal.signal(signal.SIGUSR1, soft_timeout_sighandler)
+    # L'initializer lascia pagine libere che altrimenti diventano private.
+    _release_task_memory(force=True)
 
-    probe = None
-    if os.environ.get('CELERY_RS_MEMORY_PROBE'):
-        from celery.concurrency._rs_memory_probe import MemoryProbe
-        probe = MemoryProbe(os.environ['CELERY_RS_MEMORY_PROBE'])
     completed = 0
     try:
         while not maxtasks or completed < maxtasks:
@@ -182,7 +184,8 @@ def child_main(fd, app, hostname, maxtasks=0, max_memory_per_child=0):
             _clear_result_traceback(result)
             # Il figlio inattivo non deve trattenere l'ultimo job e i suoi buffer.
             del result, target, args, kwargs, body
-            _release_task_memory()
+            # Pochi recuperi durante il riscaldamento; nessun GC dei task utente.
+            _release_task_memory(force=completed in (1, 10, 100, 1000))
             if probe is not None:
                 probe.sample(completed)
             if retire:

@@ -187,22 +187,19 @@ def _main(control, app, hostname):
             'celery.app.task', 'celery.canvas', 'celery.result',
             'celery.backends', 'celery.backends.base',
             'celery.app.trace', 'celery.app._rs_producer', 'celery.app.amqp',
-            # `billiard.util.set_pdeathsig` compila un wrapper cffi all'avvio
-            # di ogni figlio (`cffi.FFI()` → cparser/pycparser): qui le pagine
-            # restano condivise con tutti i figli.
-            'billiard.util', 'cffi.cparser'):
+            'billiard.util'):
         try:
             __import__(module)
         except Exception:  # pragma: no cover - dipendenze opzionali
             traceback.print_exc()
 
-    _warm_cffi()
     _warm_backend_errors(app)
     _close_inherited_fds({control.fileno()})
     # `gc.freeze()` (non `collect`): nel figlio di un master multi-thread i
     # finalizer di oggetti ereditati possono toccare stato non valido dopo il
     # fork; congelare le pagine basta per la condivisione copy-on-write.
     gc.freeze()
+    _rs_child._release_task_memory(force=True)
 
     while True:
         command, fds = _recv_control(control)

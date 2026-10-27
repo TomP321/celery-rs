@@ -1,0 +1,152 @@
+{
+ "label": "10b-after",
+ "venv": ".venv-rs",
+ "concurrency": 10,
+ "budget_mb": 2048.0,
+ "series": [
+  {
+   "workers": 1,
+   "pss_mb": 78.3,
+   "processes": 12
+  },
+  {
+   "workers": 2,
+   "pss_mb": 156.8,
+   "processes": 24
+  },
+  {
+   "workers": 3,
+   "pss_mb": 234.6,
+   "processes": 36
+  },
+  {
+   "workers": 4,
+   "pss_mb": 312.1,
+   "processes": 48
+  },
+  {
+   "workers": 5,
+   "pss_mb": 389.9,
+   "processes": 60
+  },
+  {
+   "workers": 6,
+   "pss_mb": 467.8,
+   "processes": 72
+  },
+  {
+   "workers": 7,
+   "pss_mb": 545.3,
+   "processes": 84
+  },
+  {
+   "workers": 8,
+   "pss_mb": 622.7,
+   "processes": 96
+  },
+  {
+   "workers": 9,
+   "pss_mb": 700.5,
+   "processes": 108
+  },
+  {
+   "workers": 10,
+   "pss_mb": 777.9,
+   "processes": 120
+  },
+  {
+   "workers": 11,
+   "pss_mb": 855.5,
+   "processes": 132
+  },
+  {
+   "workers": 12,
+   "pss_mb": 932.3,
+   "processes": 144
+  },
+  {
+   "workers": 13,
+   "pss_mb": 1010.1,
+   "processes": 156
+  },
+  {
+   "workers": 14,
+   "pss_mb": 1087.7,
+   "processes": 168
+  },
+  {
+   "workers": 15,
+   "pss_mb": 1170.8,
+   "processes": 180
+  },
+  {
+   "workers": 16,
+   "pss_mb": 1251.0,
+   "processes": 192
+  },
+  {
+   "workers": 17,
+   "pss_mb": 1328.6,
+   "processes": 204
+  },
+  {
+   "workers": 18,
+   "pss_mb": 1406.4,
+   "processes": 216
+  },
+  {
+   "workers": 19,
+   "pss_mb": 1483.7,
+   "processes": 228
+  },
+  {
+   "workers": 20,
+   "pss_mb": 1560.8,
+   "processes": 240
+  },
+  {
+   "workers": 21,
+   "pss_mb": 1637.5,
+   "processes": 252
+  },
+  {
+   "workers": 22,
+   "pss_mb": 1714.7,
+   "processes": 264
+  },
+  {
+   "workers": 23,
+   "pss_mb": 1793.0,
+   "processes": 276
+  },
+  {
+   "workers": 24,
+   "pss_mb": 1870.7,
+   "processes": 288
+  },
+  {
+   "workers": 25,
+   "pss_mb": 1948.3,
+   "processes": 300
+  },
+  {
+   "workers": 26,
+   "pss_mb": 2026.0,
+   "processes": 312
+  },
+  {
+   "workers": 27,
+   "pss_mb": 2103.0,
+   "processes": 324
+  }
+ ],
+ "workers_fit_idle": 26,
+ "idle_total_mb": 2103.0,
+ "idle_per_worker_mb": 77.9,
+ "loaded_total_mb": 2316.6,
+ "loaded_per_worker_mb": 85.8,
+ "workers_fit_loaded": 23,
+ "tasks": 10000,
+ "tasks_completed": 10000,
+ "tasks_per_s": 2191.0
+}

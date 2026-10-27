@@ -501,6 +501,7 @@ dependencies = [
  "celery-worker",
  "compact_str",
  "futures-core",
+ "libc",
  "pyo3",
  "pyo3-build-config",
  "tokio",

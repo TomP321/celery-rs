@@ -68,7 +68,10 @@ def current_process():
 
 
 def _set_pdeathsig(signum):
-    from billiard.util import set_pdeathsig as _set_pdeathsig
+    try:
+        from _celery_rs import _set_pdeathsig
+    except ImportError:
+        from billiard.util import set_pdeathsig as _set_pdeathsig
     return _set_pdeathsig(signum)
 
 
