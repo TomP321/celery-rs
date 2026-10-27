@@ -31,7 +31,7 @@ from billiard.common import (
     terminate_handler_fired,
 )
 from billiard.compat import mem_rss
-from billiard.einfo import ExceptionInfo
+from billiard.einfo import ExceptionInfo, ExceptionWithTraceback
 from billiard.pool import EX_FAILURE, EX_OK, EX_RECYCLE, soft_timeout_sighandler
 from celery.utils.log import get_logger
 
@@ -84,6 +84,31 @@ def _write_ready(sock, job, result, retire=False):
                  pickle.dumps(result, protocol=pickle.HIGHEST_PROTOCOL))
 
 
+def _clear_result_traceback(result):
+    # Il tracer prova a pulire anche i frame ancora in esecuzione. Dopo
+    # READY sono terminati: liberarli evita cicli con ExceptionInfo e le
+    # grandi liste co_positions di billiard, senza aspettare il GC globale.
+    value = result[1]
+    if result[0] and isinstance(value, tuple) and len(value) == 3:
+        value = value[1]
+    if isinstance(value, ExceptionInfo):
+        exception = value.exception
+        if isinstance(exception, ExceptionWithTraceback):
+            exception = exception.exc
+        if isinstance(exception, BaseException) and exception.__traceback__ is not None:
+            tb = exception.__traceback__
+            traceback.clear_frames(tb)
+            # f_back conserva anche fast_trace_task e il suo R: clear_frames
+            # percorre soltanto tb_next e lascia quel ciclo intatto.
+            frame = tb.tb_frame.f_back
+            while frame is not None:
+                try:
+                    frame.clear()
+                except RuntimeError:
+                    break
+                frame = frame.f_back
+
+
 def child_main(fd, app, hostname, maxtasks=0, max_memory_per_child=0):
     """Loop del figlio; ritorna l'exit code (stile billiard)."""
     from celery.concurrency.prefork import process_destructor, process_initializer
@@ -98,6 +123,10 @@ def child_main(fd, app, hostname, maxtasks=0, max_memory_per_child=0):
     reset_signals(full=True)
     signal.signal(signal.SIGUSR1, soft_timeout_sighandler)
 
+    probe = None
+    if os.environ.get('CELERY_RS_MEMORY_PROBE'):
+        from celery.concurrency._rs_memory_probe import MemoryProbe
+        probe = MemoryProbe(os.environ['CELERY_RS_MEMORY_PROBE'])
     completed = 0
     try:
         while not maxtasks or completed < maxtasks:
@@ -142,9 +171,12 @@ def child_main(fd, app, hostname, maxtasks=0, max_memory_per_child=0):
                 exitcode = EX_RECYCLE
                 retire = True
             _write_ready(sock, job, result, retire=retire)
+            _clear_result_traceback(result)
             # Il figlio inattivo non deve trattenere l'ultimo job e i suoi buffer.
             del result, target, args, kwargs, body
             _release_task_memory()
+            if probe is not None:
+                probe.sample(completed)
             if retire:
                 break
     except SystemExit as exc:
