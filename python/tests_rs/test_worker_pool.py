@@ -523,3 +523,47 @@ def test_zygote_preserves_user_gc_configuration(enabled):
     finally:
         gc.set_threshold(*previous_thresholds)
         (gc.enable if previous_enabled else gc.disable)()
+
+
+@app.task(shared=False)
+def backend_error_imports():
+    before = set(sys.modules)
+    connection_errors = app.backend.connection_errors
+    channel_errors = app.backend.channel_errors
+    assert connection_errors and channel_errors
+    return sorted(set(sys.modules) - before)
+
+
+def test_redis_error_imports_are_shared_by_pool_children():
+    # Un'interruzione del broker non deve importare redis/kombu in ogni figlio.
+    with Driver('rust', concurrency=2) as driver:
+        request, _, _, _ = driver.submit(backend_error_imports)
+        driver.wait()
+        assert driver.value(request) == []
+
+
+class _TrackedResult:
+    def __init__(self, path):
+        self.path = path
+        self.payload = bytearray(1024 * 1024)
+
+    def __reduce__(self):
+        return str, ('done',)
+
+    def __del__(self):
+        with open(self.path, 'w') as output:
+            output.write(str(os.getpid()))
+
+
+def _tracked_result(path):
+    return _TrackedResult(path)
+
+
+def test_idle_child_releases_last_job_result(tmp_path):
+    path = tmp_path / 'released'
+    with Driver('rust', concurrency=1) as driver:
+        result = driver.pool.apply_async(_tracked_result, args=(str(path),))
+        assert driver.wait_until(result.ready)
+        assert result.get() == 'done'
+        assert driver.wait_until(path.exists)
+        assert int(path.read_text()) in driver.pids()

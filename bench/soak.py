@@ -33,14 +33,16 @@ def descendants(root):
             stat = (proc / 'stat').read_text().rsplit(')', 1)[1].split()
             if stat[0] == 'Z':
                 continue
-            pss = next(int(line.split()[1]) for line in
-                       (proc / 'smaps_rollup').read_text().splitlines() if line.startswith('Pss:'))
+            memory = {parts[0].rstrip(':'): int(parts[1]) for line in
+                      (proc / 'smaps_rollup').read_text().splitlines()
+                      if len(parts := line.split()) == 3 and parts[2] == 'kB'}
+            pss = memory['Pss']
             status = (proc / 'status').read_text().splitlines()
             threads = next(int(line.split()[1]) for line in status if line.startswith('Threads:'))
             children = (proc / 'task' / str(pid) / 'children').read_text().split()
             found.append({'pid': pid, 'parent': parent, 'start': stat[19], 'pss_kib': pss,
                           'fds': len(list((proc / 'fd').iterdir())), 'threads': threads,
-                          'children': [int(p) for p in children]})
+                          'children': [int(p) for p in children], 'memory_kib': memory})
             todo.extend((int(child), pid) for child in children)
         except (FileNotFoundError, ProcessLookupError, PermissionError):
             continue

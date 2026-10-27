@@ -23,6 +23,11 @@ use crate::transport::{
     transport_error,
 };
 
+#[pyfunction]
+pub(crate) fn _release_task_memory() {
+    celery_backend::redis::release_task_memory();
+}
+
 /// `_celery_rs.Waker`: il loop Python dorme in `wait` finché un componente
 /// Rust (consumer, pool) non chiama `notify`.
 #[pyclass(name = "Waker", module = "_celery_rs", frozen)]

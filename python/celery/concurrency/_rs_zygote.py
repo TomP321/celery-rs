@@ -156,6 +156,17 @@ def _warm_cffi():
     ffi.cdef('int prctl (int __option, ...);')
 
 
+def _warm_backend_errors(app):
+    # Il primo errore di rete importa redis-py e kombu (~15 MB): questi
+    # oggetti devono nascere condivisi, prima del freeze e del fork dei figli.
+    from celery.backends.redis import RedisBackend
+
+    backend = app.backend
+    if isinstance(backend, RedisBackend):
+        backend.connection_errors
+        backend.channel_errors
+
+
 def _main(control, app, hostname):
     control.setblocking(True)
     # Importa presto: dopo `gc.freeze()` queste pagine restano condivise.
@@ -186,6 +197,7 @@ def _main(control, app, hostname):
             traceback.print_exc()
 
     _warm_cffi()
+    _warm_backend_errors(app)
     _close_inherited_fds({control.fileno()})
     # `gc.freeze()` (non `collect`): nel figlio di un master multi-thread i
     # finalizer di oggetti ereditati possono toccare stato non valido dopo il

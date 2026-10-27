@@ -1,0 +1,13 @@
+{
+  "probe": "100 store_result/forget, 1 MiB; stesso Python rs con binding precedente/nuovo",
+  "before": {
+    "baseline_kib": 26700,
+    "final_kib": 39284,
+    "growth_kib": 12584
+  },
+  "after": {
+    "baseline_kib": 26592,
+    "final_kib": 28948,
+    "growth_kib": 2356
+  }
+}

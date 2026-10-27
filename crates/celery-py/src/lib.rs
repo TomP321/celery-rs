@@ -30,6 +30,7 @@ fn _celery_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(transport::after_fork, m)?)?;
     m.add_class::<cron::PyCronSpec>()?;
     m.add_class::<transport::Connection>()?;
+    m.add_function(wrap_pyfunction!(worker::_release_task_memory, m)?)?;
     m.add_class::<worker::PyWaker>()?;
     m.add_class::<worker::PyWorkerConsumer>()?;
     m.add_class::<worker::PyPool>()?;
