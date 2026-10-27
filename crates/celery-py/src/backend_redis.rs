@@ -254,6 +254,10 @@ impl RedisClient {
         )
     }
 
+    fn ttl(&self, py: Python<'_>, key: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+        self.command(py, Command::Ttl { key: bytes_arg(key)? })
+    }
+
     fn publish(
         &self,
         py: Python<'_>,
@@ -594,7 +598,7 @@ impl RedisPubSub {
     }
 
     fn unsubscribe(&self, py: Python<'_>, channels: Vec<String>) -> PyResult<()> {
-        py.detach(|| self.inner.unsubscribe(&channels).map_err(redis_error))
+        py.detach(|| block(self.inner.unsubscribe(&channels)))
     }
 
     /// `can_read(timeout=0)`: c'è un messaggio senza consumarlo?

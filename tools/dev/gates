@@ -51,6 +51,7 @@ def main():
             'native-tests': ['.venv-ref/bin/python', '-m', 'pytest', 'crates/celery-py/tests', '-q'],
             **{f'tests_rs-{i + 1}': ['tools/dev/test-group', str(run_dir), *group]
                for i, group in enumerate(groups) if group},
+            'integration': ['./compat', 'integration'],
             'api': ['./compat', 'api'], 'wire': ['./compat', 'wire'],
             'upstream': ['./compat', 'upstream', '--venv', '.venv-rs'],
             'wire-worker-solo': ['./compat', 'wire-worker', '--pool', 'solo'],
@@ -129,14 +130,15 @@ def main():
                 break
     if not any(row[1] for row in rows) and not interrupted:
         with ThreadPoolExecutor(max_workers=count) as pool:
-            estimates = {'upstream': 500, 'wire-worker-prefork': 400,
+            estimates = {'integration': 1800, 'upstream': 500, 'wire-worker-prefork': 400,
                          'wire-worker-solo': 350, **{f'tests_rs-{i + 1}': cost
                                                    for i, cost in enumerate(costs)}}
             ordered = sorted(jobs.items(),
                              key=lambda item: weights.get('gate:' + item[0],
                                                           estimates.get(item[0], 60)),
                              reverse=True)
-            futures = [pool.submit(run, name, cmd) for name, cmd in ordered
+            # `integration` prende da sé una corsia per broker: niente lock esterno
+            futures = [pool.submit(run, name, cmd, name != 'integration') for name, cmd in ordered
                        if name in selected or ('tests_rs' in selected and name.startswith('tests_rs-'))]
             rows.extend(f.result() for f in futures)
     print('nome | esito | durata | sintesi')

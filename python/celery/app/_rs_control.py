@@ -167,7 +167,7 @@ def broadcast(control, connection, command, arguments=None, destination=None,
             content_encoding,
             headers,
             reply_route,
-            timeout,
+            timeout if reply_ticket else 0.0,
             limit,
             reply_ticket,
         )

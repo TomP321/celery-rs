@@ -4,7 +4,7 @@ Il master forka questo processo **prima** di avviare i thread Rust del pool
 (ma può avere già il runtime del producer: gli ``after_fork`` del pacchetto
 scartano i runtime/socket ereditati). Lo zygote:
 
-1. chiude i descrittori ereditati dal padre (non usa mai i suoi socket);
+1. chiude i descrittori ereditati dal padre, conservando controllo e log;
 2. importa i moduli pesanti (app, task, ``celery.concurrency.prefork``) e fa
    ``gc.freeze()``: le pagine diventano condivise in copy-on-write da tutti i
    figli;
@@ -15,10 +15,12 @@ scartano i runtime/socket ereditati). Lo zygote:
 
 import array
 import gc
+import logging
 import os
 import socket
 import struct
 import traceback
+from itertools import chain
 
 __all__ = ('create',)
 
@@ -76,7 +78,8 @@ def _close_inherited_fds(keep):
     padre (socket, epoll) non sono utilizzabili dopo il fork e non devono
     restare aperti nello zygote/figli. Si tengono anche gli fd di
     ``sys.stdout``/``sys.stderr``/``sys.stdin``: con la cattura di pytest o un
-    log rediretto possono non essere 0/1/2.
+    log rediretto possono non essere 0/1/2. Conserva anche gli stream e le
+    connessioni delle code posseduti dagli handler di logging.
     """
     import sys as _sys
 
@@ -86,6 +89,21 @@ def _close_inherited_fds(keep):
             keep.add(stream.fileno())
         except (AttributeError, OSError, ValueError):
             pass
+    # Gli handler restano vivi nei figli: un fd chiuso qui può essere
+    # riutilizzato dal broker e ricevere successivamente i byte dei log.
+    for logger in chain((logging.getLogger(),),
+                        logging.Logger.manager.loggerDict.values()):
+        if not isinstance(logger, logging.Logger):
+            continue
+        for handler in logger.handlers:
+            queue = getattr(handler, 'queue', None)
+            for stream in (getattr(handler, 'stream', None),
+                           getattr(queue, '_reader', None),
+                           getattr(queue, '_writer', None)):
+                try:
+                    keep.add(stream.fileno())
+                except (AttributeError, OSError, ValueError):
+                    pass
     try:
         entries = [int(entry) for entry in os.listdir('/proc/self/fd')
                    if entry.isdigit()]

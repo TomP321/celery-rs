@@ -906,6 +906,19 @@ impl Connection {
             None => Headers::new(),
         };
         let mut properties: Properties = match properties {
+            Some(dict) if !self.virtual_transport => {
+                let mut properties = Headers::with_capacity(dict.len());
+                for (key, value) in dict.iter() {
+                    let key = key.extract::<&str>()?;
+                    // py-amqp ignora le proprietà sconosciute senza convertirne i valori.
+                    if matches!(key, "delivery_mode" | "priority" | "correlation_id"
+                        | "reply_to" | "expiration" | "message_id" | "timestamp"
+                        | "type" | "user_id" | "app_id" | "cluster_id") && !value.is_none() {
+                        properties.insert(key, py_to_value(&value)?);
+                    }
+                }
+                properties.into()
+            }
             Some(dict) => py_to_headers(dict)?.into(),
             None => Properties::new(),
         };
