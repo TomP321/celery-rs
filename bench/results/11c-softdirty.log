@@ -1,0 +1,9 @@
+corsia 0: .venv-rs/bin/python -
+bytes=0 immortalize=0
+{"child_dirty_pages": 260, "inherited_dirty_pages": 260, "master_dirty_pages": 252, "child_private_growth_kib": 16, "master_private_growth_kib": 80, "dominant_types": [["code", 67], ["str", 39], ["function", 27], ["tuple", 22], ["type", 21], ["dict", 12], ["method_descriptor", 11], ["builtin_function_or_method", 8], ["wrapper_descriptor", 8], ["cell", 6], ["ReferenceType", 5], ["set", 4], ["method", 3], ["int", 3], ["member_descriptor", 2]], "unknown_pages": 14}
+bytes=0 immortalize=1
+{"child_dirty_pages": 144, "inherited_dirty_pages": 144, "master_dirty_pages": 170, "child_private_growth_kib": 44, "master_private_growth_kib": 64, "dominant_types": [["code", 50], ["tuple", 24], ["str", 21], ["dict", 6], ["type", 5], ["cell", 4], ["function", 3], ["set", 3], ["method", 2], ["int", 2], ["object", 2], ["ReferenceType", 1], ["cython_function_or_method", 1], ["EnumType", 1], ["cached_property", 1]], "unknown_pages": 18}
+bytes=16384 immortalize=0
+{"child_dirty_pages": 281, "inherited_dirty_pages": 281, "master_dirty_pages": 233, "child_private_growth_kib": 44, "master_private_growth_kib": 48, "dominant_types": [["code", 69], ["str", 39], ["tuple", 28], ["function", 27], ["type", 21], ["dict", 14], ["method_descriptor", 12], ["builtin_function_or_method", 8], ["wrapper_descriptor", 8], ["cell", 6], ["ReferenceType", 5], ["method", 3], ["set", 3], ["int", 3], ["getset_descriptor", 3]], "unknown_pages": 22}
+bytes=16384 immortalize=1
+{"child_dirty_pages": 131, "inherited_dirty_pages": 131, "master_dirty_pages": 159, "child_private_growth_kib": 40, "master_private_growth_kib": 28, "dominant_types": [["code", 51], ["tuple", 17], ["str", 16], ["type", 5], ["dict", 4], ["function", 3], ["method", 2], ["int", 2], ["cell", 2], ["set", 2], ["object", 2], ["Counter", 1], ["cython_function_or_method", 1], ["EnumType", 1], ["cached_property", 1]], "unknown_pages": 21}

@@ -1,0 +1,5 @@
+corsia 0: .venv-rs/bin/python /tmp/11c-amqp-long.py
+broker=amqp bytes=0 tasks=300000 immortalize=0
+.venv-rs idle tot=66.0 (10) | PICCO tot=74.8 master=15.6 zygote=5.1 figli=54.1 (10) | dopo tot=74.8 master=15.6 zygote=5.1 figli=54.1 | 4382 task/s
+broker=amqp bytes=0 tasks=300000 immortalize=1
+.venv-rs idle tot=50.1 (10) | PICCO tot=57.3 master=13.2 zygote=4.0 figli=40.2 (10) | dopo tot=57.3 master=13.2 zygote=4.0 figli=40.2 | 4292 task/s

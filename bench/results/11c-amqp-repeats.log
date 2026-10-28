@@ -1,0 +1,9 @@
+corsia 0: .venv-rs/bin/python /tmp/11c-amqp-repeat.py
+repetition=2 broker=amqp bytes=0 immortalize=0
+.venv-rs idle tot=66.5 (10) | PICCO tot=74.5 master=14.9 zygote=5.1 figli=54.5 (10) | dopo tot=74.5 master=14.9 zygote=5.1 figli=54.5 | 4107 task/s
+repetition=2 broker=amqp bytes=0 immortalize=1
+.venv-rs idle tot=50.0 (10) | PICCO tot=56.5 master=12.5 zygote=3.9 figli=40.1 (10) | dopo tot=56.5 master=12.5 zygote=3.9 figli=40.1 | 4096 task/s
+repetition=3 broker=amqp bytes=0 immortalize=0
+.venv-rs idle tot=66.2 (10) | PICCO tot=74.6 master=15.0 zygote=5.1 figli=54.4 (10) | dopo tot=74.6 master=15.1 zygote=5.1 figli=54.4 | 4266 task/s
+repetition=3 broker=amqp bytes=0 immortalize=1
+.venv-rs idle tot=50.1 (10) | PICCO tot=56.6 master=12.5 zygote=4.0 figli=40.1 (10) | dopo tot=56.6 master=12.5 zygote=4.0 figli=40.1 | 3998 task/s

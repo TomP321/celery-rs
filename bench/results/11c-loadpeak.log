@@ -1,0 +1,17 @@
+corsia 0: /home/ubuntu/HDD/celery-rs-wt/11c-immortal-load/.venv-rs/bin/python /tmp/11c-measure.py
+broker=redis bytes=0 immortalize=0
+.venv-rs idle tot=66.3 (10) | PICCO tot=73.1 master=13.5 zygote=5.1 figli=54.5 (10) | dopo tot=73.1 master=13.5 zygote=5.1 figli=54.5 | 2829 task/s
+broker=redis bytes=0 immortalize=1
+.venv-rs idle tot=49.5 (10) | PICCO tot=53.7 master=10.9 zygote=3.9 figli=38.9 (10) | dopo tot=53.7 master=10.9 zygote=3.9 figli=38.9 | 2822 task/s
+broker=redis bytes=16384 immortalize=0
+.venv-rs idle tot=66.0 (10) | PICCO tot=74.8 master=14.9 zygote=5.1 figli=54.8 (10) | dopo tot=74.8 master=14.9 zygote=5.1 figli=54.8 | 1828 task/s
+broker=redis bytes=16384 immortalize=1
+.venv-rs idle tot=49.6 (10) | PICCO tot=57.3 master=12.8 zygote=3.9 figli=40.6 (10) | dopo tot=57.3 master=12.8 zygote=3.9 figli=40.6 | 1825 task/s
+broker=amqp bytes=0 immortalize=0
+.venv-rs idle tot=66.3 (10) | PICCO tot=74.7 master=15.0 zygote=5.1 figli=54.5 (10) | dopo tot=74.7 master=15.0 zygote=5.1 figli=54.5 | 4219 task/s
+broker=amqp bytes=0 immortalize=1
+.venv-rs idle tot=49.8 (10) | PICCO tot=56.5 master=12.5 zygote=3.9 figli=40.0 (10) | dopo tot=56.5 master=12.5 zygote=3.9 figli=40.0 | 3993 task/s
+broker=amqp bytes=16384 immortalize=0
+.venv-rs idle tot=66.5 (10) | PICCO tot=77.8 master=16.4 zygote=5.2 figli=56.2 (10) | dopo tot=77.8 master=16.4 zygote=5.2 figli=56.2 | 2723 task/s
+broker=amqp bytes=16384 immortalize=1
+.venv-rs idle tot=49.8 (10) | PICCO tot=58.1 master=13.7 zygote=3.9 figli=40.5 (10) | dopo tot=58.2 master=13.8 zygote=3.9 figli=40.5 | 2979 task/s

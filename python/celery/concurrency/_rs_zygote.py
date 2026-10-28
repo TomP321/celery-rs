@@ -48,6 +48,7 @@ def create(app, hostname):
     gc_enabled = gc.isenabled()
     gc.disable()
     try:
+        _immortalize_heap()
         pid = os.fork()
     except BaseException:
         if gc_enabled:
@@ -71,6 +72,15 @@ def create(app, hostname):
         gc.enable()
     child.close()
     return parent, pid
+
+
+def _immortalize_heap():
+    if os.environ.get("CELERY_RS_IMMORTALIZE") == "0":
+        return
+    from _celery_rs import _immortalize, _release_task_memory
+
+    _immortalize(gc.get_objects())
+    _release_task_memory(force=True)
 
 
 def _fd_identity(fd):
@@ -209,6 +219,7 @@ def _main(control, app, hostname):
     # `gc.freeze()` (non `collect`): nel figlio di un master multi-thread i
     # finalizer di oggetti ereditati possono toccare stato non valido dopo il
     # fork; congelare le pagine basta per la condivisione copy-on-write.
+    _immortalize_heap()
     gc.freeze()
     _rs_child._release_task_memory(force=True)
 

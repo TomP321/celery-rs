@@ -44,3 +44,23 @@ dell'allocatore (`malloc_trim`). Nessun effetto funzionale; costo di CPU proporz
 ## Processi
 Il pool prefork ha un processo in più: lo zygote, da cui nascono i figli (il master contiene i
 thread del runtime Rust e non può forkare in sicurezza). Con `-c 10`: master, zygote, 10 figli.
+
+## Oggetti immortali nel pool prefork Rust
+Su CPython 3.12–3.14 con GIL, a 64 bit little-endian, il master e lo zygote
+rendono immortali gli oggetti già presenti prima del fork e i loro referenti.
+Si riducono le pagine copiate per aggiornare i refcount nei figli. La visita usa
+`tp_traverse` anche sui contenitori non tracciati, con profondità massima 128;
+il refcount stesso interrompe i cicli, senza grandi strutture temporanee.
+Sono esclusi gli oggetti già immortali, quelli con `tp_finalize`/`tp_del` e le
+istanze native `_celery_rs` (devono poter chiudere socket e runtime).
+
+Questi oggetti non vengono più liberati: i weakref, le `WeakValueDictionary` e
+i receiver deboli dei segnali possono restare vivi fino alla fine del processo;
+`sys.getrefcount()` restituisce valori enormi. Le istanze con finalizzatore di tipo
+sono escluse, ma possono restare vive se trattenute da un contenitore immortale;
+un `__del__` aggiunto al tipo dopo la visita non farà
+liberare le istanze già immortali. Gli oggetti creati dopo restano normali.
+Questo compromesso è accettato per il pool prefork, dove il patrimonio iniziale
+è precaricato per tutta la vita del worker e il risparmio di RAM è prioritario.
+`CELERY_RS_IMMORTALIZE=0` ripristina il comportamento precedente. Sugli altri
+interpreti, build free-threaded, architetture e versioni la funzione è un no-op.
