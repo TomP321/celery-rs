@@ -38,7 +38,22 @@ def tree(pid):
     return pids
 
 
-def memory_snapshot(pid):
+def mapping_snapshot(pid):
+    mappings = {}
+    group = None
+    for line in Path(f'/proc/{pid}/smaps').read_text().splitlines():
+        fields = line.split()
+        if '-' in fields[0]:
+            name = fields[5] if len(fields) > 5 else '[anonymous]'
+            group = mappings.setdefault(name, {})
+        elif fields[0].rstrip(':') in (
+                'Size', 'Pss', 'Private_Dirty', 'Private_Clean', 'Shared_Dirty', 'Shared_Clean'):
+            key = fields[0].rstrip(':')
+            group[key] = group.get(key, 0) + int(fields[1])
+    return mappings
+
+
+def memory_snapshot(pid, mappings=False):
     records = []
     pids = tree(pid)
     parents = {}
@@ -56,6 +71,9 @@ def memory_snapshot(pid):
             records.append({'pid': process, 'ppid': parent,
                             'pss_kb': values['Pss'],
                             'private_dirty_kb': values['Private_Dirty']})
+            if mappings:
+                records[-1]['mappings_kib'] = mapping_snapshot(process)
+                records[-1]['threads'] = len(os.listdir(f'/proc/{process}/task'))
         except (OSError, StopIteration, KeyError):
             continue
     for record in records:
@@ -195,7 +213,7 @@ def main():
     try:
         wait_ready(worker)
         time.sleep(3)
-        idle_processes = memory_snapshot(worker.pid)
+        idle_processes = memory_snapshot(worker.pid, mappings=True)
         idle_per = [record['pss_kb'] for record in idle_processes]
         idle_total = sum(idle_per)
 
@@ -243,7 +261,7 @@ def main():
 
         throughput_processes = memory_snapshot(worker.pid)
         lat = client(args.venv, LATENCY.format(n=args.latency_n), env)
-        after_processes = memory_snapshot(worker.pid)
+        after_processes = memory_snapshot(worker.pid, mappings=True)
         after_per = [record['pss_kb'] for record in after_processes]
         after_total = sum(after_per)
         sampling.set()

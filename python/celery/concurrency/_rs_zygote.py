@@ -251,7 +251,9 @@ def _main(control, app, hostname):
             except OSError:
                 pass
             try:
-                _close_inherited_fds({child_fd})
+                # Lo zygote ha già chiuso i fd del master. Restano soltanto
+                # stdio/log, controllo (appena chiuso) e il socket del figlio:
+                # riscansionare i logger qui sporcherebbe le pagine condivise.
                 code = _rs_child.child_main(
                     child_fd, app, hostname, maxtasks, max_memory)
             except BaseException:
