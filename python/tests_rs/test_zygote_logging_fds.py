@@ -13,7 +13,8 @@ ROOT = Path(__file__).resolve().parents[2]
 def test_zygote_preserves_logging_descriptors(logger_name, handler_kind):
     script = r'''
 import json, logging, logging.handlers, os, socket, sys
-from celery.concurrency._rs_zygote import _close_inherited_fds
+from celery.concurrency._rs_zygote import _close_inherited_fds, _snapshot_runtime_fds
+import _celery_rs
 
 logger = logging.getLogger(sys.argv[1])
 logger.setLevel(logging.ERROR)
@@ -26,12 +27,16 @@ else:
     queue = Queue()
     handler = logging.handlers.QueueHandler(queue)
 logger.addHandler(handler)
+connection = _celery_rs.Connection("memory://")
+connection.declare_queue("logging-fds")
+runtime_fds = _snapshot_runtime_fds(_celery_rs._runtime_fds())
+assert runtime_fds
 read_fd, write_fd = os.pipe()
 pid = os.fork()
 if pid == 0:
     try:
-        _close_inherited_fds({write_fd})
-        _close_inherited_fds({write_fd})
+        _close_inherited_fds({write_fd}, runtime_fds)
+        _close_inherited_fds({write_fd}, runtime_fds)
         left, right = socket.socketpair()
         left.settimeout(0.3)
         right.settimeout(0.3)

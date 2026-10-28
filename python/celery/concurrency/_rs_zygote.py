@@ -4,7 +4,7 @@ Il master forka questo processo **prima** di avviare i thread Rust del pool
 (ma può avere già il runtime del producer: gli ``after_fork`` del pacchetto
 scartano i runtime/socket ereditati). Lo zygote:
 
-1. chiude i descrittori ereditati dal padre, conservando controllo e log;
+1. chiude solo i descrittori del runtime Rust ereditati dal padre;
 2. importa i moduli pesanti (app, task, ``celery.concurrency.prefork``) e fa
    ``gc.freeze()``: le pagine diventano condivise in copy-on-write da tutti i
    figli;
@@ -15,12 +15,10 @@ scartano i runtime/socket ereditati). Lo zygote:
 
 import array
 import gc
-import logging
 import os
 import socket
 import struct
 import traceback
-from itertools import chain
 
 __all__ = ('create',)
 
@@ -41,6 +39,9 @@ def create(app, hostname):
 
     Va chiamata dal master prima di avviare thread propri del pool.
     """
+    from _celery_rs import _runtime_fds
+
+    runtime_fds = _snapshot_runtime_fds(_runtime_fds())
     parent, child = socket.socketpair(socket.AF_UNIX, socket.SOCK_STREAM)
     # I callback after_fork e gli import possono avviare il GC prima che
     # l'heap ereditato sia congelato; i finalizer dei thread non sono sicuri.
@@ -60,6 +61,7 @@ def create(app, hostname):
             gc.enable()
         try:
             parent.close()
+            _close_inherited_fds({child.fileno()}, runtime_fds)
             _main(child, app, hostname)
         except BaseException:
             traceback.print_exc()
@@ -71,51 +73,56 @@ def create(app, hostname):
     return parent, pid
 
 
-def _close_inherited_fds(keep):
-    """Chiude tutto tranne stdio e i fd in ``keep``.
-
-    Linux: enumerazione di ``/proc/self/fd``. Gli fd del runtime Rust del
-    padre (socket, epoll) non sono utilizzabili dopo il fork e non devono
-    restare aperti nello zygote/figli. Si tengono anche gli fd di
-    ``sys.stdout``/``sys.stderr``/``sys.stdin``: con la cattura di pytest o un
-    log rediretto possono non essere 0/1/2. Conserva anche gli stream e le
-    connessioni delle code posseduti dagli handler di logging.
-    """
-    import sys as _sys
-
-    keep = set(keep)
-    for stream in (_sys.stdout, _sys.stderr, _sys.stdin):
-        try:
-            keep.add(stream.fileno())
-        except (AttributeError, OSError, ValueError):
-            pass
-    # Gli handler restano vivi nei figli: un fd chiuso qui può essere
-    # riutilizzato dal broker e ricevere successivamente i byte dei log.
-    for logger in chain((logging.getLogger(),),
-                        logging.Logger.manager.loggerDict.values()):
-        if not isinstance(logger, logging.Logger):
-            continue
-        for handler in logger.handlers:
-            queue = getattr(handler, 'queue', None)
-            for stream in (getattr(handler, 'stream', None),
-                           getattr(queue, '_reader', None),
-                           getattr(queue, '_writer', None)):
-                try:
-                    keep.add(stream.fileno())
-                except (AttributeError, OSError, ValueError):
-                    pass
+def _fd_identity(fd):
     try:
-        entries = [int(entry) for entry in os.listdir('/proc/self/fd')
-                   if entry.isdigit()]
+        stat = os.fstat(fd)
+        return stat.st_dev, stat.st_ino
     except OSError:
-        entries = []
-    for fd in entries:
-        if fd < 3 or fd in keep:
+        return None
+
+
+def _snapshot_runtime_fds(fds):
+    result = {}
+    for fd in fds:
+        identity = _fd_identity(fd)
+        if identity is None or (hasattr(fds, 'items') and fds[fd] != identity):
             continue
+        result[fd] = identity
         try:
-            os.close(fd)
-        except OSError:
+            with open(f'/proc/self/fdinfo/{fd}') as info:
+                for line in info:
+                    if line.startswith('tfd:'):
+                        fields = line.replace(':', ': ').split()
+                        target = int(fields[1])
+                        expected = (int(fields[fields.index('sdev:') + 1], 16),
+                                    int(fields[fields.index('ino:') + 1], 16))
+                        # epoll è condiviso col padre: una connessione aperta
+                        # dopo il fork può avere un numero uguale a un fd Python.
+                        if _fd_identity(target) == expected:
+                            result[target] = expected
+        except FileNotFoundError:
             pass
+    return result
+
+
+def _close_inherited_fds(keep, runtime_fds=None):
+    """Chiude solo gli fd Rust, senza acquisire mutex ereditati.
+
+    La foto prima del fork conserva anche le connessioni che il padre chiude
+    subito dopo; fdinfo nel figlio include quelle aperte prima del fork ma
+    dopo la foto. Le identità impediscono chiusure di numeri già riciclati.
+    Non si modifica epoll, condiviso col padre.
+    """
+    runtime_fds = runtime_fds or {}
+    inherited = {fd: identity for fd, identity in runtime_fds.items()
+                 if _fd_identity(fd) == identity}
+    close = _snapshot_runtime_fds(inherited)
+    for fd, identity in close.items():
+        if fd >= 3 and fd not in keep and _fd_identity(fd) == identity:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
 
 
 def _recv_control(control):
@@ -199,7 +206,6 @@ def _main(control, app, hostname):
         # Solo un'ottimizzazione: se fallisce (es. dipendenze del backend
         # mancanti) l'errore resta quello del riferimento, al primo uso.
         traceback.print_exc()
-    _close_inherited_fds({control.fileno()})
     # `gc.freeze()` (non `collect`): nel figlio di un master multi-thread i
     # finalizer di oggetti ereditati possono toccare stato non valido dopo il
     # fork; congelare le pagine basta per la condivisione copy-on-write.
@@ -256,9 +262,8 @@ def _main(control, app, hostname):
             except OSError:
                 pass
             try:
-                # Lo zygote ha già chiuso i fd del master. Restano soltanto
-                # stdio/log, controllo (appena chiuso) e il socket del figlio:
-                # riscansionare i logger qui sporcherebbe le pagine condivise.
+                # Gli fd Python restano ereditabili; quelli Rust sono già
+                # chiusi nello zygote. Nessuna riscansione sporca il CoW.
                 code = _rs_child.child_main(
                     child_fd, app, hostname, maxtasks, max_memory)
             except BaseException:

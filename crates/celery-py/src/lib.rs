@@ -28,6 +28,7 @@ fn _celery_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(task::encode_task_v2, m)?)?;
     m.add_function(wrap_pyfunction!(cron::cron_parse, m)?)?;
     m.add_function(wrap_pyfunction!(transport::after_fork, m)?)?;
+    m.add_function(wrap_pyfunction!(transport::_runtime_fds, m)?)?;
     m.add_class::<cron::PyCronSpec>()?;
     m.add_class::<transport::Connection>()?;
     m.add_function(wrap_pyfunction!(worker::_release_task_memory, m)?)?;

@@ -27,6 +27,7 @@ mod fd {
 
     #[derive(Debug)]
     pub struct NotifyFd {
+        _registration: Option<crate::fds::Registration>,
         fd: RawFd,
     }
 
@@ -38,7 +39,10 @@ mod fd {
             if fd < 0 {
                 Err(io::Error::last_os_error())
             } else {
-                Ok(Self { fd })
+                Ok(Self {
+                    _registration: Some(crate::fds::Registration::new(fd)),
+                    fd,
+                })
             }
         }
 
@@ -81,6 +85,7 @@ mod fd {
 
     impl Drop for NotifyFd {
         fn drop(&mut self) {
+            self._registration.take();
             // SAFETY: il fd è nostro e non viene usato dopo la chiusura.
             unsafe {
                 libc::close(self.fd);

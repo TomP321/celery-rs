@@ -23,7 +23,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 /// Un figlio appena creato: pid e estremità master dello `socketpair`.
 pub struct SpawnedChild {
     pub pid: i32,
-    pub stream: UnixStream,
+    pub stream: crate::fds::Tracked<UnixStream>,
 }
 
 /// Chi crea, segnala e raccoglie i figli.
@@ -55,7 +55,7 @@ const CONTROL_FRAME_LEN: usize = 9;
 
 /// Spawner reale: parla con il processo zygote Python.
 pub struct ZygoteSpawner {
-    control: Mutex<UnixStream>,
+    control: Mutex<crate::fds::Tracked<UnixStream>>,
     zygote_pid: i32,
     maxtasks: u32,
     max_memory_kb: u32,
@@ -80,7 +80,7 @@ impl ZygoteSpawner {
         let control = unsafe { UnixStream::from_raw_fd(dup) };
         control.set_nonblocking(false)?;
         Ok(Self {
-            control: Mutex::new(control),
+            control: Mutex::new(crate::fds::Tracked::new(control)),
             zygote_pid,
             maxtasks: maxtasks.unwrap_or(0),
             max_memory_kb: max_memory_kb.unwrap_or(0),
@@ -143,7 +143,8 @@ impl ZygoteSpawner {
         let mut errlen = [0u8; 4];
         errlen.copy_from_slice(&body[5..9]);
         let errlen = u32::from_be_bytes(errlen) as usize;
-        let message = String::from_utf8_lossy(&body[9..9 + errlen.min(body.len() - 9)]).into_owned();
+        let message =
+            String::from_utf8_lossy(&body[9..9 + errlen.min(body.len() - 9)]).into_owned();
         if status != 0 {
             return Err(io::Error::other(if message.is_empty() {
                 "lo zygote non ha creato il figlio".to_owned()
@@ -177,9 +178,9 @@ impl Spawner for ZygoteSpawner {
             return Err(io::Error::last_os_error());
         }
         // SAFETY: entrambi i descrittori sono appena stati creati e di nostra proprietà.
-        let master = unsafe { UnixStream::from_raw_fd(fds[0]) };
+        let master = crate::fds::Tracked::new(unsafe { UnixStream::from_raw_fd(fds[0]) });
         // SAFETY: idem; viene chiuso dopo l'invio a meno che lo zygote lo adotti.
-        let child = unsafe { OwnedFd::from_raw_fd(fds[1]) };
+        let child = crate::fds::Tracked::new(unsafe { OwnedFd::from_raw_fd(fds[1]) });
         use std::os::fd::AsRawFd;
 
         if let Err(error) = self.send_control(CONTROL_SPAWN, Some(child.as_raw_fd())) {
@@ -194,7 +195,10 @@ impl Spawner for ZygoteSpawner {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         match Self::read_reply(&mut control) {
-            Ok(pid) => Ok(SpawnedChild { pid, stream: master }),
+            Ok(pid) => Ok(SpawnedChild {
+                pid,
+                stream: master,
+            }),
             Err(error) => {
                 self.lost.store(true, Ordering::Release);
                 Err(error)

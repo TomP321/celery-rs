@@ -36,11 +36,72 @@ use celery_transport::{
 /// entry dice se va ricreato (lazy, al primo uso nel nuovo processo).
 struct RuntimeEntry {
     pid: u32,
+    _fds: Vec<celery_worker::fds::Registration>,
     runtime: tokio::runtime::Runtime,
 }
 
 /// Le entry non vengono mai liberate: dopo fork si azzera solo il puntatore.
 static RUNTIME: AtomicPtr<RuntimeEntry> = AtomicPtr::new(ptr::null_mut());
+
+// La sonda identifica il driver per appartenenza, anche se altri thread
+// aprono contemporaneamente epoll propri. Nessun fd Python viene marcato.
+#[cfg(target_os = "linux")]
+fn runtime_fds(runtime: &tokio::runtime::Runtime) -> Result<Vec<i32>, String> {
+    use std::os::fd::AsRawFd;
+    let (probe, _peer) =
+        std::os::unix::net::UnixStream::pair().map_err(|error| error.to_string())?;
+    probe
+        .set_nonblocking(true)
+        .map_err(|error| error.to_string())?;
+    let _entered = runtime.enter();
+    // SAFETY: AsyncFd possiede lo UnixStream; nessun altro può chiuderne
+    // il descrittore o cambiarlo fino alla distruzione della sonda.
+    let probe = unsafe { tokio::io::unix::AsyncFd::register(probe) }
+        .map_err(|error| error.to_string())?;
+    let probe_fd = probe.as_raw_fd();
+    let entries = std::fs::read_dir("/proc/self/fd").map_err(|error| error.to_string())?;
+    let mut fds = Vec::new();
+    for entry in entries {
+        let entry = entry.map_err(|error| error.to_string())?;
+        if std::fs::read_link(entry.path()).ok().as_deref()
+            != Some(std::path::Path::new("anon_inode:[eventpoll]"))
+        {
+            continue;
+        }
+        let Some(fd) = entry
+            .file_name()
+            .to_str()
+            .and_then(|name| name.parse::<i32>().ok())
+        else {
+            continue;
+        };
+        let Ok(info) = std::fs::read_to_string(format!("/proc/self/fdinfo/{fd}")) else {
+            continue;
+        };
+        if info.lines().any(|line| {
+            line.strip_prefix("tfd:")
+                .and_then(|rest| rest.split_whitespace().next())
+                .and_then(|value| value.parse::<i32>().ok())
+                == Some(probe_fd)
+        }) {
+            fds.push(fd);
+        }
+    }
+    if fds.is_empty() {
+        return Err("driver epoll tokio non trovato".into());
+    }
+    Ok(fds)
+}
+
+#[cfg(not(target_os = "linux"))]
+fn runtime_fds(_runtime: &tokio::runtime::Runtime) -> Result<Vec<i32>, String> {
+    Ok(Vec::new())
+}
+
+#[pyfunction]
+pub fn _runtime_fds() -> std::collections::BTreeMap<i32, (u64, u64)> {
+    celery_worker::fds::snapshot()
+}
 
 fn build_runtime() -> Result<tokio::runtime::Runtime, String> {
     // Un worker thread (non il chiamante) guida driver I/O e timer anche
@@ -66,9 +127,15 @@ pub(crate) fn runtime() -> Result<&'static tokio::runtime::Runtime, String> {
                 return Ok(&entry.runtime);
             }
         }
+        let runtime = build_runtime()?;
+        let fds = runtime_fds(&runtime)?
+            .into_iter()
+            .map(celery_worker::fds::Registration::new)
+            .collect();
         let fresh = Box::into_raw(Box::new(RuntimeEntry {
             pid,
-            runtime: build_runtime()?,
+            runtime,
+            _fds: fds,
         }));
         match RUNTIME.compare_exchange(current, fresh, Ordering::AcqRel, Ordering::Acquire) {
             Ok(_) => {

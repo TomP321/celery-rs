@@ -164,7 +164,7 @@ struct Active {
 #[derive(Debug)]
 struct Child {
     pid: i32,
-    writer: UnixStream,
+    writer: crate::fds::Tracked<UnixStream>,
     active: Option<Active>,
     /// Dopo un hard timeout: istante in cui inviare SIGKILL se SIGTERM non basta.
     pending_kill: Option<Instant>,
@@ -928,7 +928,10 @@ fn spawn_to_target(inner: &Arc<Inner>) {
                     state.idle.push_back(id);
                     id
                 };
-                spawn_reader(id, pid, reader, inner.spawner.clone(), inner.tx.clone());
+                spawn_reader(
+                    id, pid, crate::fds::Tracked::new(reader),
+                    inner.spawner.clone(), inner.tx.clone(),
+                );
             }
             Err(error) => {
                 mark_zygote_lost(inner, Some(error));
@@ -956,7 +959,7 @@ fn mark_zygote_lost(inner: &Arc<Inner>, _error: Option<io::Error>) {
 fn spawn_reader(
     child_id: u32,
     pid: i32,
-    reader: UnixStream,
+    reader: crate::fds::Tracked<UnixStream>,
     spawner: Arc<dyn Spawner>,
     tx: Sender<Command>,
 ) {
@@ -964,7 +967,7 @@ fn spawn_reader(
         .name(format!("celery-rs-pool-child-{child_id}"))
         .spawn(move || {
             let mut reader = reader;
-            while let Ok(Some(frame)) = read_frame(&mut reader) {
+            while let Ok(Some(frame)) = read_frame(&mut *reader) {
                 if tx.send(Command::Frame { child: child_id, frame }).is_err() {
                     return;
                 }
@@ -1338,7 +1341,7 @@ mod tests {
             thread::spawn(move || fake_child_loop(peer, control));
             Ok(SpawnedChild {
                 pid,
-                stream: master,
+                stream: crate::fds::Tracked::new(master),
             })
         }
 

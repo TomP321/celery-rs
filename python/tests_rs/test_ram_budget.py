@@ -26,7 +26,7 @@ def test_prefork_private_startup_pages(tmp_path):
                if p['role'] == 'child') <= 5.4 * 1024, data
 
 
-def test_zygote_closes_master_fds_once_and_children_keep_only_their_socket(tmp_path):
+def test_zygote_closes_runtime_fds_once_and_children_preserve_user_fds(tmp_path):
     code = r'''
 import fcntl, json, os, time
 from celery import Celery
@@ -36,20 +36,15 @@ app = Celery('fds', broker='memory://', backend='cache+memory://')
 app.finalize()
 path = os.environ['CLOSE_CALLS']
 original = _rs_zygote._close_inherited_fds
-def close(keep):
+def close(keep, runtime_fds=None):
     with open(path, 'a') as output:
         output.write(str(os.getpid()) + '\n')
-    return original(keep)
+    return original(keep, runtime_fds)
 _rs_zygote._close_inherited_fds = close
 with open('/dev/null') as stream:
     master_fd = fcntl.fcntl(stream.fileno(), fcntl.F_DUPFD_CLOEXEC, 512)
 def inspect_fds():
-    try:
-        os.fstat(master_fd)
-    except OSError:
-        pass
-    else:
-        raise AssertionError('fd del master ereditato')
+    os.fstat(master_fd)
     return os.getpid(), sorted(os.listdir('/proc/self/fd'))
 pool = RsTaskPool(10, app=app, initargs=(app, 'fds@test'))
 pool.start()

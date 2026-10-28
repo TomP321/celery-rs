@@ -24,7 +24,7 @@ compact_str.workspace = true
 futures-core.workspace = true
 libc.workspace = true
 pyo3.workspace = true
-tokio = { workspace = true, features = ["rt", "time"] }
+tokio = { workspace = true, features = ["rt", "time", "net"] }
 
 [build-dependencies]
 pyo3-build-config.workspace = true
