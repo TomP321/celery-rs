@@ -193,7 +193,12 @@ def _main(control, app, hostname):
         except Exception:  # pragma: no cover - dipendenze opzionali
             traceback.print_exc()
 
-    _warm_backend_errors(app)
+    try:
+        _warm_backend_errors(app)
+    except Exception:
+        # Solo un'ottimizzazione: se fallisce (es. dipendenze del backend
+        # mancanti) l'errore resta quello del riferimento, al primo uso.
+        traceback.print_exc()
     _close_inherited_fds({control.fileno()})
     # `gc.freeze()` (non `collect`): nel figlio di un master multi-thread i
     # finalizer di oggetti ereditati possono toccare stato non valido dopo il
