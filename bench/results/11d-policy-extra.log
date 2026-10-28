@@ -1,0 +1,9 @@
+corsia 0: .venv-rs/bin/python /tmp/11d-policy-extra.py
+policy=2 Python=311
+.venv-rs311 idle tot=72.3 (10) | PICCO tot=85.2 master=15.2 zygote=6.1 figli=63.9 (10) | dopo tot=85.2 master=15.2 zygote=6.1 figli=63.9 | 2730 task/s
+policy=2 Python=313
+.venv-rs idle tot=50.3 (10) | PICCO tot=54.9 master=11.2 zygote=4.0 figli=39.8 (10) | dopo tot=54.9 master=11.2 zygote=4.0 figli=39.8 | 2830 task/s
+policy=4 Python=311
+.venv-rs311 idle tot=73.0 (10) | PICCO tot=86.3 master=15.0 zygote=6.2 figli=65.1 (10) | dopo tot=86.3 master=15.0 zygote=6.2 figli=65.1 | 2679 task/s
+policy=4 Python=313
+.venv-rs idle tot=50.2 (10) | PICCO tot=54.2 master=11.1 zygote=3.9 figli=39.3 (10) | dopo tot=54.2 master=11.1 zygote=3.9 figli=39.3 | 2942 task/s

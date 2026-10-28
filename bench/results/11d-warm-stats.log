@@ -1,0 +1,3 @@
+corsia 0: env CELERY_RS_SHARED_STATS=/home/ubuntu/HDD/celery-rs-wt/11d-ram-over-speed/target/11d-state CELERY_RS_MEM_VARIANT=collect,freeze,trim,siblings,warm .venv-rs/bin/python /tmp/11d-pair.py
+.venv-rs311 idle tot=54.4 (10) | PICCO tot=78.8 master=19.5 zygote=6.5 figli=52.9 (10) | dopo tot=77.8 master=19.4 zygote=6.5 figli=51.9 | 2808 task/s
+.venv-rs idle tot=45.1 (10) | PICCO tot=52.7 master=13.5 zygote=4.0 figli=35.2 (10) | dopo tot=52.4 master=13.6 zygote=4.0 figli=34.9 | 3100 task/s

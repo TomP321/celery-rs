@@ -41,6 +41,8 @@ def create(app, hostname):
     """
     from _celery_rs import _runtime_fds
 
+    # I cicli temporanei del bootstrap non devono diventare immortali o congelati.
+    gc.collect()
     runtime_fds = _snapshot_runtime_fds(_runtime_fds())
     parent, child = socket.socketpair(socket.AF_UNIX, socket.SOCK_STREAM)
     # I callback after_fork e gli import possono avviare il GC prima che
@@ -49,6 +51,8 @@ def create(app, hostname):
     gc.disable()
     try:
         _immortalize_heap()
+        # Anche il master deve evitare di riscrivere gli header GC condivisi.
+        gc.freeze()
         pid = os.fork()
     except BaseException:
         if gc_enabled:

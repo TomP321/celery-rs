@@ -1,0 +1,16 @@
+corsia 4: .venv-rs/bin/python /tmp/11d-experiments.py
+baseline
+.venv-rs311 idle tot=66.4 (10) | PICCO tot=80.0 master=12.1 zygote=5.8 figli=62.1 (10) | dopo tot=80.3 master=12.3 zygote=5.8 figli=62.1 | 2384 task/s
+.venv-rs idle tot=44.5 (10) | PICCO tot=51.2 master=9.5 zygote=3.6 figli=38.0 (10) | dopo tot=50.4 master=9.1 zygote=3.6 figli=37.8 | 2463 task/s
+trim
+.venv-rs311 idle tot=65.6 (10) | PICCO tot=77.1 master=12.3 zygote=5.6 figli=59.2 (10) | dopo tot=76.8 master=12.1 zygote=5.5 figli=59.2 | 2426 task/s
+.venv-rs idle tot=43.9 (10) | PICCO tot=51.6 master=9.1 zygote=3.7 figli=38.8 (10) | dopo tot=50.7 master=8.7 zygote=3.6 figli=38.4 | 2651 task/s
+slim-child
+.venv-rs311 idle tot=68.8 (10) | PICCO tot=80.5 master=13.3 zygote=5.7 figli=61.5 (10) | dopo tot=80.6 master=13.3 zygote=5.7 figli=61.5 | 2358 task/s
+.venv-rs idle tot=43.5 (10) | PICCO tot=50.1 master=8.7 zygote=3.6 figli=37.8 (10) | dopo tot=49.5 master=8.4 zygote=3.6 figli=37.5 | 2386 task/s
+arenas
+.venv-rs311 idle tot=70.1 (10) | PICCO tot=85.3 master=14.5 zygote=6.2 figli=64.7 (10) | dopo tot=85.1 master=14.3 zygote=6.1 figli=64.7 | 2382 task/s
+.venv-rs idle tot=44.4 (10) | PICCO tot=54.1 master=11.3 zygote=3.8 figli=38.9 (10) | dopo tot=53.4 master=11.1 zygote=3.8 figli=38.5 | 2909 task/s
+combined
+.venv-rs311 idle tot=64.5 (10) | PICCO tot=78.3 master=12.3 zygote=5.5 figli=60.5 (10) | dopo tot=78.4 master=12.3 zygote=5.5 figli=60.6 | 2566 task/s
+.venv-rs idle tot=43.1 (10) | PICCO tot=48.9 master=8.7 zygote=3.5 figli=36.8 (10) | dopo tot=50.0 master=9.3 zygote=3.5 figli=37.2 | 2782 task/s

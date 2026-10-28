@@ -32,6 +32,8 @@ def pss(pid):
 def sample():
     m = pss(p.pid); zs = kids(p.pid); z = sum(pss(x) for x in zs)
     ch = [c for x in zs for c in kids(x)]; c = sum(pss(x) for x in ch)
+    if not ch:  # Il riferimento forka direttamente dal master, senza zygote.
+        return m, 0, z, len(zs)
     return m, z, c, len(ch)
 idle = sample()
 assert idle[3] == int(conc), idle

@@ -1,0 +1,17 @@
+corsia 0: .venv-rs/bin/python /tmp/11d-runtime-screen.py
+policy-off Python=311
+.venv-rs311 idle tot=72.1 (10) | PICCO tot=84.9 master=14.9 zygote=6.1 figli=63.8 (10) | dopo tot=84.9 master=14.9 zygote=6.1 figli=63.8 | 2679 task/s
+policy-off Python=313
+.venv-rs idle tot=50.5 (10) | PICCO tot=54.7 master=11.2 zygote=3.9 figli=39.6 (10) | dopo tot=54.7 master=11.2 zygote=3.9 figli=39.6 | 2728 task/s
+policy-1 Python=311
+.venv-rs311 idle tot=72.8 (10) | PICCO tot=86.7 master=15.2 zygote=6.2 figli=65.3 (10) | dopo tot=86.7 master=15.2 zygote=6.2 figli=65.3 | 2627 task/s
+policy-1 Python=313
+.venv-rs idle tot=50.6 (10) | PICCO tot=54.9 master=11.3 zygote=3.9 figli=39.7 (10) | dopo tot=54.9 master=11.3 zygote=3.9 figli=39.7 | 2965 task/s
+small-stack Python=311
+.venv-rs311 idle tot=72.4 (10) | PICCO tot=85.4 master=15.4 zygote=6.2 figli=63.8 (10) | dopo tot=85.3 master=15.4 zygote=6.2 figli=63.8 | 2790 task/s
+small-stack Python=313
+.venv-rs idle tot=50.9 (10) | PICCO tot=55.1 master=11.3 zygote=4.0 figli=39.8 (10) | dopo tot=55.1 master=11.3 zygote=4.0 figli=39.8 | 2838 task/s
+current-thread Python=311
+.venv-rs311 idle tot=72.0 (10) | PICCO tot=84.5 master=15.3 zygote=6.0 figli=63.2 (10) | dopo tot=84.5 master=15.3 zygote=6.0 figli=63.2 | 2675 task/s
+current-thread Python=313
+.venv-rs idle tot=50.2 (10) | PICCO tot=54.6 master=11.3 zygote=3.9 figli=39.4 (10) | dopo tot=54.6 master=11.3 zygote=3.9 figli=39.3 | 2891 task/s

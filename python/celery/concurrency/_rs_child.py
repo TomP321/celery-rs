@@ -184,8 +184,8 @@ def child_main(fd, app, hostname, maxtasks=0, max_memory_per_child=0):
             _clear_result_traceback(result)
             # Il figlio inattivo non deve trattenere l'ultimo job e i suoi buffer.
             del result, target, args, kwargs, body
-            # Pochi recuperi durante il riscaldamento; nessun GC dei task utente.
-            _release_task_memory(force=completed in (1, 10, 100, 1000))
+            # Restituisce subito i buffer liberi, senza raccogliere oggetti utente.
+            _release_task_memory(force=True)
             if probe is not None:
                 probe.sample(completed)
             if retire:

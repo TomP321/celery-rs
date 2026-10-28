@@ -1,0 +1,25 @@
+corsia 0: .venv-rs/bin/python /tmp/11d-master-screen.py
+consolidated Python=311 broker=redis bytes=0
+.venv-rs311 idle tot=73.4 (10) | PICCO tot=85.1 master=14.8 zygote=6.2 figli=64.1 (10) | dopo tot=85.1 master=14.8 zygote=6.2 figli=64.1 | 2675 task/s
+consolidated Python=311 broker=redis bytes=16384
+.venv-rs311 idle tot=71.9 (10) | PICCO tot=84.2 master=16.1 zygote=5.9 figli=62.1 (10) | dopo tot=83.8 master=15.8 zygote=5.9 figli=62.1 | 1721 task/s
+consolidated Python=311 broker=amqp bytes=0
+.venv-rs311 idle tot=72.4 (10) | PICCO tot=84.8 master=16.6 zygote=6.0 figli=62.2 (10) | dopo tot=84.8 master=16.6 zygote=6.0 figli=62.2 | 3688 task/s
+consolidated Python=311 broker=amqp bytes=16384
+.venv-rs311 idle tot=71.9 (10) | PICCO tot=86.8 master=17.3 zygote=6.0 figli=63.5 (10) | dopo tot=86.5 master=17.2 zygote=6.0 figli=63.3 | 2711 task/s
+consolidated Python=313 broker=redis bytes=0
+.venv-rs idle tot=50.5 (10) | PICCO tot=54.5 master=11.2 zygote=3.9 figli=39.5 (10) | dopo tot=54.5 master=11.2 zygote=3.9 figli=39.5 | 2825 task/s
+consolidated Python=313 broker=redis bytes=16384
+.venv-rs idle tot=50.4 (10) | PICCO tot=55.2 master=11.6 zygote=3.9 figli=39.7 (10) | dopo tot=55.0 master=11.6 zygote=3.9 figli=39.5 | 1815 task/s
+consolidated Python=313 broker=amqp bytes=0
+.venv-rs idle tot=50.8 (10) | PICCO tot=56.8 master=12.8 zygote=4.0 figli=40.0 (10) | dopo tot=56.8 master=12.8 zygote=4.0 figli=40.0 | 3898 task/s
+consolidated Python=313 broker=amqp bytes=16384
+.venv-rs idle tot=50.7 (10) | PICCO tot=57.2 master=13.2 zygote=3.9 figli=40.1 (10) | dopo tot=57.0 master=13.2 zygote=3.9 figli=40.0 | 2726 task/s
+arenas-1 Python=311 broker=redis bytes=0
+.venv-rs311 idle tot=72.4 (10) | PICCO tot=83.4 master=15.1 zygote=6.0 figli=62.3 (10) | dopo tot=83.4 master=15.1 zygote=6.0 figli=62.3 | 2746 task/s
+arenas-1 Python=313 broker=redis bytes=0
+.venv-rs idle tot=50.9 (10) | PICCO tot=55.0 master=11.3 zygote=3.9 figli=39.8 (10) | dopo tot=55.0 master=11.3 zygote=3.9 figli=39.8 | 2894 task/s
+arenas-2 Python=311 broker=redis bytes=0
+.venv-rs311 idle tot=72.3 (10) | PICCO tot=83.8 master=14.9 zygote=6.0 figli=62.9 (10) | dopo tot=83.8 master=14.9 zygote=6.0 figli=62.9 | 2742 task/s
+arenas-2 Python=313 broker=redis bytes=0
+.venv-rs idle tot=51.0 (10) | PICCO tot=55.3 master=11.2 zygote=4.0 figli=40.1 (10) | dopo tot=55.3 master=11.2 zygote=4.0 figli=40.1 | 2895 task/s

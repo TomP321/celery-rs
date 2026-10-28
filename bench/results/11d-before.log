@@ -1,0 +1,24 @@
+Python=311 broker=redis payload=0
+corsia 0: /home/ubuntu/HDD/celery-rs-wt/11d-ram-over-speed/.venv-rs311/bin/python bench/memprobe/loadpeak.py /home/ubuntu/HDD/celery-rs-wt/11d-ram-over-speed/.venv-rs311 10 /home/ubuntu/HDD/celery-rs-wt/11d-ram-over-speed/bench/memprobe 30000 --broker redis --payload-bytes 0
+.venv-rs311 idle tot=76.5 (10) | PICCO tot=88.9 master=16.4 zygote=6.5 figli=66.0 (10) | dopo tot=88.9 master=16.4 zygote=6.5 figli=66.0 | 2707 task/s
+Python=311 broker=redis payload=16384
+corsia 0: /home/ubuntu/HDD/celery-rs-wt/11d-ram-over-speed/.venv-rs311/bin/python bench/memprobe/loadpeak.py /home/ubuntu/HDD/celery-rs-wt/11d-ram-over-speed/.venv-rs311 10 /home/ubuntu/HDD/celery-rs-wt/11d-ram-over-speed/bench/memprobe 30000 --broker redis --payload-bytes 16384
+.venv-rs311 idle tot=71.6 (10) | PICCO tot=84.9 master=15.8 zygote=5.9 figli=63.2 (10) | dopo tot=84.9 master=15.8 zygote=5.9 figli=63.2 | 1625 task/s
+Python=311 broker=amqp payload=0
+corsia 0: /home/ubuntu/HDD/celery-rs-wt/11d-ram-over-speed/.venv-rs311/bin/python bench/memprobe/loadpeak.py /home/ubuntu/HDD/celery-rs-wt/11d-ram-over-speed/.venv-rs311 10 /home/ubuntu/HDD/celery-rs-wt/11d-ram-over-speed/bench/memprobe 30000 --broker amqp --payload-bytes 0
+.venv-rs311 idle tot=64.2 (10) | PICCO tot=85.4 master=15.9 zygote=6.0 figli=63.5 (10) | dopo tot=85.0 master=15.6 zygote=6.0 figli=63.4 | 3747 task/s
+Python=311 broker=amqp payload=16384
+corsia 0: /home/ubuntu/HDD/celery-rs-wt/11d-ram-over-speed/.venv-rs311/bin/python bench/memprobe/loadpeak.py /home/ubuntu/HDD/celery-rs-wt/11d-ram-over-speed/.venv-rs311 10 /home/ubuntu/HDD/celery-rs-wt/11d-ram-over-speed/bench/memprobe 30000 --broker amqp --payload-bytes 16384
+.venv-rs311 idle tot=69.1 (10) | PICCO tot=85.1 master=16.6 zygote=5.9 figli=62.6 (10) | dopo tot=82.2 master=15.4 zygote=5.7 figli=61.1 | 2592 task/s
+Python=313 broker=redis payload=0
+corsia 0: /home/ubuntu/HDD/celery-rs-wt/11d-ram-over-speed/.venv-rs/bin/python bench/memprobe/loadpeak.py /home/ubuntu/HDD/celery-rs-wt/11d-ram-over-speed/.venv-rs 10 /home/ubuntu/HDD/celery-rs-wt/11d-ram-over-speed/bench/memprobe 30000 --broker redis --payload-bytes 0
+.venv-rs idle tot=43.4 (10) | PICCO tot=51.4 master=9.1 zygote=3.7 figli=38.6 (10) | dopo tot=50.3 master=8.7 zygote=3.6 figli=38.0 | 2507 task/s
+Python=313 broker=redis payload=16384
+corsia 0: /home/ubuntu/HDD/celery-rs-wt/11d-ram-over-speed/.venv-rs/bin/python bench/memprobe/loadpeak.py /home/ubuntu/HDD/celery-rs-wt/11d-ram-over-speed/.venv-rs 10 /home/ubuntu/HDD/celery-rs-wt/11d-ram-over-speed/bench/memprobe 30000 --broker redis --payload-bytes 16384
+.venv-rs idle tot=42.9 (10) | PICCO tot=53.7 master=10.7 zygote=3.6 figli=39.3 (10) | dopo tot=52.2 master=9.4 zygote=3.6 figli=39.2 | 1532 task/s
+Python=313 broker=amqp payload=0
+corsia 0: /home/ubuntu/HDD/celery-rs-wt/11d-ram-over-speed/.venv-rs/bin/python bench/memprobe/loadpeak.py /home/ubuntu/HDD/celery-rs-wt/11d-ram-over-speed/.venv-rs 10 /home/ubuntu/HDD/celery-rs-wt/11d-ram-over-speed/bench/memprobe 30000 --broker amqp --payload-bytes 0
+.venv-rs idle tot=45.1 (10) | PICCO tot=53.1 master=10.8 zygote=3.7 figli=38.6 (10) | dopo tot=52.5 master=10.8 zygote=3.6 figli=38.0 | 3882 task/s
+Python=313 broker=amqp payload=16384
+corsia 0: /home/ubuntu/HDD/celery-rs-wt/11d-ram-over-speed/.venv-rs/bin/python bench/memprobe/loadpeak.py /home/ubuntu/HDD/celery-rs-wt/11d-ram-over-speed/.venv-rs 10 /home/ubuntu/HDD/celery-rs-wt/11d-ram-over-speed/bench/memprobe 30000 --broker amqp --payload-bytes 16384
+.venv-rs idle tot=44.3 (10) | PICCO tot=53.9 master=11.5 zygote=3.6 figli=38.9 (10) | dopo tot=53.7 master=11.2 zygote=3.6 figli=38.8 | 2918 task/s

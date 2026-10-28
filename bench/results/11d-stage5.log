@@ -1,0 +1,27 @@
+corsia 0: .venv-rs/bin/python /tmp/11d-stage5.py
+collect,freeze,trim,siblings,seal-child
+.venv-rs311 idle tot=58.8 (10) | PICCO tot=78.4 master=17.2 zygote=6.4 figli=54.8 (10) | dopo tot=78.0 master=17.2 zygote=6.4 figli=54.4 | 2855 task/s
+.venv-rs idle tot=46.2 (10) | PICCO tot=51.7 master=11.2 zygote=4.0 figli=36.5 (10) | dopo tot=51.6 master=11.2 zygote=4.0 figli=36.4 | 2998 task/s
+collect,freeze,trim,siblings,fill-child
+.venv-rs311 idle tot=55.2 (10) | PICCO tot=78.4 master=16.9 zygote=6.4 figli=55.1 (10) | dopo tot=78.2 master=16.8 zygote=6.4 figli=54.9 | 2810 task/s
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/11d-ram-over-speed/bench/memprobe/loadpeak.py", line 39, in <module>
+    assert idle[3] == int(conc), idle
+           ^^^^^^^^^^^^^^^^^^^^
+AssertionError: (0, 0, 0, 0)
+Traceback (most recent call last):
+  File "/tmp/11d-pair.py", line 6, in <module>
+    subprocess.run([str(venv/'bin/python'),'bench/memprobe/loadpeak.py',str(venv),'10',str(root/'bench/memprobe'),'30000','--broker','redis'],check=True)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/miniconda3/lib/python3.13/subprocess.py", line 577, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['/home/ubuntu/HDD/celery-rs-wt/11d-ram-over-speed/.venv-rs/bin/python', 'bench/memprobe/loadpeak.py', '/home/ubuntu/HDD/celery-rs-wt/11d-ram-over-speed/.venv-rs', '10', '/home/ubuntu/HDD/celery-rs-wt/11d-ram-over-speed/bench/memprobe', '30000', '--broker', 'redis']' returned non-zero exit status 1.
+Traceback (most recent call last):
+  File "/tmp/11d-stage5.py", line 4, in <module>
+    subprocess.run(['.venv-rs/bin/python','/tmp/11d-pair.py'],env=dict(os.environ,CELERY_RS_MEM_VARIANT=name),check=True)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/miniconda3/lib/python3.13/subprocess.py", line 577, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['.venv-rs/bin/python', '/tmp/11d-pair.py']' returned non-zero exit status 1.

@@ -1,0 +1,17 @@
+corsia 0: .venv-rs/bin/python /tmp/11d-lapin-screen.py
+before-lapin Python=311 bytes=0
+.venv-before311 idle tot=75.7 (10) | PICCO tot=89.6 master=17.2 zygote=6.4 figli=66.0 (10) | dopo tot=89.6 master=17.2 zygote=6.4 figli=66.0 | 3779 task/s
+after-lapin Python=311 bytes=0
+.venv-rs311 idle tot=73.0 (10) | PICCO tot=86.2 master=15.3 zygote=6.2 figli=64.7 (10) | dopo tot=86.2 master=15.3 zygote=6.2 figli=64.7 | 3863 task/s
+before-lapin Python=311 bytes=16384
+.venv-before311 idle tot=73.1 (10) | PICCO tot=88.0 master=17.2 zygote=6.1 figli=64.7 (10) | dopo tot=87.7 master=17.2 zygote=6.1 figli=64.4 | 2835 task/s
+after-lapin Python=311 bytes=16384
+.venv-rs311 idle tot=72.7 (10) | PICCO tot=85.1 master=15.8 zygote=6.0 figli=63.3 (10) | dopo tot=84.9 master=15.8 zygote=6.0 figli=63.1 | 2777 task/s
+before-lapin Python=313 bytes=0
+.venv-before313 idle tot=54.1 (10) | PICCO tot=62.8 master=13.7 zygote=4.5 figli=44.6 (10) | dopo tot=62.8 master=13.7 zygote=4.5 figli=44.6 | 3975 task/s
+after-lapin Python=313 bytes=0
+.venv-rs idle tot=50.9 (10) | PICCO tot=55.6 master=11.2 zygote=3.9 figli=40.4 (10) | dopo tot=55.6 master=11.2 zygote=3.9 figli=40.4 | 3863 task/s
+before-lapin Python=313 bytes=16384
+.venv-before313 idle tot=50.7 (10) | PICCO tot=58.3 master=13.3 zygote=4.0 figli=41.0 (10) | dopo tot=58.2 master=13.3 zygote=4.0 figli=40.9 | 2722 task/s
+after-lapin Python=313 bytes=16384
+.venv-rs idle tot=50.9 (10) | PICCO tot=57.2 master=13.3 zygote=3.9 figli=39.9 (10) | dopo tot=56.1 master=12.3 zygote=3.9 figli=39.8 | 2651 task/s

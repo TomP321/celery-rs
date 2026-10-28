@@ -1,0 +1,3 @@
+corsia 1: env CELERY_RS_MEM_VARIANT=collect,freeze,trim,siblings .venv-rs/bin/python /tmp/11d-pair.py
+.venv-rs311 idle tot=51.9 (10) | PICCO tot=78.4 master=16.0 zygote=6.3 figli=56.1 (10) | dopo tot=78.2 master=16.0 zygote=6.3 figli=55.9 | 2135 task/s
+.venv-rs idle tot=42.4 (10) | PICCO tot=51.8 master=10.8 zygote=3.9 figli=37.2 (10) | dopo tot=51.7 master=10.8 zygote=3.9 figli=37.1 | 3069 task/s

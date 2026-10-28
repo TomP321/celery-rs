@@ -1,0 +1,14 @@
+corsia 0: env CELERY_RS_MEM_VARIANT=no-adaptive .venv-rs/bin/python /tmp/11d-pair.py
+Traceback (most recent call last):
+  File "/home/ubuntu/HDD/celery-rs-wt/11d-ram-over-speed/bench/memprobe/loadpeak.py", line 39, in <module>
+    assert idle[3] == int(conc), idle
+           ^^^^^^^^^^^^^^^^^^^^
+AssertionError: (0, 0, 0, 0)
+Traceback (most recent call last):
+  File "/tmp/11d-pair.py", line 6, in <module>
+    subprocess.run([str(venv/'bin/python'),'bench/memprobe/loadpeak.py',str(venv),'10',str(root/'bench/memprobe'),'30000','--broker','redis'],check=True)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/HDD/miniconda3/lib/python3.13/subprocess.py", line 577, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['/home/ubuntu/HDD/celery-rs-wt/11d-ram-over-speed/.venv-rs311/bin/python', 'bench/memprobe/loadpeak.py', '/home/ubuntu/HDD/celery-rs-wt/11d-ram-over-speed/.venv-rs311', '10', '/home/ubuntu/HDD/celery-rs-wt/11d-ram-over-speed/bench/memprobe', '30000', '--broker', 'redis']' returned non-zero exit status 1.

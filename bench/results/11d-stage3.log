@@ -1,0 +1,13 @@
+corsia 1: .venv-rs/bin/python /tmp/11d-stage3.py
+baseline {}
+.venv-rs311 idle tot=68.1 (10) | PICCO tot=82.5 master=14.6 zygote=5.9 figli=62.0 (10) | dopo tot=82.8 master=14.8 zygote=5.9 figli=62.0 | 2730 task/s
+.venv-rs idle tot=47.2 (10) | PICCO tot=51.9 master=10.0 zygote=3.7 figli=38.2 (10) | dopo tot=51.9 master=10.0 zygote=3.7 figli=38.2 | 2897 task/s
+collect,freeze,trim,master-trim {}
+.venv-rs311 idle tot=71.2 (10) | PICCO tot=83.8 master=14.6 zygote=5.9 figli=63.3 (10) | dopo tot=83.8 master=14.5 zygote=5.9 figli=63.3 | 2677 task/s
+.venv-rs idle tot=47.5 (10) | PICCO tot=52.6 master=9.9 zygote=3.8 figli=38.9 (10) | dopo tot=52.4 master=9.8 zygote=3.7 figli=38.8 | 2967 task/s
+collect,freeze,trim,master-trim {'CELERY_RS_MEM_LIFO': '1'}
+.venv-rs311 idle tot=71.3 (10) | PICCO tot=81.6 master=14.5 zygote=5.4 figli=61.6 (10) | dopo tot=81.6 master=14.5 zygote=5.4 figli=61.6 | 2566 task/s
+.venv-rs idle tot=47.0 (10) | PICCO tot=52.4 master=10.1 zygote=3.7 figli=38.6 (10) | dopo tot=52.4 master=10.0 zygote=3.7 figli=38.6 | 2955 task/s
+collect,freeze,preload,seal,trim,master-trim {'CELERY_RS_MEM_LIFO': '1'}
+.venv-rs311 idle tot=71.8 (10) | PICCO tot=81.7 master=14.3 zygote=5.6 figli=61.8 (10) | dopo tot=81.7 master=14.3 zygote=5.6 figli=61.8 | 2792 task/s
+.venv-rs idle tot=46.2 (10) | PICCO tot=50.9 master=9.8 zygote=3.6 figli=37.5 (10) | dopo tot=50.9 master=9.8 zygote=3.6 figli=37.5 | 3013 task/s

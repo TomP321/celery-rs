@@ -1,0 +1,17 @@
+corsia 1: env CELERY_RS_MEM_VARIANT=collect,freeze,seal .venv-rs/bin/python /tmp/11d-matrix.py
+Python=311 broker=redis payload=0
+.venv-rs311 idle tot=65.5 (10) | PICCO tot=81.2 master=13.7 zygote=5.8 figli=61.6 (10) | dopo tot=81.1 master=13.7 zygote=5.8 figli=61.6 | 2554 task/s
+Python=311 broker=redis payload=16384
+.venv-rs311 idle tot=69.3 (10) | PICCO tot=82.7 master=14.0 zygote=5.8 figli=62.8 (10) | dopo tot=82.2 master=13.2 zygote=5.7 figli=63.2 | 1500 task/s
+Python=311 broker=amqp payload=0
+.venv-rs311 idle tot=69.5 (10) | PICCO tot=85.0 master=15.5 zygote=5.9 figli=63.5 (10) | dopo tot=85.0 master=15.6 zygote=5.9 figli=63.5 | 3571 task/s
+Python=311 broker=amqp payload=16384
+.venv-rs311 idle tot=66.9 (10) | PICCO tot=83.7 master=14.7 zygote=5.8 figli=63.1 (10) | dopo tot=82.1 master=14.1 zygote=5.7 figli=62.4 | 2379 task/s
+Python=313 broker=redis payload=0
+.venv-rs idle tot=44.3 (10) | PICCO tot=50.9 master=9.2 zygote=3.7 figli=38.0 (10) | dopo tot=50.1 master=8.7 zygote=3.6 figli=37.9 | 2837 task/s
+Python=313 broker=redis payload=16384
+.venv-rs idle tot=45.0 (10) | PICCO tot=53.9 master=10.8 zygote=3.7 figli=39.4 (10) | dopo tot=52.5 master=10.0 zygote=3.6 figli=39.0 | 1607 task/s
+Python=313 broker=amqp payload=0
+.venv-rs idle tot=43.8 (10) | PICCO tot=51.5 master=10.1 zygote=3.5 figli=37.9 (10) | dopo tot=51.5 master=10.1 zygote=3.5 figli=37.8 | 3417 task/s
+Python=313 broker=amqp payload=16384
+.venv-rs idle tot=43.7 (10) | PICCO tot=55.9 master=12.4 zygote=3.7 figli=39.9 (10) | dopo tot=54.6 master=11.6 zygote=3.6 figli=39.4 | 2498 task/s

@@ -1,0 +1,10 @@
+corsia 0: .venv-rs/bin/python /tmp/11d-stage6.py
+collect,freeze,trim,siblings,collect-child
+.venv-rs311 idle tot=53.5 (10) | PICCO tot=77.6 master=16.9 zygote=6.3 figli=54.4 (10) | dopo tot=77.5 master=16.9 zygote=6.3 figli=54.3 | 2847 task/s
+.venv-rs idle tot=42.3 (10) | PICCO tot=51.8 master=10.8 zygote=3.9 figli=37.1 (10) | dopo tot=52.3 master=11.1 zygote=3.9 figli=37.3 | 3140 task/s
+collect,freeze,trim,siblings,collect-child,seal-child
+.venv-rs311 idle tot=58.2 (10) | PICCO tot=76.4 master=17.0 zygote=6.3 figli=53.1 (10) | dopo tot=76.2 master=17.0 zygote=6.3 figli=52.9 | 2606 task/s
+.venv-rs idle tot=46.9 (10) | PICCO tot=51.9 master=11.3 zygote=4.0 figli=36.6 (10) | dopo tot=51.8 master=11.4 zygote=4.0 figli=36.5 | 3042 task/s
+collect,freeze,trim,siblings,collect-child,fill-child
+.venv-rs311 idle tot=55.1 (10) | PICCO tot=78.8 master=16.9 zygote=6.4 figli=55.6 (10) | dopo tot=78.6 master=16.9 zygote=6.4 figli=55.4 | 2885 task/s
+.venv-rs idle tot=44.6 (10) | PICCO tot=50.3 master=11.2 zygote=3.9 figli=35.3 (10) | dopo tot=50.0 master=11.0 zygote=3.9 figli=35.1 | 3046 task/s
