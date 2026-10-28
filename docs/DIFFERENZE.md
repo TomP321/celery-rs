@@ -19,6 +19,11 @@ L'accesso dalla classe o da un'istanza restituisce l'oggetto vero; prima del pri
 `vars(cls)` / `inspect.getattr_static` vedono il descrittore. Elencate in `tools/compat` fra le
 differenze accettate.
 
+## Annotazioni di `celery.utils.nodenames.worker_direct`
+`kombu.entity.Queue` è importata solo per il controllo dei tipi (non a runtime, per non caricare
+kombu): `typing.get_type_hints(worker_direct)` solleva `NameError`, mentre `inspect.signature` e
+le annotazioni come stringhe sono identiche al riferimento.
+
 ## Traceback dei task falliti (pool prefork Rust)
 Dopo che il figlio ha inviato il risultato di un task fallito, i frame del traceback ormai
 terminati vengono svuotati (`frame.clear()`), come Celery tenta già di fare durante il tracing.

@@ -50,15 +50,18 @@ soddisfa le dipendenze di chi richiede `celery`.
 
 ```toml
 # pyproject.toml, al posto di "celery==…"
-"celery @ https://github.com/TomP321/celery-rs/releases/download/<tag>/<file>.whl",
+"celery[redis] @ https://github.com/TomP321/celery-rs/releases/download/<tag>/<file>.whl",
 ```
 
 **Dal sorgente** (serve la toolchain Rust):
 
 ```sh
 pip install maturin
-pip install git+https://github.com/TomP321/celery-rs
+pip install "celery[redis] @ git+https://github.com/TomP321/celery-rs"
 ```
+
+Come per Celery, con Redis serve l'extra `[redis]` (porta `redis` e `packaging` tramite
+`kombu[redis]`).
 
 L'avvio non cambia:
 
@@ -81,6 +84,20 @@ celery -A proj beat --loglevel info
 - **Differenze note**: [docs/DIFFERENZE.md](docs/DIFFERENZE.md).
 - **Variabili d'ambiente** per tornare al percorso di Celery: `CELERY_RS_WORKER=0`,
   `CELERY_RS_PRODUCER=0`, `CELERY_RS_BACKEND=0`.
+
+## Limiti
+
+- **Versione**: replica Celery **5.7.0rc1**; chi parte da una 5.x precedente fa anche un
+  aggiornamento di Celery (vedi le note di rilascio 5.6/5.7).
+- **Piattaforma**: solo **Linux** (zygote, `/proc`, `prctl`); il rilascio della memoria
+  (`malloc_trim`) agisce solo con glibc. Wheel per x86_64 `manylinux_2_28`.
+- **Fuori dal core Rust**: broker diversi da Redis/RabbitMQ e backend diversi da Redis/RPC usano il
+  codice di Celery (kombu) e non sono verificati da questo progetto; pool `eventlet`/`gevent` non
+  verificati.
+- Parti della suite di Celery che richiedono servizi assenti nell'ambiente di test (Django,
+  backend su database, sicurezza con certificati) falliscono o vengono saltate allo stesso modo
+  nel riferimento: non sono verificate.
+- Differenze di comportamento documentate in [docs/DIFFERENZE.md](docs/DIFFERENZE.md).
 
 ## Consigli per la RAM
 
