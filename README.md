@@ -46,11 +46,11 @@ memoria cresce quanto quella di Celery, partendo da molto più in basso (220 vs 
 Requisiti: Linux, Python ≥ 3.10. Il pacchetto si chiama `celery` (versione `5.7.0rc1+rs.…`), quindi
 soddisfa le dipendenze di chi richiede `celery`.
 
-**Da wheel precompilata** (vedi le [release](https://github.com/TomP321/celery-rs/releases)):
+**Da wheel precompilata** (branch [`wheels`](https://github.com/TomP321/celery-rs/tree/wheels), Linux x86_64 glibc ≥ 2.28, nessuna toolchain Rust necessaria):
 
 ```toml
 # pyproject.toml, al posto di "celery==…"
-"celery[redis] @ https://github.com/TomP321/celery-rs/releases/download/<tag>/<file>.whl",
+"celery[redis] @ https://github.com/TomP321/celery-rs/raw/wheels/celery-5.7.0rc1%2Brs.0.1.0-cp310-abi3-manylinux_2_28_x86_64.whl",
 ```
 
 **Dal sorgente** (serve la toolchain Rust):
