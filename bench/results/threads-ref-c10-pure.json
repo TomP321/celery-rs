@@ -1,0 +1,62 @@
+{
+ "label": "threads-ref-c10-pure",
+ "venv": ".venv-ref",
+ "pool": "threads",
+ "concurrency": 10,
+ "n": 20000,
+ "prefill": true,
+ "completed_tasks": 20000,
+ "completed_before_resume": 0,
+ "worker_tasks_per_s": 882.9566012566073,
+ "broker": "redis://127.0.0.1:6390/0",
+ "idle_processes": [
+  {
+   "pid": 1121691,
+   "ppid": 1121689,
+   "pss_kb": 47303,
+   "private_dirty_kb": 43468,
+   "role": "master"
+  }
+ ],
+ "after_processes": [
+  {
+   "pid": 1121691,
+   "ppid": 1121689,
+   "pss_kb": 48096,
+   "private_dirty_kb": 44264,
+   "role": "master"
+  }
+ ],
+ "throughput_processes": [
+  {
+   "pid": 1121691,
+   "ppid": 1121689,
+   "pss_kb": 48002,
+   "private_dirty_kb": 44168,
+   "role": "master"
+  }
+ ],
+ "pss_idle_kb": 47303,
+ "pss_idle_per_process_kb": [
+  47303
+ ],
+ "pss_peak_kb": 48096,
+ "pss_after_kb": 48096,
+ "pss_after_per_process_kb": [
+  48096
+ ],
+ "client_publish_per_s": 1765.6799009759409,
+ "client_maxrss_kb": 44904,
+ "end_to_end_s": 22.651169912016485,
+ "end_to_end_tasks_per_s": 882.9566012566073,
+ "drain_after_publish_s": 22.651169912016485,
+ "latency_ms": {
+  "p50": 3.0987944919615984,
+  "p99": 3.99758800631389,
+  "max": 4.8766249674372375
+ },
+ "python": "3.13.9",
+ "task": "pure",
+ "include": null,
+ "source": null
+}
