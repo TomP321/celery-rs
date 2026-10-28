@@ -1,123 +1,184 @@
 #!/usr/bin/env python3
-"""Genera la GIF del README: uvx --with pillow python tools/docs/make_readme_gif.py."""
+"""Genera la GIF: uvx --with pillow python tools/docs/make_readme_gif.py."""
+import subprocess
+import tomllib
+from functools import lru_cache
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
 ROOT = Path(__file__).resolve().parents[2]
 OUTPUT = ROOT / 'docs/assets/celery-rs-conversione.gif'
-WIDTH, HEIGHT = 960, 1130
-FONT_DIR = Path('/usr/share/fonts/truetype/dejavu')
-BG, INK, MUTED = '#f5f7fa', '#172536', '#46566a'
-COLORS = ['#a94408', '#185caa', '#52606d', '#b52c36']
-FILLS = ['#fff0e4', '#eaf3ff', '#edf0f3', '#fff0f1']
+SITE = ROOT / '.venv-ref/lib/python3.13/site-packages'
+WIDTH, HEIGHT = 960, 580
+BG, PANEL, BORDER = '#0b0c10', '#11141b', '#2c303b'
+WHITE, MUTED, ORANGE, BLUE = '#f3f1ed', '#a0a7b7', '#e8946f', '#78b6ed'
+DARK = '#303642'
+GROUPS = ['celery/app', 'celery/worker', 'celery/concurrency', 'celery/backends',
+          'celery/beat+schedules', 'celery/events', 'celery/bin', 'celery/utils',
+          'kombu', 'billiard', 'amqp/redis-py']
+PHASES = ['protocollo', 'trasporti', 'client Python', 'result backend', 'worker',
+          'beat', 'CLI', 'ottimizzazione', 'hardening', 'RAM']
 
 
+@lru_cache(maxsize=None)
 def font(size, bold=False):
-    return ImageFont.truetype(str(FONT_DIR / ('DejaVuSans-Bold.ttf' if bold else 'DejaVuSans.ttf')), size)
+    name = 'DejaVuSansMono-Bold.ttf' if bold else 'DejaVuSansMono.ttf'
+    return ImageFont.truetype('/usr/share/fonts/truetype/dejavu/' + name, size)
 
 
-def label(draw, xy, value, size=19, fill=INK, bold=False):
+def text(d, x, y, value, size=11, color=MUTED, bold=False, width=None):
     face = font(size, bold)
-    # Il controllo rende visibili anche le regressioni dovute a nuove etichette.
-    box = draw.textbbox(xy, value, font=face)
-    if box[2] > WIDTH - 24 or box[3] > HEIGHT - 20:
+    if width is not None:
+        while d.textlength(value, font=face) > width:
+            value = value[:-2] + '…'
+    box = d.textbbox((x, y), value, font=face)
+    if box[2] > WIDTH - 14 or box[3] > HEIGHT - 12:
         raise ValueError(f'Testo fuori dal fotogramma: {value}')
-    draw.text(xy, value, font=face, fill=fill)
+    d.text((x, y), value, fill=color, font=face)
 
 
-RUST = [
-    ('Protocollo · celery-proto', 'Task v1/v2, header, JSON, compressione'),
-    ('Trasporti · celery-transport', 'Redis, RabbitMQ (AMQP 0-9-1), memory://'),
-    ('Producer · delay() / apply_async()', 'Serializzazione e invio'),
-    ('Risultati · celery-backend', 'Backend Redis e RPC'),
-    ('Consumer · celery-worker', 'QoS/prefetch, ack, eventi, heartbeat'),
-    ('Timer e stato del worker', 'ETA, rate limit, revoche'),
-    ('Controllo remoto · trasporto', 'Pidbox, mingle, gossip; comandi Python'),
-    ('Pool prefork', 'Supervisore, zygote, IPC con i figli'),
-    ('Beat e client di controllo CLI', 'Crontab e invio; inspect / control'),
-]
-PYTHON = [
-    ('App e API dei task', 'Configurazione, registry, classe Task'),
-    ('Canvas e risultati', 'chain, group, chord, AsyncResult'),
-    ('Estensioni pubbliche', 'Segnali, bootsteps, comandi Panel'),
-    ('Esecuzione nei figli', 'Trace dei task e codice utente'),
-    ('Interfaccia CLI e integrazioni', 'click, loader, fixup Django'),
-    ('Persistenza di beat', 'Schedule su shelve'),
-]
+def load_map():
+    data = tomllib.loads((ROOT / 'tools/docs/conversion_map.toml').read_text())
+    expected = {'celery/' + p.relative_to(ROOT / 'celery/celery').as_posix()
+                for p in (ROOT / 'celery/celery').rglob('*.py')}
+    for package in ['kombu', 'billiard', 'amqp', 'redis']:
+        expected.update(package + '/' + p.relative_to(SITE / package).as_posix()
+                        for p in (SITE / package).rglob('*.py'))
+    rows = data['files']
+    assert len({r['path'] for r in rows}) == len(rows), 'File duplicati'
+    assert {r['path'] for r in rows} == expected, 'Inventario incompleto o cambiato'
+    for row in rows:
+        assert row['group'] in GROUPS
+        assert row['status'] in {'rust', 'python', 'originale', 'assente'}
+        package, rel = row['path'].split('/', 1)
+        source = ROOT / 'celery/celery' / rel if package == 'celery' else SITE / package / rel
+        row['lines'] = len(source.read_bytes().splitlines())
+        fraction = row.get('rust', 1 if row['status'] == 'rust' else 0)
+        assert 0 <= fraction <= 1
+        if fraction:
+            assert (ROOT / 'crates' / row['crate']).is_dir()
+        row['weight'] = fraction * row['lines']
+    return rows
 
 
-def panel(draw, x, y, w, h, group, title, subtitle, rows, visible):
-    color = COLORS[group] if visible else '#77818d'
-    draw.rounded_rectangle((x, y, x + w, y + h), radius=16,
-                           fill=FILLS[group] if visible else '#eef1f5', outline=color, width=2)
-    label(draw, (x + 16, y + 14), title, 23, color, True)
-    label(draw, (x + 16, y + 48), subtitle, 17, MUTED)
-    if visible:
-        for i, (heading, detail) in enumerate(rows):
-            ry = y + 88 + i * 54
-            for text, size, offset, bold in [(heading, 18, 0, True), (detail, 16, 25, False)]:
-                if draw.textlength(text, font=font(size, bold)) > w - 32:
-                    raise ValueError(f'Etichetta troppo larga: {text}')
-                label(draw, (x + 16, ry + offset), text, size, INK, bold)
-    else:
-        label(draw, (x + 16, y + 92), 'Segue nell’animazione…', 18, MUTED)
+def percentages(rows):
+    result = {}
+    for group in GROUPS:
+        subset = [r for r in rows if r['group'] == group]
+        result[group] = sum(r['weight'] for r in subset) / max(1, sum(r['lines'] for r in subset))
+    active = [r for r in rows if r['status'] in {'rust', 'python'}]
+    total = sum(r['weight'] for r in active) / sum(r['lines'] for r in active)
+    return result, total
 
 
-def frame(stage):
+def commits():
+    subjects = subprocess.check_output(['git', 'log', '--reverse', '--format=%s'], cwd=ROOT, text=True).splitlines()
+    chosen = [s for s in subjects if s.startswith(('01:', '02', '03:', '04:', '05', '06:', '07:', '08', '09', '10'))
+              and not s.startswith('spec')]
+    assert chosen, 'Mancano commit reali'
+    return chosen
+
+
+def render(progress, rows, ratios, total, subjects):
     im = Image.new('RGB', (WIDTH, HEIGHT), BG)
     d = ImageDraw.Draw(im)
-    label(d, (28, 22), 'celery-rs', 38, INK, True)
-    label(d, (28, 73), 'Cosa passa in Rust, cosa resta in Python', 27, INK, True)
-    label(d, (28, 114), 'Stessa API pubblica di Celery 5.7.0rc1 · core Rust, task Python', 20, MUTED)
-    for i, (x, title) in enumerate([(28, 'Rust'), (192, 'Python'), (376, 'Non convertito'), (610, 'Non supportato / non verificato')]):
-        d.rectangle((x, 157, x + 12, 169), fill=COLORS[i])
-        label(d, (x + 20, 151), title, 15, COLORS[i], True)
-    panel(d, 28, 190, 446, 590, 0, '01  In Rust', 'Core e percorsi di I/O', RUST, stage >= 0)
-    panel(d, 486, 190, 446, 590, 1, '02  In Python per scelta', 'API identica, estendibile dall’utente', PYTHON, stage >= 1)
-    if stage >= 1:
-        label(d, (502, 643), 'celery-beat: crontab in Rust; fusi orari', 17, MUTED)
-        label(d, (502, 669), 'e DST restano Python, come shelve.', 17, MUTED)
-    panel(d, 28, 795, 446, 171, 2, '03  Non convertito', 'Percorso originale di Celery', [
-        ('Altri broker tramite kombu: SQS, …', 'Backend: SQLAlchemy, cache, S3,'),
-    ], stage >= 2)
-    if stage >= 2:
-        label(d, (44, 935), 'MongoDB, DynamoDB, …', 16)
-    panel(d, 486, 795, 446, 171, 3, '04  Limiti', 'Non supportato / non verificato', [
-        ('Pool eventlet e gevent', 'macOS e Windows · solo Linux'),
-    ], stage >= 3)
-    if stage == 4:
-        d.rounded_rectangle((28, 982, 932, 1103), radius=14, fill=INK)
-        for y, text, size in [
-            (992, '23.300 righe Rust · 6 crate | guscio Python: 52.600 righe', 21),
-            (1022, 'Worker -c 10: 300 → 73 MB (−76%) | in 8 GB: 27 → 96–105 | Redis: task/s ×3', 20),
-            (1052, 'Verifiche: API (137 moduli), messaggi sul broker, 190 comandi CLI,', 19),
-            (1077, '31.691 unit test e suite t/integration di Celery.', 19),
-        ]:
-            label(d, (44, y), text, size, '#ffffff', y == 992)
+    d.rounded_rectangle((7, 7, 952, 572), radius=16, outline=BORDER, width=2)
+    d.rounded_rectangle((24, 22, 429, 48), radius=13, fill='#35241f', outline='#80513f')
+    text(d, 36, 27, '✻ CLAUDE CODE · DYNAMIC WORKFLOW', 13, ORANGE, True)
+    text(d, 773, 29, 'CELERY → RUST', 16, WHITE, True)
+    text(d, 24, 63, f'{100 * total * progress:4.1f}% del runtime in Rust', 27, WHITE, True)
+    phase = min(9, int(progress * 10))
+    text(d, 26, 105, f'fase {phase + 1} · {PHASES[phase]}', 14, ORANGE)
+    text(d, 530, 110, 'Pesi LOC · percorso supportato · API Python conservata', 11)
+    d.line((24, 140, 935, 140), fill=BORDER)
+    text(d, 25, 151, 'porting.log', 12, WHITE, True)
+    text(d, 291, 151, 'FILE · .py → .rs', 12, WHITE, True)
+    text(d, 694, 151, '→ IN RUST PER PACCHETTO', 12, WHITE, True)
+    for x in [274, 679]:
+        d.line((x, 151, x, 467), fill=BORDER)
+    # Ogni cella corrisponde a un file: nessun file è nascosto dal raggruppamento.
+    for gi, group in enumerate(GROUPS):
+        y = 184 + gi * 25
+        subset = [r for r in rows if r['group'] == group]
+        for i, row in enumerate(subset):
+            x, cy = 291 + (i % 72) * 5, y + (i // 72) * 6
+            threshold = (i + 1) / (len(subset) + 1)
+            local = max(0, min(1, (progress - gi * .012) / .88))
+            color = DARK
+            if local >= threshold:
+                color = ORANGE if row['status'] == 'rust' else BLUE if row['status'] == 'python' else DARK
+            d.rectangle((x, cy, x + 3, cy + 3), fill=color)
+            if color == ORANGE and row.get('rust', 1) < 1:
+                d.rectangle((x + 2, cy, x + 3, cy + 3), fill=BLUE)
+            if row['status'] == 'rust' and abs(local - threshold) < .018 and progress < 1:
+                d.rectangle((x - 1, cy - 1, x + 4, cy + 4), outline='#ffe2b4')
+        text(d, 694, y - 5, group, 10, WHITE)
+        bar_y = y + 10
+        d.rounded_rectangle((694, bar_y, 884, bar_y + 4), radius=2, fill=DARK)
+        fill = ratios[group] * progress
+        if fill:
+            d.rectangle((694, bar_y, 694 + round(190 * fill), bar_y + 4), fill=ORANGE)
+        text(d, 893, y, f'{100 * fill:.1f}%', 11, ORANGE)
+    # Le righe scorrono in ordine d'inventario; destinazioni di crate reali.
+    stream = [r for r in rows if r['status'] in {'rust', 'python'}]
+    end = min(len(stream), 5 + int(progress * (len(stream) - 5)))
+    for i, row in enumerate(stream[max(0, end - 6):end]):
+        y = 183 + i * 45
+        rust = row['status'] == 'rust'
+        text(d, 25, y, ('port  ' if rust else 'keep  ') + row['path'], 10, ORANGE if rust else BLUE, width=235)
+        targets = {'celery-worker': 'pool/…', 'celery-transport': 'redis/…' if 'redis' in row['path'] else 'transport.rs',
+                   'celery-backend': 'redis.rs' if 'redis' in row['path'] else 'lib.rs',
+                   'celery-beat': 'parser.rs', 'celery-proto': 'compression.rs'}
+        destination = '→ ' + row['crate'] + '/src/' + targets[row['crate']] if rust else '(API / runtime Python)'
+        text(d, 37, y + 15, destination, 10, MUTED, width=222)
+    for x, color, label in [(291, ORANGE, 'Rust'), (385, BLUE, 'Python'), (493, DARK, 'originale/assente')]:
+        d.rectangle((x, 463, x + 6, 469), fill=color)
+        text(d, x + 12, 458, label, 10)
+    d.line((24, 484, 935, 484), fill=BORDER)
+    if progress >= 1:
+        text(d, 25, 495, '23.300 righe Rust · 6 crate    worker -c 10: 300 → 73 MB (−76%)', 15, WHITE, True)
+        text(d, 25, 527, 'In 8 GB: 27 → 96–105 worker     Redis: task/s ×3', 15, ORANGE)
     else:
-        label(d, (28, 1001), f'{stage + 1}/5 · ' + ['Il core Rust', 'L’API Python', 'Il percorso originale', 'I limiti della copertura'][stage], 22, INK, True)
-        label(d, (28, 1041), 'Segue: riepilogo di dimensioni, memoria, prestazioni e verifiche.', 20, MUTED)
+        end = min(len(subjects), 3 + int(progress * (len(subjects) - 3)))
+        for i, subject in enumerate(subjects[max(0, end - 3):end]):
+            text(d, 25, 495 + i * 20, '· ' + subject, 11, WHITE if i == 2 else MUTED, width=903)
     return im
 
 
 def main():
-    frames = [frame(stage) for stage in range(5)]
-    # Una palette comune evita variazioni di colore tra i fotogrammi.
-    palette = frames[-1].quantize(colors=128)
-    indexed = [im.quantize(palette=palette, dither=Image.Dither.NONE) for im in frames]
+    rows = load_map()
+    ratios, total = percentages(rows)
+    subjects = commits()
+    # Una palette globale campiona anche celle grigie e colori intermedi.
+    sample = Image.new('RGB', (WIDTH, HEIGHT * 3))
+    for i, p in enumerate([0, .5, 1]):
+        sample.paste(render(p, rows, ratios, total, subjects), (0, HEIGHT * i))
+    palette = sample.quantize(colors=128)
+    frames = [render(i / 200, rows, ratios, total, subjects).quantize(palette=palette, dither=Image.Dither.NONE)
+              for i in range(201)]
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-    indexed[0].save(OUTPUT, save_all=True, append_images=indexed[1:],
-                    duration=[2500, 3000, 2500, 2500, 6500], loop=0, optimize=False)
+    frames[0].save(OUTPUT, save_all=True, append_images=frames[1:],
+                   duration=[80] * 200 + [5000], loop=0, optimize=True,
+                   palette=palette.getpalette())
     with Image.open(OUTPUT) as gif:
         duration = 0
         for i in range(gif.n_frames):
             gif.seek(i)
             duration += gif.info['duration']
-        assert gif.size[0] == 960 and gif.info['loop'] == 0
-        assert 10000 <= duration <= 20000
-    assert OUTPUT.stat().st_size <= 1_500_000
-    print(f'{OUTPUT.relative_to(ROOT)}: {OUTPUT.stat().st_size:,} byte, {duration / 1000:g} s')
+        assert gif.size == (WIDTH, HEIGHT) and gif.info['loop'] == 0
+        assert 15000 <= duration <= 25000
+        # Estratti dalla GIF codificata, così si controlla anche la quantizzazione.
+        check = ROOT / 'target/readme-gif'
+        check.mkdir(parents=True, exist_ok=True)
+        for name, index in [('inizio', 0), ('25', 50), ('50', 100), ('75', 150), ('finale', gif.n_frames - 1)]:
+            gif.seek(index)
+            gif.convert('RGB').save(check / f'{name}.png')
+    assert OUTPUT.stat().st_size <= 4_000_000
+    print(f'{len(rows)} file; {WIDTH}×{HEIGHT}; {duration / 1000:g} s; 12,5 fps; {OUTPUT.stat().st_size:,} byte')
+    for group, ratio in ratios.items():
+        print(f'{group}: {ratio:.2%}')
+    print(f'Globale: {total:.2%}')
 
 
 if __name__ == '__main__':

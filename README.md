@@ -5,7 +5,7 @@
 stessi comandi (`celery -A app worker|beat|inspect|…`), stesse classi, stesse impostazioni, stesso
 traffico sul broker. Si installa al posto del pacchetto `celery` e il codice applicativo non cambia.
 
-![Mappa animata dei componenti in Rust, delle API Python, dei percorsi Celery non convertiti e dei limiti di celery-rs.](docs/assets/celery-rs-conversione.gif)
+![Workflow animato Celery → Rust: file convertiti in arancione, API Python in blu, avanzamento per pacchetto pesato sulle righe e risultati di memoria e prestazioni.](docs/assets/celery-rs-conversione.gif)
 
 > Progetto indipendente, non affiliato al progetto Celery. Basato su Celery 5.7.0rc1 (licenza BSD).
 

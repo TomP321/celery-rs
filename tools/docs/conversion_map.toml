@@ -1,0 +1,2843 @@
+# Copertura dei ruoli a runtime, non percentuale di testo tradotto letteralmente.
+# Conteggio: righe fisiche incluse righe vuote e commenti; file misti conservati Python
+# salvo loop/pool e I/O scavalcati integralmente nel percorso nativo.
+# Gli altri moduli Celery (canvas, trace, loader, ecc.) sono aggregati ad app.
+# originale/assente esclusi dal denominatore globale, inclusi in quello per pacchetto.
+version = 1
+
+[[files]]
+path = "celery/__init__.py"
+group = "celery/app"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/__main__.py"
+group = "celery/app"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/_state.py"
+group = "celery/app"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/app/__init__.py"
+group = "celery/app"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/app/amqp.py"
+group = "celery/app"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/app/annotations.py"
+group = "celery/app"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/app/autoretry.py"
+group = "celery/app"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/app/backends.py"
+group = "celery/app"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/app/base.py"
+group = "celery/app"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/app/builtins.py"
+group = "celery/app"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/app/control.py"
+group = "celery/app"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/app/defaults.py"
+group = "celery/app"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/app/events.py"
+group = "celery/app"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/app/log.py"
+group = "celery/app"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/app/registry.py"
+group = "celery/app"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/app/routes.py"
+group = "celery/app"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/app/task.py"
+group = "celery/app"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/app/trace.py"
+group = "celery/app"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/app/utils.py"
+group = "celery/app"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/apps/__init__.py"
+group = "celery/app"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/apps/beat.py"
+group = "celery/app"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/apps/multi.py"
+group = "celery/app"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/apps/worker.py"
+group = "celery/app"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/backends/__init__.py"
+group = "celery/backends"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/backends/arangodb.py"
+group = "celery/backends"
+status = "originale"
+crate = ""
+# Backend opzionale fuori dal percorso Redis/RPC/memory.
+
+[[files]]
+path = "celery/backends/asynchronous.py"
+group = "celery/backends"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/backends/azureblockblob.py"
+group = "celery/backends"
+status = "originale"
+crate = ""
+# Backend opzionale fuori dal percorso Redis/RPC/memory.
+
+[[files]]
+path = "celery/backends/base.py"
+group = "celery/backends"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/backends/cache.py"
+group = "celery/backends"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/backends/cassandra.py"
+group = "celery/backends"
+status = "originale"
+crate = ""
+# Backend opzionale fuori dal percorso Redis/RPC/memory.
+
+[[files]]
+path = "celery/backends/consul.py"
+group = "celery/backends"
+status = "originale"
+crate = ""
+# Backend opzionale fuori dal percorso Redis/RPC/memory.
+
+[[files]]
+path = "celery/backends/cosmosdbsql.py"
+group = "celery/backends"
+status = "originale"
+crate = ""
+# Backend opzionale fuori dal percorso Redis/RPC/memory.
+
+[[files]]
+path = "celery/backends/couchbase.py"
+group = "celery/backends"
+status = "originale"
+crate = ""
+# Backend opzionale fuori dal percorso Redis/RPC/memory.
+
+[[files]]
+path = "celery/backends/couchdb.py"
+group = "celery/backends"
+status = "originale"
+crate = ""
+# Backend opzionale fuori dal percorso Redis/RPC/memory.
+
+[[files]]
+path = "celery/backends/database/__init__.py"
+group = "celery/backends"
+status = "originale"
+crate = ""
+# Backend opzionale fuori dal percorso Redis/RPC/memory.
+
+[[files]]
+path = "celery/backends/database/models.py"
+group = "celery/backends"
+status = "originale"
+crate = ""
+# Backend opzionale fuori dal percorso Redis/RPC/memory.
+
+[[files]]
+path = "celery/backends/database/session.py"
+group = "celery/backends"
+status = "originale"
+crate = ""
+# Backend opzionale fuori dal percorso Redis/RPC/memory.
+
+[[files]]
+path = "celery/backends/dynamodb.py"
+group = "celery/backends"
+status = "originale"
+crate = ""
+# Backend opzionale fuori dal percorso Redis/RPC/memory.
+
+[[files]]
+path = "celery/backends/elasticsearch.py"
+group = "celery/backends"
+status = "originale"
+crate = ""
+# Backend opzionale fuori dal percorso Redis/RPC/memory.
+
+[[files]]
+path = "celery/backends/filesystem.py"
+group = "celery/backends"
+status = "originale"
+crate = ""
+# Backend opzionale fuori dal percorso Redis/RPC/memory.
+
+[[files]]
+path = "celery/backends/gcs.py"
+group = "celery/backends"
+status = "originale"
+crate = ""
+# Backend opzionale fuori dal percorso Redis/RPC/memory.
+
+[[files]]
+path = "celery/backends/mongodb.py"
+group = "celery/backends"
+status = "originale"
+crate = ""
+# Backend opzionale fuori dal percorso Redis/RPC/memory.
+
+[[files]]
+path = "celery/backends/redis.py"
+group = "celery/backends"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/backends/rpc.py"
+group = "celery/backends"
+status = "rust"
+crate = "celery-backend"
+rust = 0.24721603563474387
+# Frazione misurata: 111/449 righe fisiche dei ruoli delegati.
+# Simboli: ResultConsumer.
+# Il resto rimane Python; compressione: solo codec nativi, registry/fallback Python.
+
+[[files]]
+path = "celery/backends/s3.py"
+group = "celery/backends"
+status = "originale"
+crate = ""
+# Backend opzionale fuori dal percorso Redis/RPC/memory.
+
+[[files]]
+path = "celery/beat.py"
+group = "celery/beat+schedules"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/bin/__init__.py"
+group = "celery/bin"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/bin/amqp.py"
+group = "celery/bin"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/bin/base.py"
+group = "celery/bin"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/bin/beat.py"
+group = "celery/bin"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/bin/call.py"
+group = "celery/bin"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/bin/celery.py"
+group = "celery/bin"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/bin/control.py"
+group = "celery/bin"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/bin/events.py"
+group = "celery/bin"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/bin/graph.py"
+group = "celery/bin"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/bin/list.py"
+group = "celery/bin"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/bin/logtool.py"
+group = "celery/bin"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/bin/migrate.py"
+group = "celery/bin"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/bin/multi.py"
+group = "celery/bin"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/bin/purge.py"
+group = "celery/bin"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/bin/result.py"
+group = "celery/bin"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/bin/shell.py"
+group = "celery/bin"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/bin/upgrade.py"
+group = "celery/bin"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/bin/worker.py"
+group = "celery/bin"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/bootsteps.py"
+group = "celery/app"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/canvas.py"
+group = "celery/app"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/concurrency/__init__.py"
+group = "celery/concurrency"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/concurrency/asynpool.py"
+group = "celery/concurrency"
+status = "rust"
+crate = "celery-worker"
+# Ruolo del loop/pool prefork scavalcato da _rs_consumer e rs_prefork; wrapper pubblici restano Python.
+
+[[files]]
+path = "celery/concurrency/base.py"
+group = "celery/concurrency"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/concurrency/eventlet.py"
+group = "celery/concurrency"
+status = "assente"
+crate = ""
+# Pool non supportato.
+
+[[files]]
+path = "celery/concurrency/gevent.py"
+group = "celery/concurrency"
+status = "assente"
+crate = ""
+# Pool non supportato.
+
+[[files]]
+path = "celery/concurrency/prefork.py"
+group = "celery/concurrency"
+status = "rust"
+crate = "celery-worker"
+# Ruolo del loop/pool prefork scavalcato da _rs_consumer e rs_prefork; wrapper pubblici restano Python.
+
+[[files]]
+path = "celery/concurrency/solo.py"
+group = "celery/concurrency"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/concurrency/thread.py"
+group = "celery/concurrency"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/contrib/__init__.py"
+group = "celery/app"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/contrib/abortable.py"
+group = "celery/app"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/contrib/django/__init__.py"
+group = "celery/app"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/contrib/django/task.py"
+group = "celery/app"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/contrib/migrate.py"
+group = "celery/app"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/contrib/pytest.py"
+group = "celery/app"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/contrib/rdb.py"
+group = "celery/app"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/contrib/sphinx.py"
+group = "celery/app"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/contrib/testing/__init__.py"
+group = "celery/app"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/contrib/testing/app.py"
+group = "celery/app"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/contrib/testing/manager.py"
+group = "celery/app"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/contrib/testing/mocks.py"
+group = "celery/app"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/contrib/testing/tasks.py"
+group = "celery/app"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/contrib/testing/worker.py"
+group = "celery/app"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/events/__init__.py"
+group = "celery/events"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/events/cursesmon.py"
+group = "celery/events"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/events/dispatcher.py"
+group = "celery/events"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/events/dumper.py"
+group = "celery/events"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/events/event.py"
+group = "celery/events"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/events/receiver.py"
+group = "celery/events"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/events/snapshot.py"
+group = "celery/events"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/events/state.py"
+group = "celery/events"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/exceptions.py"
+group = "celery/app"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/fixups/__init__.py"
+group = "celery/app"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/fixups/django.py"
+group = "celery/app"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/loaders/__init__.py"
+group = "celery/app"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/loaders/app.py"
+group = "celery/app"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/loaders/base.py"
+group = "celery/app"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/loaders/default.py"
+group = "celery/app"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/local.py"
+group = "celery/app"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/platforms.py"
+group = "celery/app"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/result.py"
+group = "celery/app"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/schedules.py"
+group = "celery/beat+schedules"
+status = "rust"
+crate = "celery-beat"
+rust = 0.13995726495726496
+# Frazione misurata: 131/936 righe fisiche dei ruoli delegati.
+# Simboli: crontab_parser.parse, crontab_parser._parse_part, crontab_parser._expand_range, crontab_parser._range_steps, crontab_parser._star_steps, crontab_parser._expand_star, crontab_parser._expand_number, crontab._delta_to_next.
+# Il resto rimane Python; compressione: solo codec nativi, registry/fallback Python.
+
+[[files]]
+path = "celery/security/__init__.py"
+group = "celery/app"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/security/certificate.py"
+group = "celery/app"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/security/key.py"
+group = "celery/app"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/security/serialization.py"
+group = "celery/app"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/security/utils.py"
+group = "celery/app"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/signals.py"
+group = "celery/app"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/states.py"
+group = "celery/app"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/utils/__init__.py"
+group = "celery/utils"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/utils/abstract.py"
+group = "celery/utils"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/utils/annotations.py"
+group = "celery/utils"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/utils/collections.py"
+group = "celery/utils"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/utils/debug.py"
+group = "celery/utils"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/utils/deprecated.py"
+group = "celery/utils"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/utils/dispatch/__init__.py"
+group = "celery/utils"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/utils/dispatch/signal.py"
+group = "celery/utils"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/utils/functional.py"
+group = "celery/utils"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/utils/graph.py"
+group = "celery/utils"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/utils/imports.py"
+group = "celery/utils"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/utils/iso8601.py"
+group = "celery/utils"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/utils/log.py"
+group = "celery/utils"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/utils/nodenames.py"
+group = "celery/utils"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/utils/objects.py"
+group = "celery/utils"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/utils/quorum_queues.py"
+group = "celery/utils"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/utils/saferepr.py"
+group = "celery/utils"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/utils/serialization.py"
+group = "celery/utils"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/utils/static/__init__.py"
+group = "celery/utils"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/utils/sysinfo.py"
+group = "celery/utils"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/utils/term.py"
+group = "celery/utils"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/utils/text.py"
+group = "celery/utils"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/utils/threads.py"
+group = "celery/utils"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/utils/time.py"
+group = "celery/utils"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/utils/timer2.py"
+group = "celery/utils"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/worker/__init__.py"
+group = "celery/worker"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/worker/autoscale.py"
+group = "celery/worker"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/worker/components.py"
+group = "celery/worker"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/worker/consumer/__init__.py"
+group = "celery/worker"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/worker/consumer/agent.py"
+group = "celery/worker"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/worker/consumer/connection.py"
+group = "celery/worker"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/worker/consumer/consumer.py"
+group = "celery/worker"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/worker/consumer/control.py"
+group = "celery/worker"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/worker/consumer/delayed_delivery.py"
+group = "celery/worker"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/worker/consumer/events.py"
+group = "celery/worker"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/worker/consumer/gossip.py"
+group = "celery/worker"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/worker/consumer/heart.py"
+group = "celery/worker"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/worker/consumer/mingle.py"
+group = "celery/worker"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/worker/consumer/tasks.py"
+group = "celery/worker"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/worker/control.py"
+group = "celery/worker"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/worker/heartbeat.py"
+group = "celery/worker"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/worker/loops.py"
+group = "celery/worker"
+status = "rust"
+crate = "celery-worker"
+# Ruolo del loop/pool prefork scavalcato da _rs_consumer e rs_prefork; wrapper pubblici restano Python.
+
+[[files]]
+path = "celery/worker/pidbox.py"
+group = "celery/worker"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/worker/request.py"
+group = "celery/worker"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/worker/state.py"
+group = "celery/worker"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/worker/strategy.py"
+group = "celery/worker"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "celery/worker/worker.py"
+group = "celery/worker"
+status = "python"
+crate = ""
+# API, orchestrazione o utilità Python conservata.
+
+[[files]]
+path = "kombu/__init__.py"
+group = "kombu"
+status = "python"
+crate = ""
+# Tipi pubblici e utilità ancora disponibili al guscio Python.
+
+[[files]]
+path = "kombu/abstract.py"
+group = "kombu"
+status = "python"
+crate = ""
+# Tipi pubblici e utilità ancora disponibili al guscio Python.
+
+[[files]]
+path = "kombu/asynchronous/__init__.py"
+group = "kombu"
+status = "originale"
+crate = ""
+# Percorso opzionale Kombu non usato dal trasporto nativo.
+
+[[files]]
+path = "kombu/asynchronous/aws/__init__.py"
+group = "kombu"
+status = "originale"
+crate = ""
+# Percorso opzionale Kombu non usato dal trasporto nativo.
+
+[[files]]
+path = "kombu/asynchronous/aws/connection.py"
+group = "kombu"
+status = "originale"
+crate = ""
+# Percorso opzionale Kombu non usato dal trasporto nativo.
+
+[[files]]
+path = "kombu/asynchronous/aws/ext.py"
+group = "kombu"
+status = "originale"
+crate = ""
+# Percorso opzionale Kombu non usato dal trasporto nativo.
+
+[[files]]
+path = "kombu/asynchronous/aws/sqs/__init__.py"
+group = "kombu"
+status = "originale"
+crate = ""
+# Percorso opzionale Kombu non usato dal trasporto nativo.
+
+[[files]]
+path = "kombu/asynchronous/aws/sqs/connection.py"
+group = "kombu"
+status = "originale"
+crate = ""
+# Percorso opzionale Kombu non usato dal trasporto nativo.
+
+[[files]]
+path = "kombu/asynchronous/aws/sqs/ext.py"
+group = "kombu"
+status = "originale"
+crate = ""
+# Percorso opzionale Kombu non usato dal trasporto nativo.
+
+[[files]]
+path = "kombu/asynchronous/aws/sqs/message.py"
+group = "kombu"
+status = "originale"
+crate = ""
+# Percorso opzionale Kombu non usato dal trasporto nativo.
+
+[[files]]
+path = "kombu/asynchronous/aws/sqs/queue.py"
+group = "kombu"
+status = "originale"
+crate = ""
+# Percorso opzionale Kombu non usato dal trasporto nativo.
+
+[[files]]
+path = "kombu/asynchronous/debug.py"
+group = "kombu"
+status = "originale"
+crate = ""
+# Percorso opzionale Kombu non usato dal trasporto nativo.
+
+[[files]]
+path = "kombu/asynchronous/http/__init__.py"
+group = "kombu"
+status = "originale"
+crate = ""
+# Percorso opzionale Kombu non usato dal trasporto nativo.
+
+[[files]]
+path = "kombu/asynchronous/http/base.py"
+group = "kombu"
+status = "originale"
+crate = ""
+# Percorso opzionale Kombu non usato dal trasporto nativo.
+
+[[files]]
+path = "kombu/asynchronous/http/curl.py"
+group = "kombu"
+status = "originale"
+crate = ""
+# Percorso opzionale Kombu non usato dal trasporto nativo.
+
+[[files]]
+path = "kombu/asynchronous/hub.py"
+group = "kombu"
+status = "originale"
+crate = ""
+# Percorso opzionale Kombu non usato dal trasporto nativo.
+
+[[files]]
+path = "kombu/asynchronous/semaphore.py"
+group = "kombu"
+status = "originale"
+crate = ""
+# Percorso opzionale Kombu non usato dal trasporto nativo.
+
+[[files]]
+path = "kombu/asynchronous/timer.py"
+group = "kombu"
+status = "originale"
+crate = ""
+# Percorso opzionale Kombu non usato dal trasporto nativo.
+
+[[files]]
+path = "kombu/clocks.py"
+group = "kombu"
+status = "python"
+crate = ""
+# Tipi pubblici e utilità ancora disponibili al guscio Python.
+
+[[files]]
+path = "kombu/common.py"
+group = "kombu"
+status = "python"
+crate = ""
+# Tipi pubblici e utilità ancora disponibili al guscio Python.
+
+[[files]]
+path = "kombu/compat.py"
+group = "kombu"
+status = "python"
+crate = ""
+# Tipi pubblici e utilità ancora disponibili al guscio Python.
+
+[[files]]
+path = "kombu/compression.py"
+group = "kombu"
+status = "rust"
+crate = "celery-proto"
+rust = 0.1623931623931624
+# Frazione misurata: 19/117 righe fisiche dei ruoli delegati.
+# Simboli: compress, decompress.
+# Il resto rimane Python; compressione: solo codec nativi, registry/fallback Python.
+
+[[files]]
+path = "kombu/connection.py"
+group = "kombu"
+status = "rust"
+crate = "celery-transport"
+# Ruolo I/O sostituito da FastConnection/RsProducer/RsMessage; eventuali tipi pubblici restano importabili.
+
+[[files]]
+path = "kombu/entity.py"
+group = "kombu"
+status = "python"
+crate = ""
+# Tipi pubblici e utilità ancora disponibili al guscio Python.
+
+[[files]]
+path = "kombu/exceptions.py"
+group = "kombu"
+status = "python"
+crate = ""
+# Tipi pubblici e utilità ancora disponibili al guscio Python.
+
+[[files]]
+path = "kombu/log.py"
+group = "kombu"
+status = "python"
+crate = ""
+# Tipi pubblici e utilità ancora disponibili al guscio Python.
+
+[[files]]
+path = "kombu/matcher.py"
+group = "kombu"
+status = "python"
+crate = ""
+# Tipi pubblici e utilità ancora disponibili al guscio Python.
+
+[[files]]
+path = "kombu/message.py"
+group = "kombu"
+status = "rust"
+crate = "celery-transport"
+# Ruolo I/O sostituito da FastConnection/RsProducer/RsMessage; eventuali tipi pubblici restano importabili.
+
+[[files]]
+path = "kombu/messaging.py"
+group = "kombu"
+status = "rust"
+crate = "celery-transport"
+# Ruolo I/O sostituito da FastConnection/RsProducer/RsMessage; eventuali tipi pubblici restano importabili.
+
+[[files]]
+path = "kombu/mixins.py"
+group = "kombu"
+status = "python"
+crate = ""
+# Tipi pubblici e utilità ancora disponibili al guscio Python.
+
+[[files]]
+path = "kombu/pidbox.py"
+group = "kombu"
+status = "python"
+crate = ""
+# Tipi pubblici e utilità ancora disponibili al guscio Python.
+
+[[files]]
+path = "kombu/pools.py"
+group = "kombu"
+status = "rust"
+crate = "celery-transport"
+# Ruolo I/O sostituito da FastConnection/RsProducer/RsMessage; eventuali tipi pubblici restano importabili.
+
+[[files]]
+path = "kombu/resource.py"
+group = "kombu"
+status = "rust"
+crate = "celery-transport"
+# Ruolo I/O sostituito da FastConnection/RsProducer/RsMessage; eventuali tipi pubblici restano importabili.
+
+[[files]]
+path = "kombu/serialization.py"
+group = "kombu"
+status = "python"
+crate = ""
+# Tipi pubblici e utilità ancora disponibili al guscio Python.
+
+[[files]]
+path = "kombu/simple.py"
+group = "kombu"
+status = "python"
+crate = ""
+# Tipi pubblici e utilità ancora disponibili al guscio Python.
+
+[[files]]
+path = "kombu/transport/SLMQ.py"
+group = "kombu"
+status = "originale"
+crate = ""
+# Percorso opzionale Kombu non usato dal trasporto nativo.
+
+[[files]]
+path = "kombu/transport/SQS/SNS.py"
+group = "kombu"
+status = "originale"
+crate = ""
+# Percorso opzionale Kombu non usato dal trasporto nativo.
+
+[[files]]
+path = "kombu/transport/SQS/__init__.py"
+group = "kombu"
+status = "originale"
+crate = ""
+# Percorso opzionale Kombu non usato dal trasporto nativo.
+
+[[files]]
+path = "kombu/transport/SQS/exceptions.py"
+group = "kombu"
+status = "originale"
+crate = ""
+# Percorso opzionale Kombu non usato dal trasporto nativo.
+
+[[files]]
+path = "kombu/transport/__init__.py"
+group = "kombu"
+status = "originale"
+crate = ""
+# Percorso opzionale Kombu non usato dal trasporto nativo.
+
+[[files]]
+path = "kombu/transport/azureservicebus.py"
+group = "kombu"
+status = "originale"
+crate = ""
+# Percorso opzionale Kombu non usato dal trasporto nativo.
+
+[[files]]
+path = "kombu/transport/azurestoragequeues.py"
+group = "kombu"
+status = "originale"
+crate = ""
+# Percorso opzionale Kombu non usato dal trasporto nativo.
+
+[[files]]
+path = "kombu/transport/base.py"
+group = "kombu"
+status = "rust"
+crate = "celery-transport"
+# Ruolo I/O sostituito da FastConnection/RsProducer/RsMessage; eventuali tipi pubblici restano importabili.
+
+[[files]]
+path = "kombu/transport/confluentkafka.py"
+group = "kombu"
+status = "originale"
+crate = ""
+# Percorso opzionale Kombu non usato dal trasporto nativo.
+
+[[files]]
+path = "kombu/transport/consul.py"
+group = "kombu"
+status = "originale"
+crate = ""
+# Percorso opzionale Kombu non usato dal trasporto nativo.
+
+[[files]]
+path = "kombu/transport/etcd.py"
+group = "kombu"
+status = "originale"
+crate = ""
+# Percorso opzionale Kombu non usato dal trasporto nativo.
+
+[[files]]
+path = "kombu/transport/filesystem.py"
+group = "kombu"
+status = "originale"
+crate = ""
+# Percorso opzionale Kombu non usato dal trasporto nativo.
+
+[[files]]
+path = "kombu/transport/gcpubsub.py"
+group = "kombu"
+status = "originale"
+crate = ""
+# Percorso opzionale Kombu non usato dal trasporto nativo.
+
+[[files]]
+path = "kombu/transport/librabbitmq.py"
+group = "kombu"
+status = "originale"
+crate = ""
+# Percorso opzionale Kombu non usato dal trasporto nativo.
+
+[[files]]
+path = "kombu/transport/memory.py"
+group = "kombu"
+status = "rust"
+crate = "celery-transport"
+# Ruolo I/O sostituito da FastConnection/RsProducer/RsMessage; eventuali tipi pubblici restano importabili.
+
+[[files]]
+path = "kombu/transport/mongodb.py"
+group = "kombu"
+status = "originale"
+crate = ""
+# Percorso opzionale Kombu non usato dal trasporto nativo.
+
+[[files]]
+path = "kombu/transport/native_delayed_delivery.py"
+group = "kombu"
+status = "originale"
+crate = ""
+# Percorso opzionale Kombu non usato dal trasporto nativo.
+
+[[files]]
+path = "kombu/transport/pgmq.py"
+group = "kombu"
+status = "originale"
+crate = ""
+# Percorso opzionale Kombu non usato dal trasporto nativo.
+
+[[files]]
+path = "kombu/transport/pyamqp.py"
+group = "kombu"
+status = "rust"
+crate = "celery-transport"
+# Ruolo I/O sostituito da FastConnection/RsProducer/RsMessage; eventuali tipi pubblici restano importabili.
+
+[[files]]
+path = "kombu/transport/pyro.py"
+group = "kombu"
+status = "originale"
+crate = ""
+# Percorso opzionale Kombu non usato dal trasporto nativo.
+
+[[files]]
+path = "kombu/transport/qpid.py"
+group = "kombu"
+status = "originale"
+crate = ""
+# Percorso opzionale Kombu non usato dal trasporto nativo.
+
+[[files]]
+path = "kombu/transport/redis.py"
+group = "kombu"
+status = "rust"
+crate = "celery-transport"
+# Ruolo I/O sostituito da FastConnection/RsProducer/RsMessage; eventuali tipi pubblici restano importabili.
+
+[[files]]
+path = "kombu/transport/sqlalchemy/__init__.py"
+group = "kombu"
+status = "originale"
+crate = ""
+# Percorso opzionale Kombu non usato dal trasporto nativo.
+
+[[files]]
+path = "kombu/transport/sqlalchemy/models.py"
+group = "kombu"
+status = "originale"
+crate = ""
+# Percorso opzionale Kombu non usato dal trasporto nativo.
+
+[[files]]
+path = "kombu/transport/virtual/__init__.py"
+group = "kombu"
+status = "rust"
+crate = "celery-transport"
+# Ruolo I/O sostituito da FastConnection/RsProducer/RsMessage; eventuali tipi pubblici restano importabili.
+
+[[files]]
+path = "kombu/transport/virtual/base.py"
+group = "kombu"
+status = "rust"
+crate = "celery-transport"
+# Ruolo I/O sostituito da FastConnection/RsProducer/RsMessage; eventuali tipi pubblici restano importabili.
+
+[[files]]
+path = "kombu/transport/virtual/exchange.py"
+group = "kombu"
+status = "rust"
+crate = "celery-transport"
+# Ruolo I/O sostituito da FastConnection/RsProducer/RsMessage; eventuali tipi pubblici restano importabili.
+
+[[files]]
+path = "kombu/transport/zookeeper.py"
+group = "kombu"
+status = "originale"
+crate = ""
+# Percorso opzionale Kombu non usato dal trasporto nativo.
+
+[[files]]
+path = "kombu/utils/__init__.py"
+group = "kombu"
+status = "python"
+crate = ""
+# Tipi pubblici e utilità ancora disponibili al guscio Python.
+
+[[files]]
+path = "kombu/utils/amq_manager.py"
+group = "kombu"
+status = "python"
+crate = ""
+# Tipi pubblici e utilità ancora disponibili al guscio Python.
+
+[[files]]
+path = "kombu/utils/collections.py"
+group = "kombu"
+status = "python"
+crate = ""
+# Tipi pubblici e utilità ancora disponibili al guscio Python.
+
+[[files]]
+path = "kombu/utils/compat.py"
+group = "kombu"
+status = "python"
+crate = ""
+# Tipi pubblici e utilità ancora disponibili al guscio Python.
+
+[[files]]
+path = "kombu/utils/debug.py"
+group = "kombu"
+status = "python"
+crate = ""
+# Tipi pubblici e utilità ancora disponibili al guscio Python.
+
+[[files]]
+path = "kombu/utils/div.py"
+group = "kombu"
+status = "python"
+crate = ""
+# Tipi pubblici e utilità ancora disponibili al guscio Python.
+
+[[files]]
+path = "kombu/utils/encoding.py"
+group = "kombu"
+status = "python"
+crate = ""
+# Tipi pubblici e utilità ancora disponibili al guscio Python.
+
+[[files]]
+path = "kombu/utils/eventio.py"
+group = "kombu"
+status = "python"
+crate = ""
+# Tipi pubblici e utilità ancora disponibili al guscio Python.
+
+[[files]]
+path = "kombu/utils/functional.py"
+group = "kombu"
+status = "python"
+crate = ""
+# Tipi pubblici e utilità ancora disponibili al guscio Python.
+
+[[files]]
+path = "kombu/utils/imports.py"
+group = "kombu"
+status = "python"
+crate = ""
+# Tipi pubblici e utilità ancora disponibili al guscio Python.
+
+[[files]]
+path = "kombu/utils/json.py"
+group = "kombu"
+status = "python"
+crate = ""
+# Tipi pubblici e utilità ancora disponibili al guscio Python.
+
+[[files]]
+path = "kombu/utils/limits.py"
+group = "kombu"
+status = "python"
+crate = ""
+# Tipi pubblici e utilità ancora disponibili al guscio Python.
+
+[[files]]
+path = "kombu/utils/objects.py"
+group = "kombu"
+status = "python"
+crate = ""
+# Tipi pubblici e utilità ancora disponibili al guscio Python.
+
+[[files]]
+path = "kombu/utils/scheduling.py"
+group = "kombu"
+status = "python"
+crate = ""
+# Tipi pubblici e utilità ancora disponibili al guscio Python.
+
+[[files]]
+path = "kombu/utils/text.py"
+group = "kombu"
+status = "python"
+crate = ""
+# Tipi pubblici e utilità ancora disponibili al guscio Python.
+
+[[files]]
+path = "kombu/utils/time.py"
+group = "kombu"
+status = "python"
+crate = ""
+# Tipi pubblici e utilità ancora disponibili al guscio Python.
+
+[[files]]
+path = "kombu/utils/url.py"
+group = "kombu"
+status = "python"
+crate = ""
+# Tipi pubblici e utilità ancora disponibili al guscio Python.
+
+[[files]]
+path = "kombu/utils/uuid.py"
+group = "kombu"
+status = "python"
+crate = ""
+# Tipi pubblici e utilità ancora disponibili al guscio Python.
+
+[[files]]
+path = "billiard/__init__.py"
+group = "billiard"
+status = "python"
+crate = ""
+# Compatibilità, errori e trace ancora usati dal guscio/figli.
+
+[[files]]
+path = "billiard/_ext.py"
+group = "billiard"
+status = "originale"
+crate = ""
+# Percorso multiprocessing non usato dal pool nativo.
+
+[[files]]
+path = "billiard/_win.py"
+group = "billiard"
+status = "originale"
+crate = ""
+# Percorso multiprocessing non usato dal pool nativo.
+
+[[files]]
+path = "billiard/common.py"
+group = "billiard"
+status = "python"
+crate = ""
+# Compatibilità, errori e trace ancora usati dal guscio/figli.
+
+[[files]]
+path = "billiard/compat.py"
+group = "billiard"
+status = "python"
+crate = ""
+# Compatibilità, errori e trace ancora usati dal guscio/figli.
+
+[[files]]
+path = "billiard/connection.py"
+group = "billiard"
+status = "rust"
+crate = "celery-worker"
+# Supervisione, fork e IPC svolti da pool Rust e zygote Python.
+
+[[files]]
+path = "billiard/context.py"
+group = "billiard"
+status = "python"
+crate = ""
+# Compatibilità, errori e trace ancora usati dal guscio/figli.
+
+[[files]]
+path = "billiard/dummy/__init__.py"
+group = "billiard"
+status = "originale"
+crate = ""
+# Percorso multiprocessing non usato dal pool nativo.
+
+[[files]]
+path = "billiard/dummy/connection.py"
+group = "billiard"
+status = "originale"
+crate = ""
+# Percorso multiprocessing non usato dal pool nativo.
+
+[[files]]
+path = "billiard/einfo.py"
+group = "billiard"
+status = "python"
+crate = ""
+# Compatibilità, errori e trace ancora usati dal guscio/figli.
+
+[[files]]
+path = "billiard/exceptions.py"
+group = "billiard"
+status = "python"
+crate = ""
+# Compatibilità, errori e trace ancora usati dal guscio/figli.
+
+[[files]]
+path = "billiard/forkserver.py"
+group = "billiard"
+status = "originale"
+crate = ""
+# Percorso multiprocessing non usato dal pool nativo.
+
+[[files]]
+path = "billiard/heap.py"
+group = "billiard"
+status = "originale"
+crate = ""
+# Percorso multiprocessing non usato dal pool nativo.
+
+[[files]]
+path = "billiard/managers.py"
+group = "billiard"
+status = "originale"
+crate = ""
+# Percorso multiprocessing non usato dal pool nativo.
+
+[[files]]
+path = "billiard/pool.py"
+group = "billiard"
+status = "rust"
+crate = "celery-worker"
+# Supervisione, fork e IPC svolti da pool Rust e zygote Python.
+
+[[files]]
+path = "billiard/popen_fork.py"
+group = "billiard"
+status = "rust"
+crate = "celery-worker"
+# Supervisione, fork e IPC svolti da pool Rust e zygote Python.
+
+[[files]]
+path = "billiard/popen_forkserver.py"
+group = "billiard"
+status = "originale"
+crate = ""
+# Percorso multiprocessing non usato dal pool nativo.
+
+[[files]]
+path = "billiard/popen_spawn_posix.py"
+group = "billiard"
+status = "originale"
+crate = ""
+# Percorso multiprocessing non usato dal pool nativo.
+
+[[files]]
+path = "billiard/popen_spawn_win32.py"
+group = "billiard"
+status = "originale"
+crate = ""
+# Percorso multiprocessing non usato dal pool nativo.
+
+[[files]]
+path = "billiard/process.py"
+group = "billiard"
+status = "rust"
+crate = "celery-worker"
+# Supervisione, fork e IPC svolti da pool Rust e zygote Python.
+
+[[files]]
+path = "billiard/queues.py"
+group = "billiard"
+status = "rust"
+crate = "celery-worker"
+# Supervisione, fork e IPC svolti da pool Rust e zygote Python.
+
+[[files]]
+path = "billiard/reduction.py"
+group = "billiard"
+status = "python"
+crate = ""
+# Compatibilità, errori e trace ancora usati dal guscio/figli.
+
+[[files]]
+path = "billiard/resource_sharer.py"
+group = "billiard"
+status = "originale"
+crate = ""
+# Percorso multiprocessing non usato dal pool nativo.
+
+[[files]]
+path = "billiard/semaphore_tracker.py"
+group = "billiard"
+status = "originale"
+crate = ""
+# Percorso multiprocessing non usato dal pool nativo.
+
+[[files]]
+path = "billiard/sharedctypes.py"
+group = "billiard"
+status = "originale"
+crate = ""
+# Percorso multiprocessing non usato dal pool nativo.
+
+[[files]]
+path = "billiard/spawn.py"
+group = "billiard"
+status = "originale"
+crate = ""
+# Percorso multiprocessing non usato dal pool nativo.
+
+[[files]]
+path = "billiard/synchronize.py"
+group = "billiard"
+status = "originale"
+crate = ""
+# Percorso multiprocessing non usato dal pool nativo.
+
+[[files]]
+path = "billiard/util.py"
+group = "billiard"
+status = "python"
+crate = ""
+# Compatibilità, errori e trace ancora usati dal guscio/figli.
+
+[[files]]
+path = "amqp/__init__.py"
+group = "amqp/redis-py"
+status = "python"
+crate = ""
+# Tipi, eccezioni o compatibilità pubblica conservati.
+
+[[files]]
+path = "amqp/abstract_channel.py"
+group = "amqp/redis-py"
+status = "rust"
+crate = "celery-transport"
+# Protocollo/socket sostituiti da lapin o client Redis Rust; copertura del ruolo, non equivalenza di tutte le API opzionali.
+
+[[files]]
+path = "amqp/basic_message.py"
+group = "amqp/redis-py"
+status = "rust"
+crate = "celery-transport"
+# Protocollo/socket sostituiti da lapin o client Redis Rust; copertura del ruolo, non equivalenza di tutte le API opzionali.
+
+[[files]]
+path = "amqp/channel.py"
+group = "amqp/redis-py"
+status = "rust"
+crate = "celery-transport"
+# Protocollo/socket sostituiti da lapin o client Redis Rust; copertura del ruolo, non equivalenza di tutte le API opzionali.
+
+[[files]]
+path = "amqp/connection.py"
+group = "amqp/redis-py"
+status = "rust"
+crate = "celery-transport"
+# Protocollo/socket sostituiti da lapin o client Redis Rust; copertura del ruolo, non equivalenza di tutte le API opzionali.
+
+[[files]]
+path = "amqp/exceptions.py"
+group = "amqp/redis-py"
+status = "python"
+crate = ""
+# Tipi, eccezioni o compatibilità pubblica conservati.
+
+[[files]]
+path = "amqp/method_framing.py"
+group = "amqp/redis-py"
+status = "rust"
+crate = "celery-transport"
+# Protocollo/socket sostituiti da lapin o client Redis Rust; copertura del ruolo, non equivalenza di tutte le API opzionali.
+
+[[files]]
+path = "amqp/platform.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "amqp/protocol.py"
+group = "amqp/redis-py"
+status = "rust"
+crate = "celery-transport"
+# Protocollo/socket sostituiti da lapin o client Redis Rust; copertura del ruolo, non equivalenza di tutte le API opzionali.
+
+[[files]]
+path = "amqp/sasl.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "amqp/serialization.py"
+group = "amqp/redis-py"
+status = "rust"
+crate = "celery-transport"
+# Protocollo/socket sostituiti da lapin o client Redis Rust; copertura del ruolo, non equivalenza di tutte le API opzionali.
+
+[[files]]
+path = "amqp/spec.py"
+group = "amqp/redis-py"
+status = "rust"
+crate = "celery-transport"
+# Protocollo/socket sostituiti da lapin o client Redis Rust; copertura del ruolo, non equivalenza di tutte le API opzionali.
+
+[[files]]
+path = "amqp/transport.py"
+group = "amqp/redis-py"
+status = "rust"
+crate = "celery-transport"
+# Protocollo/socket sostituiti da lapin o client Redis Rust; copertura del ruolo, non equivalenza di tutte le API opzionali.
+
+[[files]]
+path = "amqp/utils.py"
+group = "amqp/redis-py"
+status = "python"
+crate = ""
+# Tipi, eccezioni o compatibilità pubblica conservati.
+
+[[files]]
+path = "redis/__init__.py"
+group = "amqp/redis-py"
+status = "python"
+crate = ""
+# Tipi, eccezioni o compatibilità pubblica conservati.
+
+[[files]]
+path = "redis/_defaults.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/_himport_exec.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/_parsers/__init__.py"
+group = "amqp/redis-py"
+status = "rust"
+crate = "celery-backend"
+# Protocollo/socket sostituiti da lapin o client Redis Rust; copertura del ruolo, non equivalenza di tutte le API opzionali.
+
+[[files]]
+path = "redis/_parsers/base.py"
+group = "amqp/redis-py"
+status = "rust"
+crate = "celery-backend"
+# Protocollo/socket sostituiti da lapin o client Redis Rust; copertura del ruolo, non equivalenza di tutte le API opzionali.
+
+[[files]]
+path = "redis/_parsers/commands.py"
+group = "amqp/redis-py"
+status = "rust"
+crate = "celery-backend"
+# Protocollo/socket sostituiti da lapin o client Redis Rust; copertura del ruolo, non equivalenza di tutte le API opzionali.
+
+[[files]]
+path = "redis/_parsers/encoders.py"
+group = "amqp/redis-py"
+status = "rust"
+crate = "celery-backend"
+# Protocollo/socket sostituiti da lapin o client Redis Rust; copertura del ruolo, non equivalenza di tutte le API opzionali.
+
+[[files]]
+path = "redis/_parsers/helpers.py"
+group = "amqp/redis-py"
+status = "rust"
+crate = "celery-backend"
+# Protocollo/socket sostituiti da lapin o client Redis Rust; copertura del ruolo, non equivalenza di tutte le API opzionali.
+
+[[files]]
+path = "redis/_parsers/hiredis.py"
+group = "amqp/redis-py"
+status = "rust"
+crate = "celery-backend"
+# Protocollo/socket sostituiti da lapin o client Redis Rust; copertura del ruolo, non equivalenza di tutte le API opzionali.
+
+[[files]]
+path = "redis/_parsers/resp2.py"
+group = "amqp/redis-py"
+status = "rust"
+crate = "celery-backend"
+# Protocollo/socket sostituiti da lapin o client Redis Rust; copertura del ruolo, non equivalenza di tutte le API opzionali.
+
+[[files]]
+path = "redis/_parsers/resp3.py"
+group = "amqp/redis-py"
+status = "rust"
+crate = "celery-backend"
+# Protocollo/socket sostituiti da lapin o client Redis Rust; copertura del ruolo, non equivalenza di tutte le API opzionali.
+
+[[files]]
+path = "redis/_parsers/response_callbacks.py"
+group = "amqp/redis-py"
+status = "rust"
+crate = "celery-backend"
+# Protocollo/socket sostituiti da lapin o client Redis Rust; copertura del ruolo, non equivalenza di tutte le API opzionali.
+
+[[files]]
+path = "redis/_parsers/socket.py"
+group = "amqp/redis-py"
+status = "rust"
+crate = "celery-backend"
+# Protocollo/socket sostituiti da lapin o client Redis Rust; copertura del ruolo, non equivalenza di tutte le API opzionali.
+
+[[files]]
+path = "redis/asyncio/__init__.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/asyncio/_himport_exec.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/asyncio/client.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/asyncio/cluster.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/asyncio/connection.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/asyncio/http/__init__.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/asyncio/http/http_client.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/asyncio/keyspace_notifications.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/asyncio/lock.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/asyncio/maint_notifications.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/asyncio/multidb/__init__.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/asyncio/multidb/client.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/asyncio/multidb/command_executor.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/asyncio/multidb/config.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/asyncio/multidb/database.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/asyncio/multidb/event.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/asyncio/multidb/failover.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/asyncio/multidb/failure_detector.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/asyncio/multidb/healthcheck.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/asyncio/observability/__init__.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/asyncio/observability/recorder.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/asyncio/retry.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/asyncio/sentinel.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/asyncio/utils.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/auth/__init__.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/auth/err.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/auth/idp.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/auth/token.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/auth/token_manager.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/background.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/backoff.py"
+group = "amqp/redis-py"
+status = "rust"
+crate = "celery-backend"
+# Protocollo/socket sostituiti da lapin o client Redis Rust; copertura del ruolo, non equivalenza di tutte le API opzionali.
+
+[[files]]
+path = "redis/cache.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/client.py"
+group = "amqp/redis-py"
+status = "rust"
+crate = "celery-backend"
+# Protocollo/socket sostituiti da lapin o client Redis Rust; copertura del ruolo, non equivalenza di tutte le API opzionali.
+
+[[files]]
+path = "redis/cluster.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/commands/__init__.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/commands/bf/__init__.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/commands/bf/commands.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/commands/bf/info.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/commands/cluster.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/commands/core.py"
+group = "amqp/redis-py"
+status = "rust"
+crate = "celery-backend"
+# Protocollo/socket sostituiti da lapin o client Redis Rust; copertura del ruolo, non equivalenza di tutte le API opzionali.
+
+[[files]]
+path = "redis/commands/helpers.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/commands/json/__init__.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/commands/json/_util.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/commands/json/commands.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/commands/json/decoders.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/commands/json/path.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/commands/policies.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/commands/redismodules.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/commands/search/__init__.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/commands/search/_util.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/commands/search/aggregation.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/commands/search/commands.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/commands/search/dialect.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/commands/search/document.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/commands/search/field.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/commands/search/hybrid_query.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/commands/search/hybrid_result.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/commands/search/index_definition.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/commands/search/profile_information.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/commands/search/query.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/commands/search/querystring.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/commands/search/reducers.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/commands/search/result.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/commands/search/suggestion.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/commands/sentinel.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/commands/timeseries/__init__.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/commands/timeseries/commands.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/commands/timeseries/info.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/commands/timeseries/utils.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/commands/vectorset/__init__.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/commands/vectorset/commands.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/commands/vectorset/utils.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/connection.py"
+group = "amqp/redis-py"
+status = "rust"
+crate = "celery-backend"
+# Protocollo/socket sostituiti da lapin o client Redis Rust; copertura del ruolo, non equivalenza di tutte le API opzionali.
+
+[[files]]
+path = "redis/crc.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/credentials.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/data_structure.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/driver_info.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/event.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/exceptions.py"
+group = "amqp/redis-py"
+status = "python"
+crate = ""
+# Tipi, eccezioni o compatibilità pubblica conservati.
+
+[[files]]
+path = "redis/himport.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/http/__init__.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/http/http_client.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/keyspace_notifications.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/lock.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/maint_notifications.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/multidb/__init__.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/multidb/circuit.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/multidb/client.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/multidb/command_executor.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/multidb/config.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/multidb/database.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/multidb/event.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/multidb/exception.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/multidb/failover.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/multidb/failure_detector.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/observability/__init__.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/observability/attributes.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/observability/config.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/observability/metrics.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/observability/providers.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/observability/recorder.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/observability/registry.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/ocsp.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/retry.py"
+group = "amqp/redis-py"
+status = "rust"
+crate = "celery-backend"
+# Protocollo/socket sostituiti da lapin o client Redis Rust; copertura del ruolo, non equivalenza di tutte le API opzionali.
+
+[[files]]
+path = "redis/sentinel.py"
+group = "amqp/redis-py"
+status = "originale"
+crate = ""
+# Funzionalità opzionale del client originale fuori dal percorso supportato.
+
+[[files]]
+path = "redis/typing.py"
+group = "amqp/redis-py"
+status = "python"
+crate = ""
+# Tipi, eccezioni o compatibilità pubblica conservati.
+
+[[files]]
+path = "redis/utils.py"
+group = "amqp/redis-py"
+status = "python"
+crate = ""
+# Tipi, eccezioni o compatibilità pubblica conservati.
