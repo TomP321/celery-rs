@@ -49,10 +49,12 @@ soddisfa le dipendenze di chi richiede `celery`.
 **Da wheel precompilata** (branch [`wheels`](https://github.com/TomP321/celery-rs/tree/wheels), Linux x86_64 e aarch64, glibc ≥ 2.28, nessuna toolchain Rust necessaria):
 
 ```toml
-# pyproject.toml, al posto di "celery==…"
-"celery[redis] @ https://github.com/TomP321/celery-rs/raw/wheels/celery-5.7.0rc1%2Brs.0.1.1-cp310-abi3-manylinux_2_28_x86_64.whl ; platform_machine == 'x86_64'",
-"celery[redis] @ https://github.com/TomP321/celery-rs/raw/wheels/celery-5.7.0rc1%2Brs.0.1.1-cp310-abi3-manylinux_2_28_aarch64.whl ; platform_machine == 'aarch64'",
+# pyproject.toml, al posto di "celery==…": una riga, l'architettura (x86_64/aarch64) è scelta da sola
+"celery[redis] @ https://github.com/TomP321/celery-rs/raw/wheels/celery-5.7.0rc1%2Brs.0.1.1.tar.gz",
 ```
+
+Il pacchetto sorgente contiene solo un selettore (`tools/selector/`) che scarica e verifica
+(SHA-256) la wheel precompilata giusta: funziona con pip e uv, senza Rust.
 
 **Dal sorgente** (serve la toolchain Rust):
 
