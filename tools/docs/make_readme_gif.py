@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Genera la GIF: uvx --with pillow python tools/docs/make_readme_gif.py."""
+import ast
 import subprocess
 import tomllib
 from functools import lru_cache
@@ -10,7 +11,7 @@ from PIL import Image, ImageDraw, ImageFont
 ROOT = Path(__file__).resolve().parents[2]
 OUTPUT = ROOT / 'docs/assets/celery-rs-conversione.gif'
 SITE = ROOT / '.venv-ref/lib/python3.13/site-packages'
-WIDTH, HEIGHT = 960, 580
+WIDTH, HEIGHT = 960, 680
 BG, PANEL, BORDER = '#0b0c10', '#11141b', '#2c303b'
 WHITE, MUTED, ORANGE, BLUE = '#f3f1ed', '#a0a7b7', '#e8946f', '#78b6ed'
 DARK = '#303642'
@@ -38,6 +39,33 @@ def text(d, x, y, value, size=11, color=MUTED, bold=False, width=None):
     d.text((x, y), value, fill=color, font=face)
 
 
+def symbol_lines(source, row):
+    symbols = {}
+
+    def visit(node, prefix=''):
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+                name = prefix + child.name
+                symbols[name] = child
+                visit(child, name + '.')
+            else:
+                visit(child, prefix)
+
+    visit(ast.parse(source.read_text()))
+    covered = set()
+    for name in row['rust_symbols']:
+        node = symbols[name]
+        covered.update(range(node.lineno, node.end_lineno + 1))
+    for selector in row['rust_calls']:
+        symbol, call = selector.split('|')
+        matches = [n for n in ast.walk(symbols[symbol]) if isinstance(n, ast.Call)
+                   and (ast.unparse(n.func) == call or ast.unparse(n.func).endswith('.' + call))]
+        assert matches, f'Chiamata scomparsa: {selector}'
+        for node in matches:
+            covered.update(range(node.lineno, node.end_lineno + 1))
+    return len(covered)
+
+
 def load_map():
     data = tomllib.loads((ROOT / 'tools/docs/conversion_map.toml').read_text())
     expected = {'celery/' + p.relative_to(ROOT / 'celery/celery').as_posix()
@@ -56,6 +84,8 @@ def load_map():
         row['lines'] = len(source.read_bytes().splitlines())
         fraction = row.get('rust', 1 if row['status'] == 'rust' else 0)
         assert 0 <= fraction <= 1
+        if 'rust_symbols' in row:
+            assert abs(symbol_lines(source, row) - fraction * row['lines']) < 1e-8, row['path']
         if fraction:
             assert (ROOT / 'crates' / row['crate']).is_dir()
         row['weight'] = fraction * row['lines']
@@ -83,66 +113,97 @@ def commits():
 def render(progress, rows, ratios, total, subjects):
     im = Image.new('RGB', (WIDTH, HEIGHT), BG)
     d = ImageDraw.Draw(im)
-    d.rounded_rectangle((7, 7, 952, 572), radius=16, outline=BORDER, width=2)
-    d.rounded_rectangle((24, 22, 429, 48), radius=13, fill='#35241f', outline='#80513f')
-    text(d, 36, 27, '✻ CLAUDE CODE · DYNAMIC WORKFLOW', 13, ORANGE, True)
-    text(d, 773, 29, 'CELERY → RUST', 16, WHITE, True)
-    text(d, 24, 63, f'{100 * total * progress:4.1f}% del runtime in Rust', 27, WHITE, True)
+    d.rounded_rectangle((7, 7, 952, HEIGHT - 8), radius=16, outline=BORDER, width=2)
+    d.rounded_rectangle((24, 20, 429, 46), radius=13, fill='#35241f', outline='#80513f')
+    text(d, 36, 25, '✻ CLAUDE CODE · DYNAMIC WORKFLOW', 13, ORANGE, True)
+    text(d, 773, 27, 'CELERY → RUST', 16, WHITE, True)
+    text(d, 24, 61, f'{100 * total * progress:4.1f}% del codice di runtime in Rust', 25, WHITE, True)
+    text(d, 25, 99, 'righe del riferimento il cui ruolo è svolto da Rust', 13)
     phase = min(9, int(progress * 10))
-    text(d, 26, 105, f'fase {phase + 1} · {PHASES[phase]}', 14, ORANGE)
-    text(d, 530, 110, 'Pesi LOC · percorso supportato · API Python conservata', 11)
-    d.line((24, 140, 935, 140), fill=BORDER)
-    text(d, 25, 151, 'porting.log', 12, WHITE, True)
-    text(d, 291, 151, 'FILE · .py → .rs', 12, WHITE, True)
-    text(d, 694, 151, '→ IN RUST PER PACCHETTO', 12, WHITE, True)
-    for x in [274, 679]:
-        d.line((x, 151, x, 467), fill=BORDER)
-    # Ogni cella corrisponde a un file: nessun file è nascosto dal raggruppamento.
+    text(d, 25, 126, f'fase {phase + 1} · {PHASES[phase]}', 14, ORANGE)
+    d.line((24, 154, 935, 154), fill=BORDER)
+    text(d, 25, 164, 'FILE · .py → .rs', 12, WHITE, True)
+    text(d, 693, 164, '→ IN RUST PER PACCHETTO', 12, WHITE, True)
+    particles = []
+    protected = [(507, 446, 660, 567)]
     for gi, group in enumerate(GROUPS):
-        y = 184 + gi * 25
+        px, py = 24 + (gi % 4) * 161, 190 + (gi // 4) * 128
+        pw, ph = 153, 121
+        protected.extend([(px, py, px + pw, py + 22), (px, py + 104, px + pw, py + ph)])
+        d.rounded_rectangle((px, py, px + pw, py + ph), radius=7, fill=PANEL, outline=BORDER)
+        text(d, px + 7, py + 6, group, 10, WHITE, True)
         subset = [r for r in rows if r['group'] == group]
-        for i, row in enumerate(subset):
-            x, cy = 291 + (i % 72) * 5, y + (i // 72) * 6
-            threshold = (i + 1) / (len(subset) + 1)
-            local = max(0, min(1, (progress - gi * .012) / .88))
-            color = DARK
-            if local >= threshold:
+        # Solo il pannello dei client raggruppa due file per cella: l'inventario resta completo.
+        batch = (len(subset) + 103) // 104
+        for first in range(0, len(subset), batch):
+            cell = subset[first:first + batch]
+            index = first // batch
+            x, y = px + 8 + (index % 13) * 10, py + 27 + (index // 13) * 10
+            assert y + 7 <= py + 104, f'Troppe celle: {group}'
+            for j, row in enumerate(cell):
+                # L'accensione di ogni file ha un istante distinto e una scia di otto frame.
+                moment = .025 + gi * .004 + .87 * (first + j + 1) / (len(subset) + 1)
+                age = progress - moment
+                converted = age >= 0
                 color = ORANGE if row['status'] == 'rust' else BLUE if row['status'] == 'python' else DARK
-            d.rectangle((x, cy, x + 3, cy + 3), fill=color)
-            if color == ORANGE and row.get('rust', 1) < 1:
-                d.rectangle((x + 2, cy, x + 3, cy + 3), fill=BLUE)
-            if row['status'] == 'rust' and abs(local - threshold) < .018 and progress < 1:
-                d.rectangle((x - 1, cy - 1, x + 4, cy + 4), outline='#ffe2b4')
-        text(d, 694, y - 5, group, 10, WHITE)
-        bar_y = y + 10
-        d.rounded_rectangle((694, bar_y, 884, bar_y + 4), radius=2, fill=DARK)
+                left = x + j * 8 // len(cell)
+                right = x + (j + 1) * 8 // len(cell) - 1
+                d.rectangle((left, y, right, y + 7), fill=color if converted else DARK)
+                if converted and row['status'] == 'rust' and row.get('rust', 1) < 1:
+                    d.line((left, y + 6, right, y + 6), fill=BLUE, width=2)
+                if row['status'] == 'rust' and 0 <= age < .04:
+                    d.rectangle((x - 1, y - 1, x + 8, y + 8), outline='#ffe2b4')
+                    if age < .02:
+                        d.rectangle((left, y, right, y + 3), fill='#ffe2b4')
+                    particles.append((x + 4, y + 4, gi, age / .04))
+        suffix = ' · cella ≤2 file' if batch > 1 else ' · 1 cella/file'
+        text(d, px + 7, py + 106, f'{len(subset)} file' + suffix, 9)
+        by = 196 + gi * 33
+        protected.append((690, by - 2, 936, by + 14))
+        text(d, 693, by, group, 11, WHITE)
+        d.rounded_rectangle((693, by + 17, 884, by + 23), radius=3, fill=DARK)
         fill = ratios[group] * progress
         if fill:
-            d.rectangle((694, bar_y, 694 + round(190 * fill), bar_y + 4), fill=ORANGE)
-        text(d, 893, y, f'{100 * fill:.1f}%', 11, ORANGE)
-    # Le righe scorrono in ordine d'inventario; destinazioni di crate reali.
+            d.rectangle((693, by + 17, 693 + round(191 * fill), by + 23), fill=ORANGE)
+        text(d, 892, by + 13, f'{100 * fill:.1f}%', 11, ORANGE)
+    # Il dodicesimo pannello lascia spazio a una traccia compatta dei file effettivi.
+    px, py = 507, 446
+    d.rounded_rectangle((px, py, px + 153, py + 121), radius=7, fill=PANEL, outline=BORDER)
+    text(d, px + 7, py + 6, 'porting.log', 11, WHITE, True)
     stream = [r for r in rows if r['status'] in {'rust', 'python'}]
-    end = min(len(stream), 5 + int(progress * (len(stream) - 5)))
-    for i, row in enumerate(stream[max(0, end - 6):end]):
-        y = 183 + i * 45
+    end = min(len(stream), 2 + int(progress * (len(stream) - 2)))
+    for i, row in enumerate(stream[max(0, end - 2):end]):
+        y = py + 27 + i * 42
         rust = row['status'] == 'rust'
-        text(d, 25, y, ('port  ' if rust else 'keep  ') + row['path'], 10, ORANGE if rust else BLUE, width=235)
-        targets = {'celery-worker': 'pool/…', 'celery-transport': 'redis/…' if 'redis' in row['path'] else 'transport.rs',
-                   'celery-backend': 'redis.rs' if 'redis' in row['path'] else 'lib.rs',
-                   'celery-beat': 'parser.rs', 'celery-proto': 'compression.rs'}
-        destination = '→ ' + row['crate'] + '/src/' + targets[row['crate']] if rust else '(API / runtime Python)'
-        text(d, 37, y + 15, destination, 10, MUTED, width=222)
-    for x, color, label in [(291, ORANGE, 'Rust'), (385, BLUE, 'Python'), (493, DARK, 'originale/assente')]:
-        d.rectangle((x, 463, x + 6, 469), fill=color)
-        text(d, x + 12, 458, label, 10)
-    d.line((24, 484, 935, 484), fill=BORDER)
+        text(d, px + 7, y, ('port ' if rust else 'keep ') + row['path'], 9,
+             ORANGE if rust else BLUE, width=139)
+        destination = '→ ' + row['crate'] if rust else 'API / runtime Python'
+        text(d, px + 7, y + 14, destination, 9, width=139)
+    # Le particelle curvano verso la barra della propria destinazione, sopra i pannelli.
+    for x, y, gi, t in particles:
+        ex = 693 + 191 * ratios[GROUPS[gi]] * min(1, progress + .04)
+        ey = 216 + gi * 33
+        cx, cy = (x + ex) / 2, min(y, ey) - 38
+        def point(u):
+            return ((1-u)**2*x + 2*(1-u)*u*cx + u*u*ex,
+                    (1-u)**2*y + 2*(1-u)*u*cy + u*u*ey)
+        for offset, radius, color in [(.12, 1, '#80513f'), (.06, 2, ORANGE), (0, 3, '#ffe2b4')]:
+            tx, ty = point(max(0, t - offset))
+            if not any(x0 - radius <= tx <= x1 + radius and y0 - radius <= ty <= y1 + radius
+                       for x0, y0, x1, y1 in protected):
+                d.ellipse((tx-radius, ty-radius, tx+radius, ty+radius), fill=color)
+    for x, color, label in [(25, ORANGE, 'Rust'), (118, BLUE, 'Python'), (224, DARK, 'originale / assente')]:
+        d.rectangle((x, 580, x + 7, 587), fill=color)
+        text(d, x + 14, 577, label, 11)
+    text(d, 508, 577, 'celle miste: sottolineatura blu', 10)
+    d.line((24, 604, 935, 604), fill=BORDER)
     if progress >= 1:
-        text(d, 25, 495, '23.300 righe Rust · 6 crate    worker -c 10: 300 → 73 MB (−76%)', 15, WHITE, True)
-        text(d, 25, 527, 'In 8 GB: 27 → 96–105 worker     Redis: task/s ×3', 15, ORANGE)
+        text(d, 25, 614, '23.300 righe Rust · 6 crate    worker -c 10: 300 → 73 MB (−76%)', 15, WHITE, True)
+        text(d, 25, 643, 'In 8 GB: 27 → 96–105 worker     Redis: task/s ×3', 15, ORANGE)
     else:
         end = min(len(subjects), 3 + int(progress * (len(subjects) - 3)))
         for i, subject in enumerate(subjects[max(0, end - 3):end]):
-            text(d, 25, 495 + i * 20, '· ' + subject, 11, WHITE if i == 2 else MUTED, width=903)
+            text(d, 25, 614 + i * 17, '· ' + subject, 11, WHITE if i == 2 else MUTED, width=903)
     return im
 
 

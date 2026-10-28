@@ -1,6 +1,7 @@
 # Copertura dei ruoli a runtime, non percentuale di testo tradotto letteralmente.
-# Conteggio: righe fisiche incluse righe vuote e commenti; file misti conservati Python
-# salvo loop/pool e I/O scavalcati integralmente nel percorso nativo.
+# Conteggio: righe fisiche incluse righe vuote e commenti. Nei file misti Celery
+# si contano simboli di ruoli scavalcati oppure le sole chiamate delegate.
+# rust_calls usa simbolo|nome_chiamata; le righe sovrapposte contano una sola volta.
 # Gli altri moduli Celery (canvas, trace, loader, ecc.) sono aggregati ad app.
 # originale/assente esclusi dal denominatore globale, inclusi in quello per pacchetto.
 version = 1
@@ -36,9 +37,14 @@ crate = ""
 [[files]]
 path = "celery/app/amqp.py"
 group = "celery/app"
-status = "python"
-crate = ""
-# API, orchestrazione o utilità Python conservata.
+status = "rust"
+crate = "celery-transport"
+rust = 0.03886397608370702
+rust_symbols = ["AMQP.TaskConsumer", "AMQP.producer_pool"]
+rust_calls = ["AMQP._create_task_sender|producer.publish"]
+# Quota misurata: 26/669 righe fisiche, unione senza doppio conteggio.
+# Simboli interi: AMQP.TaskConsumer, AMQP.producer_pool; chiamate: AMQP._create_task_sender|producer.publish.
+# TaskConsumer devia a RsTaskConsumer e producer_pool a FastProducerPool; publish usa RsProducer. Routing, segnali e costruzione Task v1/v2 restano Python.
 
 [[files]]
 path = "celery/app/annotations.py"
@@ -78,9 +84,14 @@ crate = ""
 [[files]]
 path = "celery/app/control.py"
 group = "celery/app"
-status = "python"
-crate = ""
-# API, orchestrazione o utilità Python conservata.
+status = "rust"
+crate = "celery-transport"
+rust = 0.04556962025316456
+rust_symbols = ["Control.broadcast"]
+rust_calls = []
+# Quota misurata: 36/790 righe fisiche, unione senza doppio conteggio.
+# Simboli interi: Control.broadcast; chiamate: nessuna.
+# _rs_control.broadcast scavalca mailbox._broadcast per invio/raccolta risposte. Le API Control/Inspect attorno al broadcast e Panel restano Python; broadcast è contato per il ruolo I/O scavalcato, inclusi i wrapper come in kombu.connection.
 
 [[files]]
 path = "celery/app/defaults.py"
@@ -302,19 +313,26 @@ crate = ""
 [[files]]
 path = "celery/backends/redis.py"
 group = "celery/backends"
-status = "python"
-crate = ""
-# API, orchestrazione o utilità Python conservata.
+status = "rust"
+crate = "celery-backend"
+rust = 0.18687872763419483
+rust_symbols = ["ResultConsumer._reconnect_pubsub", "ResultConsumer._reconnect", "ResultConsumer.start", "ResultConsumer.stop", "ResultConsumer.drain_events", "ResultConsumer._drain_one", "ResultConsumer._wait_for_pubsub", "ResultConsumer.consume_from", "ResultConsumer._consume_from", "ResultConsumer.cancel_for", "ResultConsumer._flush_pending_unsubscribe", "RedisBackend.get", "RedisBackend.mget", "RedisBackend._set", "RedisBackend.delete", "RedisBackend.incr", "RedisBackend.expire", "RedisBackend._create_client", "RedisBackend._get_client", "RedisBackend._get_pool", "RedisBackend.ConnectionPool"]
+rust_calls = ["ResultConsumer._reconnect_pubsub|pubsub", "ResultConsumer._reconnect_pubsub|subscribe", "ResultConsumer.stop|close", "ResultConsumer._consume_from|subscribe", "ResultConsumer._drain_one|get_message"]
+# Quota misurata: 188/1006 righe fisiche, unione senza doppio conteggio.
+# Simboli interi: ResultConsumer._reconnect_pubsub, ResultConsumer._reconnect, ResultConsumer.start, ResultConsumer.stop, ResultConsumer.drain_events, ResultConsumer._drain_one, ResultConsumer._wait_for_pubsub, ResultConsumer.consume_from, ResultConsumer._consume_from, ResultConsumer.cancel_for, ResultConsumer._flush_pending_unsubscribe, RedisBackend.get, RedisBackend.mget, RedisBackend._set, RedisBackend.delete, RedisBackend.incr, RedisBackend.expire, RedisBackend._create_client, RedisBackend._get_client, RedisBackend._get_pool, RedisBackend.ConnectionPool; chiamate: ResultConsumer._reconnect_pubsub|pubsub, ResultConsumer._reconnect_pubsub|subscribe, ResultConsumer.stop|close, ResultConsumer._consume_from|subscribe, ResultConsumer._drain_one|get_message.
+# _create_rs_client seleziona _rs_redis.RsRedis/RsPubSub. Conta i simboli del ruolo I/O KV/pubsub via shim; callback on_state_change, URL, retry backend, metadati e chord restano Python. Nei simboli I/O contati restano wrapper e riconnessione Python, come in kombu.connection.
 
 [[files]]
 path = "celery/backends/rpc.py"
 group = "celery/backends"
 status = "rust"
 crate = "celery-backend"
-rust = 0.24721603563474387
-# Frazione misurata: 111/449 righe fisiche dei ruoli delegati.
-# Simboli: ResultConsumer.
-# Il resto rimane Python; compressione: solo codec nativi, registry/fallback Python.
+rust = 0.20489977728285078
+rust_symbols = ["ResultConsumer.start", "ResultConsumer.drain_events", "ResultConsumer._reconnect", "ResultConsumer.stop", "ResultConsumer.consume_from", "ResultConsumer.cancel_for"]
+rust_calls = ["RPCBackend.store_result|publish"]
+# Quota misurata: 92/449 righe fisiche, unione senza doppio conteggio.
+# Simboli interi: ResultConsumer.start, ResultConsumer.drain_events, ResultConsumer._reconnect, ResultConsumer.stop, ResultConsumer.consume_from, ResultConsumer.cancel_for; chiamate: RPCBackend.store_result|publish.
+# RsResultConsumer/promote_to_rust scavalcano consumer I/O; producer.publish usa RsProducer. Cache, _to_result, callback, API e gestione risultati restano Python.
 
 [[files]]
 path = "celery/backends/s3.py"
@@ -641,9 +659,14 @@ crate = ""
 [[files]]
 path = "celery/events/dispatcher.py"
 group = "celery/events"
-status = "python"
-crate = ""
-# API, orchestrazione o utilità Python conservata.
+status = "rust"
+crate = "celery-transport"
+rust = 0.09541984732824428
+rust_symbols = ["EventDispatcher._publish"]
+rust_calls = ["EventDispatcher.enable|Producer"]
+# Quota misurata: 25/262 righe fisiche, unione senza doppio conteggio.
+# Simboli interi: EventDispatcher._publish; chiamate: EventDispatcher.enable|Producer.
+# _create_producer seleziona _rs_producer.RsProducer. Conta il ruolo I/O di _publish e la creazione producer; costruzione Event, clock, API send/publish e gestione buffer restano Python.
 
 [[files]]
 path = "celery/events/dumper.py"
@@ -1022,16 +1045,26 @@ crate = ""
 [[files]]
 path = "celery/worker/consumer/connection.py"
 group = "celery/worker"
-status = "python"
-crate = ""
-# API, orchestrazione o utilità Python conservata.
+status = "rust"
+crate = "celery-worker"
+rust = 0.24074074074074073
+rust_symbols = ["Connection.start", "Connection.close_connection"]
+rust_calls = []
+# Quota misurata: 13/54 righe fisiche, unione senza doppio conteggio.
+# Simboli interi: Connection.start, Connection.close_connection; chiamate: nessuna.
+# c.connect restituisce RsConnection; close chiude il trasporto nativo. Logging, stato e bootstep Python esclusi.
 
 [[files]]
 path = "celery/worker/consumer/consumer.py"
 group = "celery/worker"
-status = "python"
-crate = ""
-# API, orchestrazione o utilità Python conservata.
+status = "rust"
+crate = "celery-worker"
+rust = 0.10816542948038176
+rust_symbols = ["Consumer.connect", "Consumer.connection_for_read", "Consumer.connection_for_write", "Consumer.ensure_connected", "Consumer.add_task_queue", "Consumer.cancel_task_queue", "Consumer.register_with_event_loop"]
+rust_calls = ["Consumer.ensure_connected|ensure_connection", "Consumer.add_task_queue|select_add", "Consumer.add_task_queue|consume", "Consumer.cancel_task_queue|cancel_by_queue"]
+# Quota misurata: 102/943 righe fisiche, unione senza doppio conteggio.
+# Simboli interi: Consumer.connect, Consumer.connection_for_read, Consumer.connection_for_write, Consumer.ensure_connected, Consumer.add_task_queue, Consumer.cancel_task_queue, Consumer.register_with_event_loop; chiamate: Consumer.ensure_connected|ensure_connection, Consumer.add_task_queue|select_add, Consumer.add_task_queue|consume, Consumer.cancel_task_queue|cancel_by_queue.
+# _rs_consumer.connection/RsConnection e RsTaskConsumer: connessioni, sottoscrizioni, ack/reject. Bootstep, strategie, callback, ETA/rate limit e segnali restano Python.
 
 [[files]]
 path = "celery/worker/consumer/control.py"
@@ -1050,37 +1083,62 @@ crate = ""
 [[files]]
 path = "celery/worker/consumer/events.py"
 group = "celery/worker"
-status = "python"
-crate = ""
-# API, orchestrazione o utilità Python conservata.
+status = "rust"
+crate = "celery-worker"
+rust = 0.05333333333333334
+rust_symbols = []
+rust_calls = ["Events.start|connection_for_write", "Events.start|register_with_event_loop", "Events._close|ignore_errors"]
+# Quota misurata: 4/75 righe fisiche, unione senza doppio conteggio.
+# Simboli interi: nessuno; chiamate: Events.start|connection_for_write, Events.start|register_with_event_loop, Events._close|ignore_errors.
+# Connessione eventi RsProducer e heartbeat AMQP nel runtime; registrazione socket Kombu scavalcata. Configurazione e buffer Python esclusi.
 
 [[files]]
 path = "celery/worker/consumer/gossip.py"
 group = "celery/worker"
-status = "python"
-crate = ""
-# API, orchestrazione o utilità Python conservata.
+status = "rust"
+crate = "celery-worker"
+rust = 0.05339805825242718
+rust_symbols = ["Gossip.get_consumers"]
+rust_calls = []
+# Quota misurata: 11/206 righe fisiche, unione senza doppio conteggio.
+# Simboli interi: Gossip.get_consumers; chiamate: nessuna.
+# _start_rs usa _rs_mailbox.events_consumer al posto del consumer Kombu; elezioni, stato nodi e handler Python esclusi.
 
 [[files]]
 path = "celery/worker/consumer/heart.py"
 group = "celery/worker"
-status = "python"
-crate = ""
-# API, orchestrazione o utilità Python conservata.
+status = "rust"
+crate = "celery-worker"
+rust = 0.05555555555555555
+rust_symbols = []
+rust_calls = ["Heart.start|start", "Heart.stop|stop"]
+# Quota misurata: 2/36 righe fisiche, unione senza doppio conteggio.
+# Simboli interi: nessuno; chiamate: Heart.start|start, Heart.stop|stop.
+# Invio online/offline propagato a EventDispatcher/RsProducer. Creazione Heart, timer e bootstep rimangono Python; non si conta tutto start/stop.
 
 [[files]]
 path = "celery/worker/consumer/mingle.py"
 group = "celery/worker"
-status = "python"
-crate = ""
-# API, orchestrazione o utilità Python conservata.
+status = "rust"
+crate = "celery-worker"
+rust = 0.125
+rust_symbols = ["Mingle.send_hello"]
+rust_calls = []
+# Quota misurata: 10/80 righe fisiche, unione senza doppio conteggio.
+# Simboli interi: Mingle.send_hello; chiamate: nessuna.
+# inspect.hello usa app._rs_control con connessione nativa; merge clock/revoche e orchestrazione Python esclusi.
 
 [[files]]
 path = "celery/worker/consumer/tasks.py"
 group = "celery/worker"
-status = "python"
-crate = ""
-# API, orchestrazione o utilità Python conservata.
+status = "rust"
+crate = "celery-worker"
+rust = 0.0967741935483871
+rust_symbols = []
+rust_calls = ["Tasks.start|basic_qos", "Tasks.start|TaskConsumer", "Tasks.start|qos", "Tasks.stop|ignore_errors", "Tasks.shutdown|ignore_errors"]
+# Quota misurata: 12/124 righe fisiche, unione senza doppio conteggio.
+# Simboli interi: nessuno; chiamate: Tasks.start|basic_qos, Tasks.start|TaskConsumer, Tasks.start|qos, Tasks.stop|ignore_errors, Tasks.shutdown|ignore_errors.
+# AMQP.TaskConsumer devia su RsTaskConsumer; QoS, cancel e close nativi. Strategie, politiche QoS e bootstep restano Python.
 
 [[files]]
 path = "celery/worker/control.py"
@@ -1092,23 +1150,38 @@ crate = ""
 [[files]]
 path = "celery/worker/heartbeat.py"
 group = "celery/worker"
-status = "python"
-crate = ""
-# API, orchestrazione o utilità Python conservata.
+status = "rust"
+crate = "celery-worker"
+rust = 0.09836065573770492
+rust_symbols = []
+rust_calls = ["Heart._send|send"]
+# Quota misurata: 6/61 righe fisiche, unione senza doppio conteggio.
+# Simboli interi: nessuno; chiamate: Heart._send|send.
+# Solo invio evento via EventDispatcher/RsProducer; heartbeat_sent, raccolta metriche, timer e callback restano Python.
 
 [[files]]
 path = "celery/worker/loops.py"
 group = "celery/worker"
 status = "rust"
 crate = "celery-worker"
-# Ruolo del loop/pool prefork scavalcato da _rs_consumer e rs_prefork; wrapper pubblici restano Python.
+rust = 0.5022026431718062
+rust_symbols = ["asynloop", "_enable_amqheartbeats"]
+rust_calls = []
+# Quota misurata: 114/227 righe fisiche, unione senza doppio conteggio.
+# Simboli interi: asynloop, _enable_amqheartbeats; chiamate: nessuna.
+# _rs_consumer.rsloop e _enable_heartbeats: I/O e heartbeat AMQP nativi; synloop/fallback e helper Python esclusi.
 
 [[files]]
 path = "celery/worker/pidbox.py"
 group = "celery/worker"
-status = "python"
-crate = ""
-# API, orchestrazione o utilità Python conservata.
+status = "rust"
+crate = "celery-worker"
+rust = 0.07936507936507936
+rust_symbols = ["Pidbox.start", "Pidbox._close_channel"]
+rust_calls = []
+# Quota misurata: 10/126 righe fisiche, unione senza doppio conteggio.
+# Simboli interi: Pidbox.start, Pidbox._close_channel; chiamate: nessuna.
+# start devia a _rs_mailbox.pidbox_consumer: trasporto/chiusura consumer nativi. _RsNode e dispatch Panel, handler e stato restano Python.
 
 [[files]]
 path = "celery/worker/request.py"
@@ -1127,9 +1200,14 @@ crate = ""
 [[files]]
 path = "celery/worker/strategy.py"
 group = "celery/worker"
-status = "python"
-crate = ""
-# API, orchestrazione o utilità Python conservata.
+status = "rust"
+crate = "celery-worker"
+rust = 0.04035874439461883
+rust_symbols = []
+rust_calls = ["default|send_event"]
+# Quota misurata: 9/223 righe fisiche, unione senza doppio conteggio.
+# Simboli interi: nessuno; chiamate: default|send_event.
+# Solo pubblicazione task-received via RsProducer. task_message_handler, Request, revoche, ETA, rate limit, task_received e trace restano Python: non si attribuisce la strategia intera a Rust.
 
 [[files]]
 path = "celery/worker/worker.py"
