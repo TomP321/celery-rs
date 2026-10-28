@@ -9,7 +9,15 @@ Wheel di celery-rs pronte all'installazione (nessuna toolchain Rust necessaria).
 | `celery-5.7.0rc1+rs.0.1.1-cp310-abi3-manylinux_2_28_aarch64.whl` | aarch64 (ARM: Mac Apple Silicon in Docker, Graviton, Ampere) |
 | `celery-5.7.0rc1+rs.0.1.0-…-x86_64.whl` | versione precedente: l'extra `[redis]` blocca `packaging==26.3` |
 
-Nel `pyproject.toml`, al posto di `celery==…` (il marcatore sceglie la wheel giusta):
+**Una sola riga, scelta automatica dell'architettura** (pip e uv): il pacchetto sorgente
+`celery-5.7.0rc1+rs.0.1.1.tar.gz` contiene solo un selettore che scarica e verifica (SHA-256) la
+wheel giusta per la macchina.
+
+```toml
+"celery[redis] @ https://github.com/TomP321/celery-rs/raw/wheels/celery-5.7.0rc1%2Brs.0.1.1.tar.gz",
+```
+
+In alternativa, le wheel dirette con il marcatore di piattaforma:
 
 ```toml
 "celery[redis] @ https://github.com/TomP321/celery-rs/raw/wheels/celery-5.7.0rc1%2Brs.0.1.1-cp310-abi3-manylinux_2_28_x86_64.whl ; platform_machine == 'x86_64'",
