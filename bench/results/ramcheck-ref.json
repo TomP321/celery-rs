@@ -1,0 +1,9 @@
+{
+ "label": "ref",
+ "workers": 10,
+ "concurrency": 10,
+ "processes": 110,
+ "pss_mb_per_worker": 300.4,
+ "page_tables_mb_per_worker": 1.91,
+ "memavailable_drop_mb_per_worker": 261.5
+}
