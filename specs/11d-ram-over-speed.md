@@ -1,11 +1,13 @@
 # 11d — RAM prima della velocità (worker `-c 10`, anche Python 3.11)
 
 Leggi `AGENTS.md`, `docs/DIFFERENZE.md`, `bench/results/11c-immortal-load.md`. Base: 11c
-(oggetti immortali). Nuova regola dell'utente: **si può cedere throughput per avere meno RAM**,
-purché i task/s restino **≥ Celery originale** con margine: Redis `-c 10` ≥ 1000 task/s
-(originale ~820), RabbitMQ `-c 10` ≥ 3700 task/s (originale ~3350). Conta la PSS totale del
-worker **a riposo e al picco sotto carico** (`bench/memprobe/loadpeak.py`, 30.000 task, interi
-e `--payload-bytes 16384`, Redis e RabbitMQ).
+(oggetti immortali). Regola dell'utente: **tutto sul risparmio di memoria; la base è il Celery originale.**
+Il throughput può scendere fino a quello del Celery originale misurato su questa macchina con
+la stessa misura (`loadpeak.py` con `.venv-ref`: Redis `-c 10` ~820 task/s, RabbitMQ ~3350;
+rimisuralo tu all'inizio e usa quei numeri come pavimento, non sotto). Ogni MB conta più di
+qualsiasi task/s sopra il pavimento: preferisci sempre la variante che usa meno RAM. Conta la
+PSS totale del worker **a riposo e al picco sotto carico** (`bench/memprobe/loadpeak.py`,
+30.000 task, interi e `--payload-bytes 16384`, Redis e RabbitMQ).
 
 Punto di partenza (11c, Python 3.13): riposo ~49,5 MB, picco 53,7 (Redis interi) / 58,1
 (RabbitMQ 16 KiB). La produzione dell'utente gira su **Python 3.11**, dove l'immortalità è
@@ -40,9 +42,9 @@ riporta prima/dopo per 3.11 e 3.13.
    processi, segnali, opzioni CLI) rispetto al riferimento.
 
 ## Obiettivi
-Python 3.13: riposo ≤ 45 MB, picco ≤ 50 MB in tutti e quattro gli scenari.
-Python 3.11: riduzione ≥ 15% di riposo e picco rispetto a 11c su 3.11.
-Throughput sopra i minimi indicati.
+Python 3.13: riposo ≤ 40 MB, picco ≤ 44 MB in tutti e quattro gli scenari.
+Python 3.11: riduzione ≥ 25% di riposo e picco rispetto a 11c su 3.11.
+Sono minimi, non traguardi: continua finché trovi riduzioni misurabili. Throughput ≥ pavimento.
 
 ## Verifica
 `cargo build --release`, `cargo clippy --all-targets -- -D warnings`,
@@ -55,4 +57,5 @@ numero).
 
 Nota: l'orchestratore sta eseguendo i gate in parallelo sulle corsie dei broker: le misure di
 RAM restano valide, il throughput può risultare più basso del reale (ripeti la misura finale
-di task/s due volte e riporta la migliore).
+di task/s due volte e riporta la migliore). I file in `bench/results/11d-before.log` di un
+avvio precedente interrotto possono essere riusati o sovrascritti.
