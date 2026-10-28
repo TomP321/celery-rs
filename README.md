@@ -46,11 +46,12 @@ memoria cresce quanto quella di Celery, partendo da molto più in basso (220 vs 
 Requisiti: Linux, Python ≥ 3.10. Il pacchetto si chiama `celery` (versione `5.7.0rc1+rs.…`), quindi
 soddisfa le dipendenze di chi richiede `celery`.
 
-**Da wheel precompilata** (branch [`wheels`](https://github.com/TomP321/celery-rs/tree/wheels), Linux x86_64 glibc ≥ 2.28, nessuna toolchain Rust necessaria):
+**Da wheel precompilata** (branch [`wheels`](https://github.com/TomP321/celery-rs/tree/wheels), Linux x86_64 e aarch64, glibc ≥ 2.28, nessuna toolchain Rust necessaria):
 
 ```toml
 # pyproject.toml, al posto di "celery==…"
-"celery[redis] @ https://github.com/TomP321/celery-rs/raw/wheels/celery-5.7.0rc1%2Brs.0.1.1-cp310-abi3-manylinux_2_28_x86_64.whl",
+"celery[redis] @ https://github.com/TomP321/celery-rs/raw/wheels/celery-5.7.0rc1%2Brs.0.1.1-cp310-abi3-manylinux_2_28_x86_64.whl ; platform_machine == 'x86_64'",
+"celery[redis] @ https://github.com/TomP321/celery-rs/raw/wheels/celery-5.7.0rc1%2Brs.0.1.1-cp310-abi3-manylinux_2_28_aarch64.whl ; platform_machine == 'aarch64'",
 ```
 
 **Dal sorgente** (serve la toolchain Rust):
@@ -90,7 +91,7 @@ celery -A proj beat --loglevel info
 - **Versione**: replica Celery **5.7.0rc1**; chi parte da una 5.x precedente fa anche un
   aggiornamento di Celery (vedi le note di rilascio 5.6/5.7).
 - **Piattaforma**: solo **Linux** (zygote, `/proc`, `prctl`); il rilascio della memoria
-  (`malloc_trim`) agisce solo con glibc. Wheel per x86_64 `manylinux_2_28`.
+  (`malloc_trim`) agisce solo con glibc. Wheel `manylinux_2_28` per x86_64 e aarch64.
 - **Fuori dal core Rust**: broker diversi da Redis/RabbitMQ e backend diversi da Redis/RPC usano il
   codice di Celery (kombu) e non sono verificati da questo progetto; pool `eventlet`/`gevent` non
   verificati.
