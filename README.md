@@ -50,7 +50,7 @@ soddisfa le dipendenze di chi richiede `celery`.
 
 ```toml
 # pyproject.toml, al posto di "celery==…"
-"celery[redis] @ https://github.com/TomP321/celery-rs/raw/wheels/celery-5.7.0rc1%2Brs.0.1.0-cp310-abi3-manylinux_2_28_x86_64.whl",
+"celery[redis] @ https://github.com/TomP321/celery-rs/raw/wheels/celery-5.7.0rc1%2Brs.0.1.1-cp310-abi3-manylinux_2_28_x86_64.whl",
 ```
 
 **Dal sorgente** (serve la toolchain Rust):
