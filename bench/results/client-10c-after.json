@@ -1,0 +1,330 @@
+{
+ "ref-redis": [
+  {
+   "step": "start",
+   "Pss": 5026,
+   "Pss_Anon": 4816,
+   "modules": 79,
+   "watch": []
+  },
+  {
+   "step": "import celery",
+   "Pss": 5619,
+   "Pss_Anon": 5404,
+   "modules": 87,
+   "watch": []
+  },
+  {
+   "step": "app + task",
+   "Pss": 21385,
+   "Pss_Anon": 20128,
+   "modules": 353,
+   "watch": [
+    "kombu.connection",
+    "kombu.serialization",
+    "kombu.transport",
+    "amqp",
+    "billiard",
+    "click",
+    "yaml",
+    "msgpack",
+    "greenlet",
+    "cffi",
+    "ssl",
+    "multiprocessing",
+    "importlib.metadata",
+    "dateutil",
+    "decimal",
+    "email"
+   ]
+  },
+  {
+   "step": "delay",
+   "Pss": 32648,
+   "Pss_Anon": 31012,
+   "modules": 522,
+   "watch": [
+    "kombu.connection",
+    "kombu.serialization",
+    "kombu.transport",
+    "redis",
+    "amqp",
+    "billiard",
+    "click",
+    "yaml",
+    "msgpack",
+    "greenlet",
+    "cffi",
+    "ssl",
+    "multiprocessing",
+    "importlib.metadata",
+    "dateutil",
+    "decimal",
+    "email"
+   ]
+  },
+  {
+   "step": "get",
+   "Pss": 32648,
+   "Pss_Anon": 31012,
+   "modules": 522,
+   "watch": [
+    "kombu.connection",
+    "kombu.serialization",
+    "kombu.transport",
+    "redis",
+    "amqp",
+    "billiard",
+    "click",
+    "yaml",
+    "msgpack",
+    "greenlet",
+    "cffi",
+    "ssl",
+    "multiprocessing",
+    "importlib.metadata",
+    "dateutil",
+    "decimal",
+    "email"
+   ]
+  }
+ ],
+ "rs-redis": [
+  {
+   "step": "start",
+   "Pss": 4311,
+   "Pss_Anon": 4076,
+   "modules": 61,
+   "watch": []
+  },
+  {
+   "step": "import celery",
+   "Pss": 5021,
+   "Pss_Anon": 4780,
+   "modules": 72,
+   "watch": []
+  },
+  {
+   "step": "app + task",
+   "Pss": 15925,
+   "Pss_Anon": 15188,
+   "modules": 262,
+   "watch": [
+    "amqp",
+    "billiard",
+    "cffi",
+    "ssl",
+    "multiprocessing",
+    "importlib.metadata",
+    "decimal",
+    "email"
+   ]
+  },
+  {
+   "step": "delay",
+   "Pss": 22098,
+   "Pss_Anon": 19892,
+   "modules": 333,
+   "watch": [
+    "kombu.connection",
+    "kombu.serialization",
+    "kombu.transport",
+    "amqp",
+    "billiard",
+    "yaml",
+    "msgpack",
+    "cffi",
+    "ssl",
+    "multiprocessing",
+    "importlib.metadata",
+    "decimal",
+    "email"
+   ]
+  },
+  {
+   "step": "get",
+   "Pss": 22178,
+   "Pss_Anon": 19908,
+   "modules": 333,
+   "watch": [
+    "kombu.connection",
+    "kombu.serialization",
+    "kombu.transport",
+    "amqp",
+    "billiard",
+    "yaml",
+    "msgpack",
+    "cffi",
+    "ssl",
+    "multiprocessing",
+    "importlib.metadata",
+    "decimal",
+    "email"
+   ]
+  }
+ ],
+ "ref-amqp": [
+  {
+   "step": "start",
+   "Pss": 4989,
+   "Pss_Anon": 4816,
+   "modules": 79,
+   "watch": []
+  },
+  {
+   "step": "import celery",
+   "Pss": 5579,
+   "Pss_Anon": 5404,
+   "modules": 87,
+   "watch": []
+  },
+  {
+   "step": "app + task",
+   "Pss": 21688,
+   "Pss_Anon": 20128,
+   "modules": 353,
+   "watch": [
+    "kombu.connection",
+    "kombu.serialization",
+    "kombu.transport",
+    "amqp",
+    "billiard",
+    "click",
+    "yaml",
+    "msgpack",
+    "greenlet",
+    "cffi",
+    "ssl",
+    "multiprocessing",
+    "importlib.metadata",
+    "dateutil",
+    "decimal",
+    "email"
+   ]
+  },
+  {
+   "step": "delay",
+   "Pss": 32641,
+   "Pss_Anon": 30912,
+   "modules": 524,
+   "watch": [
+    "kombu.connection",
+    "kombu.serialization",
+    "kombu.transport",
+    "redis",
+    "amqp",
+    "billiard",
+    "click",
+    "yaml",
+    "msgpack",
+    "greenlet",
+    "cffi",
+    "ssl",
+    "multiprocessing",
+    "importlib.metadata",
+    "dateutil",
+    "decimal",
+    "email"
+   ]
+  },
+  {
+   "step": "get",
+   "Pss": 32505,
+   "Pss_Anon": 30924,
+   "modules": 524,
+   "watch": [
+    "kombu.connection",
+    "kombu.serialization",
+    "kombu.transport",
+    "redis",
+    "amqp",
+    "billiard",
+    "click",
+    "yaml",
+    "msgpack",
+    "greenlet",
+    "cffi",
+    "ssl",
+    "multiprocessing",
+    "importlib.metadata",
+    "dateutil",
+    "decimal",
+    "email"
+   ]
+  }
+ ],
+ "rs-amqp": [
+  {
+   "step": "start",
+   "Pss": 4256,
+   "Pss_Anon": 4088,
+   "modules": 61,
+   "watch": []
+  },
+  {
+   "step": "import celery",
+   "Pss": 4954,
+   "Pss_Anon": 4784,
+   "modules": 72,
+   "watch": []
+  },
+  {
+   "step": "app + task",
+   "Pss": 15816,
+   "Pss_Anon": 15192,
+   "modules": 262,
+   "watch": [
+    "amqp",
+    "billiard",
+    "cffi",
+    "ssl",
+    "multiprocessing",
+    "importlib.metadata",
+    "decimal",
+    "email"
+   ]
+  },
+  {
+   "step": "delay",
+   "Pss": 21922,
+   "Pss_Anon": 19972,
+   "modules": 333,
+   "watch": [
+    "kombu.connection",
+    "kombu.serialization",
+    "kombu.transport",
+    "amqp",
+    "billiard",
+    "yaml",
+    "msgpack",
+    "cffi",
+    "ssl",
+    "multiprocessing",
+    "importlib.metadata",
+    "decimal",
+    "email"
+   ]
+  },
+  {
+   "step": "get",
+   "Pss": 22006,
+   "Pss_Anon": 19992,
+   "modules": 333,
+   "watch": [
+    "kombu.connection",
+    "kombu.serialization",
+    "kombu.transport",
+    "amqp",
+    "billiard",
+    "yaml",
+    "msgpack",
+    "cffi",
+    "ssl",
+    "multiprocessing",
+    "importlib.metadata",
+    "decimal",
+    "email"
+   ]
+  }
+ ]
+}

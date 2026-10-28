@@ -858,6 +858,9 @@ def rsloop(obj, connection, consumer, blueprint, hub, qos, heartbeat, clock,
     obj.timer_entries_registered = registered_timer_entries
     consumer.consume()
     obj.on_ready()
+    # Import e bootstep lasciano pagine libere: restituirle prima del loop
+    # riduce il residente senza raccogliere oggetti o cambiare il GC utente.
+    _celery_rs._release_task_memory(force=True)
 
     if not obj.restart_count and not obj.pool.did_start_ok():
         raise WorkerLostError('Could not start worker processes')
