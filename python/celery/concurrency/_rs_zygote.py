@@ -220,6 +220,13 @@ def _main(control, app, hostname):
         # Solo un'ottimizzazione: se fallisce (es. dipendenze del backend
         # mancanti) l'errore resta quello del riferimento, al primo uso.
         traceback.print_exc()
+    try:
+        # Logging e tracer uguali in ogni figlio: costruiti qui restano condivisi.
+        from celery.concurrency.prefork import prepare_process_initializer
+        prepare_process_initializer(app, hostname)
+    except Exception:
+        # I figli rifanno tutto nel proprio initializer, come nel riferimento.
+        traceback.print_exc()
     # `gc.freeze()` (non `collect`): nel figlio di un master multi-thread i
     # finalizer di oggetti ereditati possono toccare stato non valido dopo il
     # fork; congelare le pagine basta per la condivisione copy-on-write.

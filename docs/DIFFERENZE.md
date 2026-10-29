@@ -64,3 +64,14 @@ Questo compromesso è accettato per il pool prefork, dove il patrimonio iniziale
 è precaricato per tutta la vita del worker e il risparmio di RAM è prioritario.
 `CELERY_RS_IMMORTALIZE=0` ripristina il comportamento precedente. Sugli altri
 interpreti, build free-threaded, architetture e versioni la funzione è un no-op.
+
+## Initializer dei figli preparato nello zygote
+Con il pool prefork Rust, le parti di `process_initializer` che danno lo stesso stato in ogni
+figlio (`app.log.setup`, `set_current`/`finalize`, i tracer dei task) vengono eseguite una volta
+nello zygote prima del fork: i figli le ereditano condivise invece di ricrearle (circa −1 MB
+privato per figlio). Restano nel figlio, nell'ordine del riferimento, `set_pdeathsig`, segnali,
+titolo del processo, `init_worker`/`init_worker_process` del loader, `reset_state` e
+`worker_process_init`. Il figlio ricostruisce i tracer dei task aggiunti o con tracer sostituito
+dall'hook del loader, e rifà `log.setup` se i parametri di logging sono cambiati o se il file di
+log contiene `%i` (un file per figlio). Unica differenza: un `on_worker_process_init` del loader
+che sostituisce `task.run` di un task già registrato non viene visto dal tracer preparato.

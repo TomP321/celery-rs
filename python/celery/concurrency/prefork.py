@@ -79,6 +79,81 @@ warning, debug = logger.warning, logger.debug
 #: :func:`process_initializer` for :func:`process_destructor`.
 _process_hostname = None
 
+#: Parti di :func:`process_initializer` già eseguite nello zygote:
+#: ``(app, argomenti di log.setup, tracer per nome)``.
+_prepared = None
+
+
+def _log_setup_args(hostname):
+    logfile = os.environ.get('CELERY_LOG_FILE') or None
+    if logfile and '%i' in logfile.lower():
+        return None  # un file per figlio: va configurato nel figlio
+    return (int(os.environ.get('CELERY_LOG_LEVEL', 0) or 0), logfile,
+            bool(os.environ.get('CELERY_LOG_REDIRECT', False)),
+            str(os.environ.get('CELERY_LOG_REDIRECT_LEVEL')), hostname)
+
+
+def prepare_process_initializer(app, hostname):
+    """Esegue nello zygote, prima del fork, le parti dell'initializer uguali in
+    ogni figlio: le pagine restano condivise invece di essere ricreate N volte."""
+    global _prepared
+    args = _log_setup_args(hostname)
+    if args is None or os.environ.get('FORKED_BY_MULTIPROCESSING'):
+        return
+    app.log.setup(*args[:4], hostname=hostname)
+    app.set_current()
+    set_default_app(app)
+    app.finalize()
+    trace._tasks = app._tasks
+    tracers = {}
+    for name, task in app.tasks.items():
+        task.__trace__ = tracers[name] = trace.build_tracer(
+            name, task, app.loader, hostname, app=app)
+    _prepared = (app, args, tracers)
+
+
+def _finish_prepared(app, hostname):
+    """Nel figlio: completa ciò che lo zygote ha preparato; False se non vale."""
+    if (_prepared is None or _prepared[0] is not app
+            or os.environ.get('FORKED_BY_MULTIPROCESSING')):
+        return False
+    args = _log_setup_args(hostname)
+    if args != _prepared[1]:
+        return False
+    tracers = _prepared[2]
+    # Task aggiunti o tracer sostituiti da init_worker_process vanno ricostruiti.
+    for name, task in app.tasks.items():
+        if (name not in tracers
+                or getattr(task, '__trace__', None) is not tracers[name]):
+            task.__trace__ = trace.build_tracer(name, task, app.loader,
+                                                hostname, app=app)
+    return True
+
+
+def _initialize_tracing(app, hostname):
+    logfile = os.environ.get('CELERY_LOG_FILE') or None
+    if logfile and '%i' in logfile.lower():
+        # logfile path will differ so need to set up logging again.
+        app.log.already_setup = False
+    app.log.setup(int(os.environ.get('CELERY_LOG_LEVEL', 0) or 0),
+                  logfile,
+                  bool(os.environ.get('CELERY_LOG_REDIRECT', False)),
+                  str(os.environ.get('CELERY_LOG_REDIRECT_LEVEL')),
+                  hostname=hostname)
+    if os.environ.get('FORKED_BY_MULTIPROCESSING'):
+        # the child is a fresh interpreter (spawn, forkserver or execv)
+        trace.setup_worker_optimizations(app, hostname)
+    else:
+        app.set_current()
+        set_default_app(app)
+        app.finalize()
+        trace._tasks = app._tasks  # enables fast_trace_task optimization.
+    # rebuild execution handler for all tasks.
+    from celery.app.trace import build_tracer
+    for name, task in app.tasks.items():
+        task.__trace__ = build_tracer(name, task, app.loader, hostname,
+                                      app=app)
+
 
 def process_initializer(app, hostname):
     """Pool child process initializer.
@@ -107,28 +182,8 @@ def process_initializer(app, hostname):
     # run once per process.
     app.loader.init_worker()
     app.loader.init_worker_process()
-    logfile = os.environ.get('CELERY_LOG_FILE') or None
-    if logfile and '%i' in logfile.lower():
-        # logfile path will differ so need to set up logging again.
-        app.log.already_setup = False
-    app.log.setup(int(os.environ.get('CELERY_LOG_LEVEL', 0) or 0),
-                  logfile,
-                  bool(os.environ.get('CELERY_LOG_REDIRECT', False)),
-                  str(os.environ.get('CELERY_LOG_REDIRECT_LEVEL')),
-                  hostname=hostname)
-    if os.environ.get('FORKED_BY_MULTIPROCESSING'):
-        # the child is a fresh interpreter (spawn, forkserver or execv)
-        trace.setup_worker_optimizations(app, hostname)
-    else:
-        app.set_current()
-        set_default_app(app)
-        app.finalize()
-        trace._tasks = app._tasks  # enables fast_trace_task optimization.
-    # rebuild execution handler for all tasks.
-    from celery.app.trace import build_tracer
-    for name, task in app.tasks.items():
-        task.__trace__ = build_tracer(name, task, app.loader, hostname,
-                                      app=app)
+    if not _finish_prepared(app, hostname):
+        _initialize_tracing(app, hostname)
     from celery.worker import state as worker_state
     worker_state.reset_state()
     global _process_hostname
