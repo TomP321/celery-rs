@@ -51,6 +51,19 @@ per disattivarlo). Le altre righe sono misurate con la versione 0.1.1.
 | latenza `delay().get()` p50, Redis | 3,0 ms | **2,0 ms** |
 | `celery beat` invii/s | ~400–440 | **~670–740** |
 
+## Come risparmia memoria
+
+Oltre al lavoro del master spostato in Rust, quattro meccanismi tengono leggeri i figli del pool
+prefork (script: `tools/docs/make_memory_gifs.py`; numeri misurati con `bench/memprobe/`).
+
+![Architettura: master Python dell'originale contro master Rust e zygote di celery-rs; figli da 32,5 MB contro 5,7 MB.](docs/assets/memoria-1-architettura.gif)
+
+![Copy-on-write: dopo 2000 task un figlio di Celery ha copiato 26,8 MB su 49,8 MB, uno di celery-rs 3,7 MB su 28,0 MB.](docs/assets/memoria-2-copy-on-write.gif)
+
+![Inizializzazione preparata una volta nello zygote e memoria restituita dopo ogni task.](docs/assets/memoria-3-inizializzazione.gif)
+
+![Bilancio della RAM al picco sotto carico: 353 MB nell'originale, 78 MB su Python 3.11, 52 MB su Python 3.13.](docs/assets/memoria-4-bilancio.gif)
+
 ## Installazione
 
 Requisiti: Linux, Python ≥ 3.10. Il pacchetto si chiama `celery` (versione `5.7.0rc1+rs.…`), quindi
