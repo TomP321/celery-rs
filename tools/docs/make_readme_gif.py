@@ -233,8 +233,8 @@ def render(progress, rows, ratios, total, subjects):
     text(d, 508, 577, 'mixed cells: blue underline', 10)
     d.line((24, 604, 935, 604), fill=BORDER)
     if progress >= 1:
-        text(d, 25, 614, '23,300 Rust lines · 6 crates    worker -c 10: 300 → 73 MB (−76%)', 15, WHITE, True)
-        text(d, 25, 643, 'In 8 GB: 27 → 96–105 workers     Redis: task/s ×3', 15, ORANGE)
+        text(d, 25, 614, '24,600 Rust lines · 6 crates    worker -c 10 peak: 353 → 78 MB (−78%)', 15, WHITE, True)
+        text(d, 25, 643, 'Python 3.12+: 52 MB (−85%)       Redis: task/s ×3', 15, ORANGE)
     else:
         end = min(len(subjects), 3 + int(progress * (len(subjects) - 3)))
         for i, subject in enumerate(subjects[max(0, end - 3):end]):
