@@ -1,26 +1,5 @@
-//! Supervisore del pool di processi.
-//!
-//! Un solo thread Rust possiede lo stato dei figli, assegna i job e gestisce i
-//! time limit; i thread lettori di ogni figlio consegnano i frame al
-//! supervisore. Gli eventi (accettato, risultato, figlio perso, timeout) sono
-//! accumulati in una coda e il loop Python li consuma con
-//! [`Pool::drain_events`] dopo un [`Waker::notify`]. I callback Python non
-//! vengono mai invocati da un thread Rust: è il master, nel proprio thread, a
-//! richiamarli.
-//!
-//! Lifecycle:
-//!
-//! * `Running` — accetta job e rimpiazza i figli che escono;
-//! * `Closing` — non accetta nuovi job, completa quelli in coda e poi chiude i
-//!   figli in modo ordinato (`process_destructor` nel figlio);
-//! * `Terminating` — SIGTERM (poi SIGKILL) ai figli, coda scartata;
-//! * `Stopped` — tutti i figli raccolti e zygote chiuso.
-//!
-//! Se lo zygote muore non è possibile fare `fork()` dal master (ha thread
-//! attivi), quindi il pool non crea più figli: i job in volo restano sui figli
-//! vivi (che muoiono con lo zygote per `pdeathsig`); i job che non possono più
-//! essere eseguiti ricevono l'evento [`PoolEvent::PoolFailure`] e il master li
-//! chiude con `WorkerLostError`.
+//! Single-threaded process supervisor assigning jobs and time limits. Reader threads
+//! queue events for Python callbacks on the master thread; zygote loss prevents new forks.
 
 use std::collections::{BTreeMap, VecDeque};
 use std::io::{self, Write};
@@ -37,30 +16,26 @@ use crate::pool::frame::{Frame, FrameKind, read_frame};
 use crate::pool::spawn::{SpawnedChild, Spawner};
 use crate::wake::Waker;
 
-/// Dopo SIGTERM al figlio si aspetta questo tempo prima di SIGKILL.
 const TERM_GRACE: Duration = Duration::from_millis(100);
 
-/// Intervallo del controllo di vita dello zygote.
 const ZYGOTE_CHECK: Duration = Duration::from_secs(1);
 
-/// Exit code con cui billiard ricicla un figlio (maxtasks/max memory).
+// Matches billiard's recycling exit code for task or memory limits.
 const EX_RECYCLE: i32 = 0x9B;
 
-/// Messaggio per i job che il pool non può più eseguire (zygote perso).
-const POOL_UNAVAILABLE: &str =
-    "Pool process unavailable: worker pool cannot create children.";
+// Used when zygote loss makes queued jobs impossible to execute.
+const POOL_UNAVAILABLE: &str = "pool process unavailable: worker pool cannot create children";
 
-/// Segnali usati dal supervisore.
 pub const SIGKILL: i32 = libc::SIGKILL;
 pub const SIGTERM: i32 = libc::SIGTERM;
 pub const SIGUSR1: i32 = libc::SIGUSR1;
 
-/// Configurazione del pool.
+/// Process pool configuration.
 #[derive(Debug, Clone, Copy)]
 pub struct Config {
-    /// Numero di figli (`-c`).
+    /// Number of child processes.
     pub processes: usize,
-    /// Dimensione massima della coda dei job in attesa.
+    /// Maximum pending job count.
     pub queue_limit: usize,
 }
 
@@ -69,14 +44,12 @@ impl Config {
         let processes = processes.max(1);
         Self {
             processes,
-            // Coda limitata: il master va in backpressure invece di
-            // accumulare task senza limite (come il putlock di billiard).
+            // Bound queued jobs and backpressure the master, matching billiard's putlock.
             queue_limit: processes.saturating_mul(4).max(16),
         }
     }
 }
 
-/// Un job in attesa di essere scritto a un figlio.
 #[derive(Debug)]
 struct Job {
     id: u64,
@@ -85,7 +58,7 @@ struct Job {
     hard: Option<Duration>,
 }
 
-/// Specifica di un job inviata dal master Python.
+/// Job specification submitted by the Python master.
 pub struct JobSpec {
     pub id: u64,
     pub payload: Bytes,
@@ -93,49 +66,40 @@ pub struct JobSpec {
     pub hard_timeout: Option<Duration>,
 }
 
-/// Evento pronto per il master.
+/// Event ready for the master.
 #[derive(Debug, Clone)]
 pub enum PoolEvent {
-    /// Il figlio ha accettato il job (come `ApplyResult._ack` di billiard).
+    /// Child acceptance, matching billiard's ApplyResult._ack.
     Accepted {
         job: u64,
         pid: i32,
-        /// `time.monotonic()` del figlio, come `_time_accepted` in billiard.
+        // Child monotonic timestamp, matching billiard's _time_accepted.
         time_accepted: f64,
     },
-    /// Risultato del figlio: `payload` è il pickle del valore o
-    /// dell'`ExceptionInfo`.
+    /// Child result with a pickled value or ExceptionInfo payload.
     Ready {
         job: u64,
         success: bool,
         payload: Bytes,
     },
-    /// Il figlio è morto con un job in corso → `WorkerLostError`.
-    WorkerLost {
-        job: u64,
-        pid: i32,
-        exitcode: i32,
-    },
-    /// Job terminato da `terminate_job` → `Terminated`.
-    Terminated {
-        job: u64,
-        pid: i32,
-        exitcode: i32,
-    },
-    /// Soft time limit: il figlio ha ricevuto SIGUSR1.
+    /// Child lost during execution, reported as WorkerLostError.
+    WorkerLost { job: u64, pid: i32, exitcode: i32 },
+    /// Job terminated by the master, reported as Terminated.
+    Terminated { job: u64, pid: i32, exitcode: i32 },
+    /// Soft timeout delivered as SIGUSR1.
     SoftTimeout { job: u64, timeout: f64 },
-    /// Hard time limit: il figlio è stato terminato.
+    /// Hard timeout that terminated the child.
     HardTimeout { job: u64, timeout: f64 },
-    /// Lo zygote non è più disponibile: niente nuovi figli.
+    /// Zygote unavailable; no new children can be created.
     ZygoteLost,
-    /// Job che non potrà mai essere eseguito (zygote perso e nessun figlio).
+    /// Job impossible to execute after losing the zygote and all children.
     PoolFailure { job: u64, message: String },
 }
 
-/// Errori delle operazioni del pool.
+/// Process pool operation errors.
 #[derive(Debug, thiserror::Error)]
 pub enum PoolError {
-    #[error("il pool non è in esecuzione")]
+    #[error("pool is not running")]
     NotRunning,
     #[error("Can't shrink pool. All processes busy!")]
     ShrinkBusy,
@@ -166,16 +130,15 @@ struct Child {
     pid: i32,
     writer: crate::fds::Tracked<UnixStream>,
     active: Option<Active>,
-    /// Dopo un hard timeout: istante in cui inviare SIGKILL se SIGTERM non basta.
+    // Escalation deadline when SIGTERM does not stop a timed-out child.
     pending_kill: Option<Instant>,
-    /// Il job in corso è stato terminato dal master (`terminate_job`).
+
     job_terminated: bool,
-    /// Uscita voluta dal supervisore (shrink, restart, terminate): non conta
-    /// come "worker perso" se non c'era un job.
+    // Intentional exits without an active job must not report worker loss.
     controlled: bool,
-    /// Il lato di scrittura è già stato chiuso (shutdown ordinato).
+
     shutdown_sent: bool,
-    /// Dopo il job corrente il figlio va chiuso (restart).
+
     retire_after_job: bool,
     writes: u64,
 }
@@ -228,36 +191,26 @@ enum Command {
     Wake,
     Grow,
     Shrink(usize, Sender<Result<(), PoolError>>),
-    TerminateJob {
-        pid: i32,
-        signal: i32,
-    },
+    TerminateJob { pid: i32, signal: i32 },
     Flush(Sender<Vec<u64>>),
     Restart,
     ResetBackend(Bytes, Sender<()>),
     Close,
     Terminate,
     Abandon,
-    Frame {
-        child: u32,
-        frame: Frame,
-    },
-    Closed {
-        child: u32,
-        exitcode: i32,
-    },
+    Frame { child: u32, frame: Frame },
+    Closed { child: u32, exitcode: i32 },
 }
 
-/// Supervisore del pool, usabile da un solo punto (il master Python).
+/// Process pool controlled by the Python master.
 pub struct Pool {
     inner: Arc<Inner>,
     thread: Mutex<Option<JoinHandle<()>>>,
 }
 
 impl Pool {
-    /// Costruisce il pool e crea subito i figli; il thread supervisore parte
-    /// dopo, così quando `new` ritorna i processi iniziali esistono già. Lo
-    /// zygote deve esistere; il `fork()` avviene solo lì.
+    /// Creates initial children before starting the supervisor thread. The zygote
+    /// must already exist; only it may fork.
     pub fn new(config: Config, spawner: Arc<dyn Spawner>, waker: Waker) -> Self {
         let (tx, rx) = mpsc::channel();
         let inner = Arc::new(Inner {
@@ -284,15 +237,18 @@ impl Pool {
         }
     }
 
-    /// Invia un job. Blocca (come il putlock di billiard) se la coda è piena.
+    /// Submits a job, blocking on a full queue as billiard's putlock does.
     pub fn submit(&self, spec: JobSpec) -> Result<(), PoolError> {
-        let mut state = self.inner.state.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut state = self
+            .inner
+            .state
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
         loop {
             if !state.running() {
                 return Err(PoolError::NotRunning);
             }
             if state.zygote_lost && state.children.is_empty() {
-                // Nessun figlio potrà mai eseguire questo job.
                 state.events.push_back(PoolEvent::PoolFailure {
                     job: spec.id,
                     message: POOL_UNAVAILABLE.to_owned(),
@@ -321,16 +277,19 @@ impl Pool {
         Ok(())
     }
 
-    /// Svuota la coda degli eventi (non bloccante).
+    /// Drains ready events without blocking.
     pub fn drain_events(&self) -> Vec<PoolEvent> {
-        let mut state = self.inner.state.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut state = self
+            .inner
+            .state
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
         state.events.drain(..).collect()
     }
 
     pub fn grow(&self, n: usize) {
-        // Aggiorna il target subito, come `Pool.grow` di billiard: l'autoscaler
-        // legge `num_processes` tra due `grow` e non deve vedere un valore
-        // vecchio (altrimenti sovradimensiona il pool).
+        // Update the target immediately, matching billiard. Autoscaling reads it between
+        // grow calls and would otherwise create too many children.
         {
             let mut state = self
                 .inner
@@ -344,7 +303,7 @@ impl Pool {
         let _ = self.inner.tx.send(Command::Grow);
     }
 
-    /// Riduce il pool di `n` figli inattivi; errore se non ce ne sono.
+    /// Removes idle children, returning an error if too few are available.
     pub fn shrink(&self, n: usize) -> Result<(), PoolError> {
         let (tx, rx) = mpsc::channel();
         if self.inner.tx.send(Command::Shrink(n, tx)).is_err() {
@@ -354,31 +313,33 @@ impl Pool {
     }
 
     pub fn terminate_job(&self, pid: i32, signal: i32) {
-        let _ = self
-            .inner
-            .tx
-            .send(Command::TerminateJob { pid, signal });
+        let _ = self.inner.tx.send(Command::TerminateJob { pid, signal });
     }
 
     pub fn restart(&self) {
         let _ = self.inner.tx.send(Command::Restart);
     }
 
-    /// Invia il reset prima dei job successivi, anche ai figli occupati.
+    /// Queues backend reset before subsequent jobs, including on busy children.
     pub fn reset_backend(&self, broker: Bytes) {
         let (tx, rx) = mpsc::channel();
-        if self.inner.tx.send(Command::ResetBackend(broker, tx)).is_ok() {
+        if self
+            .inner
+            .tx
+            .send(Command::ResetBackend(broker, tx))
+            .is_ok()
+        {
             let _ = rx.recv();
         }
     }
 
-    /// Uccide subito tutti i figli (zygote perso): i job in corso finiscono
-    /// come [`PoolEvent::WorkerLost`], quelli in coda come `PoolFailure`.
+    /// Terminates children after zygote loss, reporting active jobs as WorkerLost
+    /// and queued jobs as PoolFailure.
     pub fn abandon_children(&self) {
         let _ = self.inner.tx.send(Command::Abandon);
     }
 
-    /// Scarta i job non ancora accettati (verranno riconsegnati dal broker).
+    /// Discards unaccepted jobs for broker redelivery.
     pub fn flush(&self) -> Vec<u64> {
         let (tx, rx) = mpsc::channel();
         if self.inner.tx.send(Command::Flush(tx)).is_err() {
@@ -387,12 +348,12 @@ impl Pool {
         rx.recv().unwrap_or_default()
     }
 
-    /// Chiusura ordinata: completa i job, poi chiude i figli.
+    /// Closes gracefully after queued jobs finish.
     pub fn close(&self) {
         let _ = self.inner.tx.send(Command::Close);
     }
 
-    /// Terminazione immediata.
+    /// Terminates the pool immediately.
     pub fn terminate(&self) {
         let _ = self.inner.tx.send(Command::Terminate);
     }
@@ -435,7 +396,11 @@ impl Pool {
     }
 
     pub fn did_start_ok(&self) -> bool {
-        let state = self.inner.state.lock().unwrap_or_else(PoisonError::into_inner);
+        let state = self
+            .inner
+            .state
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
         state.unexpected_exits == 0 && !state.zygote_lost
     }
 
@@ -451,9 +416,13 @@ impl Pool {
             .zygote_lost
     }
 
-    /// `(totale job scritti, conteggi per figlio vivo)`.
+    /// Returns total writes and counts for live children.
     pub fn write_stats(&self) -> (u64, Vec<u64>) {
-        let state = self.inner.state.lock().unwrap_or_else(PoisonError::into_inner);
+        let state = self
+            .inner
+            .state
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
         let per_child: Vec<u64> = state.children.values().map(|child| child.writes).collect();
         (per_child.iter().sum(), per_child)
     }
@@ -554,7 +523,7 @@ fn handle(inner: &Arc<Inner>, command: Command) {
             let _ = reply.send(());
         }
         Command::Grow => {
-            // Il target è già stato aggiornato da `Pool::grow`.
+            // Pool::grow has already updated the target.
             spawn_to_target(inner);
         }
         Command::Shrink(n, reply) => {
@@ -701,7 +670,6 @@ fn dispatch(inner: &Arc<Inner>) {
         };
         let failed = {
             let Some(child) = state.children.get_mut(&child_id) else {
-                // Il figlio è sparito: riprova con un altro.
                 state.pending.push_front(job);
                 continue;
             };
@@ -791,8 +759,7 @@ fn on_frame(inner: &Arc<Inner>, child_id: u32, frame: Frame) {
                 }
                 child.active = None;
                 if retire || child.retire_after_job {
-                    // Il figlio ha raggiunto maxtasks/max-memory: non gli si
-                    // assegna più nulla, esce da solo.
+                    // A child at its task or memory limit retires itself and must receive no new jobs.
                     child.controlled = true;
                     child.shutdown_sent = true;
                     shutdown = true;
@@ -872,7 +839,6 @@ fn on_closed(inner: &Arc<Inner>, child_id: u32, exitcode: i32) {
     notify(inner);
 }
 
-/// Genera `PoolFailure` per i job che nessun figlio potrà eseguire.
 fn fail_unrunnable(inner: &Arc<Inner>) {
     let mut state = inner.state.lock().unwrap_or_else(PoisonError::into_inner);
     if state.children.is_empty() {
@@ -929,8 +895,11 @@ fn spawn_to_target(inner: &Arc<Inner>) {
                     id
                 };
                 spawn_reader(
-                    id, pid, crate::fds::Tracked::new(reader),
-                    inner.spawner.clone(), inner.tx.clone(),
+                    id,
+                    pid,
+                    crate::fds::Tracked::new(reader),
+                    inner.spawner.clone(),
+                    inner.tx.clone(),
                 );
             }
             Err(error) => {
@@ -968,12 +937,21 @@ fn spawn_reader(
         .spawn(move || {
             let mut reader = reader;
             while let Ok(Some(frame)) = read_frame(&mut *reader) {
-                if tx.send(Command::Frame { child: child_id, frame }).is_err() {
+                if tx
+                    .send(Command::Frame {
+                        child: child_id,
+                        frame,
+                    })
+                    .is_err()
+                {
                     return;
                 }
             }
             let exitcode = spawner.reap(pid);
-            let _ = tx.send(Command::Closed { child: child_id, exitcode });
+            let _ = tx.send(Command::Closed {
+                child: child_id,
+                exitcode,
+            });
         });
 }
 
@@ -1243,7 +1221,8 @@ mod tests {
                 Err(_) => break,
             }
             while buffer.len() >= 4 {
-                let total = u32::from_be_bytes([buffer[0], buffer[1], buffer[2], buffer[3]]) as usize;
+                let total =
+                    u32::from_be_bytes([buffer[0], buffer[1], buffer[2], buffer[3]]) as usize;
                 if !(9..=1 << 20).contains(&total) {
                     break 'outer;
                 }
@@ -1262,13 +1241,18 @@ mod tests {
                     continue;
                 }
                 let mode = payload.first().copied().unwrap_or(0);
-                let ack = Frame::new(FrameKind::Ack, job, Bytes::copy_from_slice(&0f64.to_be_bytes()));
+                let ack = Frame::new(
+                    FrameKind::Ack,
+                    job,
+                    Bytes::copy_from_slice(&0f64.to_be_bytes()),
+                );
                 if write_fake_frame(&mut stream, &ack).is_err() {
                     break 'outer;
                 }
                 match mode {
                     0 => {
-                        let ready = Frame::new(FrameKind::Ready, job, Bytes::from_static(b"\x01ok"));
+                        let ready =
+                            Frame::new(FrameKind::Ready, job, Bytes::from_static(b"\x01ok"));
                         if write_fake_frame(&mut stream, &ready).is_err() {
                             break 'outer;
                         }
@@ -1288,21 +1272,23 @@ mod tests {
                         if control.kill_signal().is_some() {
                             break 'outer;
                         }
-                        let ready = Frame::new(FrameKind::Ready, job, Bytes::from_static(b"\x00fail"));
+                        let ready =
+                            Frame::new(FrameKind::Ready, job, Bytes::from_static(b"\x00fail"));
                         if write_fake_frame(&mut stream, &ready).is_err() {
                             break 'outer;
                         }
                     }
                     3 => {
                         thread::sleep(Duration::from_millis(30));
-                        let ready = Frame::new(FrameKind::Ready, job, Bytes::from_static(b"\x01ok"));
+                        let ready =
+                            Frame::new(FrameKind::Ready, job, Bytes::from_static(b"\x01ok"));
                         if write_fake_frame(&mut stream, &ready).is_err() {
                             break 'outer;
                         }
                     }
                     4 => {
-                        // READY con flag "retire": il figlio esce subito dopo.
-                        let ready = Frame::new(FrameKind::Ready, job, Bytes::from_static(b"\x03ok"));
+                        let ready =
+                            Frame::new(FrameKind::Ready, job, Bytes::from_static(b"\x03ok"));
                         if write_fake_frame(&mut stream, &ready).is_err() {
                             break 'outer;
                         }
@@ -1322,7 +1308,7 @@ mod tests {
             if !self.alive.load(Ordering::Acquire) {
                 return Err(io::Error::new(
                     io::ErrorKind::BrokenPipe,
-                    "zygote non disponibile",
+                    "zygote unavailable",
                 ));
             }
             let (master, peer) = UnixStream::pair()?;
@@ -1443,7 +1429,7 @@ mod tests {
             if done {
                 break;
             }
-            assert!(Instant::now() < deadline, "reset non ricevuto");
+            assert!(Instant::now() < deadline, "reset not received");
             thread::sleep(Duration::from_millis(2));
         }
         assert_eq!(pool.write_stats().0, 0);
@@ -1457,14 +1443,18 @@ mod tests {
         let pool = Pool::new(Config::new(2), spawner.clone(), Waker::new());
         pool.submit(spec(1, 0)).expect("submit");
         let events = collect(&pool, 3, Duration::from_secs(2));
-        // accepted, ready di un job; il secondo evento accepted arriva subito
-        // dopo (stesso giro) quindi si filtra per job.
+        // Filter by job because the next acceptance can arrive in the same iteration.
         let mut seen = Vec::new();
         for event in events {
             if let PoolEvent::Accepted { job, .. } = event {
                 assert_eq!(job, 1);
                 seen.push("accepted");
-            } else if let PoolEvent::Ready { job, success, payload } = event {
+            } else if let PoolEvent::Ready {
+                job,
+                success,
+                payload,
+            } = event
+            {
                 assert_eq!(job, 1);
                 assert!(success);
                 assert_eq!(&payload[..], b"ok");
@@ -1527,7 +1517,7 @@ mod tests {
                 .iter()
                 .any(|(who, sig)| *who == pid && *sig == SIGTERM)
         );
-        // Il figlio viene rimpiazzato con un pid nuovo.
+
         let deadline = Instant::now() + Duration::from_secs(2);
         let mut replaced = false;
         while Instant::now() < deadline {
@@ -1538,7 +1528,7 @@ mod tests {
             }
             thread::sleep(Duration::from_millis(5));
         }
-        assert!(replaced, "figlio non rimpiazzato: {:?}", pool.pids());
+        assert!(replaced, "child not replaced: {:?}", pool.pids());
         assert_eq!(spawner.spawned(), 2);
         pool.close();
         assert!(wait_stopped(&pool, Duration::from_secs(2)));
@@ -1555,12 +1545,16 @@ mod tests {
         spawner.kill(pid, -SIGKILL);
         let events = collect(&pool, 1, Duration::from_secs(2));
         match &events[0] {
-            PoolEvent::WorkerLost { job, pid: who, exitcode } => {
+            PoolEvent::WorkerLost {
+                job,
+                pid: who,
+                exitcode,
+            } => {
                 assert_eq!(*job, 11);
                 assert_eq!(*who, pid);
                 assert_eq!(*exitcode, -SIGKILL);
             }
-            other => panic!("evento inatteso: {other:?}"),
+            other => panic!("unexpected event: {other:?}"),
         }
         assert_eq!(spawner.spawned(), 2);
         pool.close();
@@ -1573,13 +1567,16 @@ mod tests {
         let pool = Pool::new(Config::new(1), spawner.clone(), Waker::new());
         let pid = pool.pids()[0];
         pool.submit(spec(12, 1)).expect("submit");
-        assert_eq!(kinds(&collect(&pool, 1, Duration::from_secs(2))), ["accepted"]);
+        assert_eq!(
+            kinds(&collect(&pool, 1, Duration::from_secs(2))),
+            ["accepted"]
+        );
         pool.terminate_job(pid, SIGTERM);
         let events = collect(&pool, 1, Duration::from_secs(2));
         assert_eq!(kinds(&events), ["terminated"]);
         match &events[0] {
             PoolEvent::Terminated { exitcode, .. } => assert_eq!(*exitcode, -SIGTERM),
-            other => panic!("evento inatteso: {other:?}"),
+            other => panic!("unexpected event: {other:?}"),
         }
         pool.close();
         assert!(wait_stopped(&pool, Duration::from_secs(2)));
@@ -1591,8 +1588,7 @@ mod tests {
         let pool = Pool::new(Config::new(1), spawner, Waker::new());
         assert_eq!(pool.pids().len(), 1);
         pool.grow(2);
-        // Il target è visibile subito (come billiard): l'autoscaler non deve
-        // sovradimensionare mentre i figli vengono creati.
+        // Expose the target immediately so autoscaling does not overshoot during spawning.
         assert_eq!(pool.num_processes(), 3);
         let deadline = Instant::now() + Duration::from_secs(2);
         while pool.pids().len() < 3 && Instant::now() < deadline {
@@ -1616,10 +1612,13 @@ mod tests {
         let spawner = FakeSpawner::new();
         let pool = Pool::new(Config::new(1), spawner, Waker::new());
         pool.submit(spec(13, 1)).expect("submit");
-        assert_eq!(kinds(&collect(&pool, 1, Duration::from_secs(2))), ["accepted"]);
+        assert_eq!(
+            kinds(&collect(&pool, 1, Duration::from_secs(2))),
+            ["accepted"]
+        );
         match pool.shrink(1) {
             Err(PoolError::ShrinkBusy) => {}
-            other => panic!("atteso ShrinkBusy, ottenuto {other:?}"),
+            other => panic!("expected ShrinkBusy, got {other:?}"),
         }
         pool.terminate();
         assert!(wait_stopped(&pool, Duration::from_secs(2)));
@@ -1630,7 +1629,10 @@ mod tests {
         let spawner = FakeSpawner::new();
         let pool = Pool::new(Config::new(1), spawner, Waker::new());
         pool.submit(spec(14, 1)).expect("submit");
-        assert_eq!(kinds(&collect(&pool, 1, Duration::from_secs(2))), ["accepted"]);
+        assert_eq!(
+            kinds(&collect(&pool, 1, Duration::from_secs(2))),
+            ["accepted"]
+        );
         pool.submit(spec(15, 1)).expect("submit");
         pool.submit(spec(16, 1)).expect("submit");
         let dropped = pool.flush();
@@ -1647,10 +1649,7 @@ mod tests {
         pool.submit(spec(18, 3)).expect("submit");
         pool.close();
         let events = collect(&pool, 4, Duration::from_secs(3));
-        assert_eq!(
-            kinds(&events),
-            ["accepted", "accepted", "ready", "ready"]
-        );
+        assert_eq!(kinds(&events), ["accepted", "accepted", "ready", "ready"]);
         assert!(wait_stopped(&pool, Duration::from_secs(3)));
         assert!(spawner.state.lock().expect("state").shutdown);
     }
@@ -1663,7 +1662,7 @@ mod tests {
         let events = collect(&pool, 1, Duration::from_secs(2));
         assert_eq!(kinds(&events), ["accepted"]);
         let pid = pool.pids()[0];
-        // Zygote perso: i figli vanno uccisi e il job in corso risulta perso.
+
         spawner.alive.store(false, Ordering::Release);
         pool.abandon_children();
         let events = collect(&pool, 1, Duration::from_secs(2));
@@ -1676,7 +1675,7 @@ mod tests {
         let spawner = FakeSpawner::new();
         let pool = Pool::new(Config::new(1), spawner.clone(), Waker::new());
         spawner.alive.store(false, Ordering::Release);
-        // grow prova a creare un figlio: fallisce e segnala ZygoteLost.
+
         pool.grow(1);
         let events = collect(&pool, 1, Duration::from_secs(2));
         assert_eq!(kinds(&events), ["zygote-lost"]);
@@ -1690,13 +1689,13 @@ mod tests {
         let mut names = kinds(&events);
         names.sort_unstable();
         assert_eq!(names, ["failure", "lost"]);
-        // Dopo la perdita dei figli un nuovo submit fallisce subito.
+
         pool.submit(spec(22, 0)).expect("submit");
         let events = collect(&pool, 1, Duration::from_secs(2));
         assert_eq!(kinds(&events), ["failure"]);
         match &events[0] {
             PoolEvent::PoolFailure { job, .. } => assert_eq!(*job, 22),
-            other => panic!("evento inatteso: {other:?}"),
+            other => panic!("unexpected event: {other:?}"),
         }
         pool.terminate();
         assert!(wait_stopped(&pool, Duration::from_secs(2)));
@@ -1710,7 +1709,7 @@ mod tests {
         pool.submit(spec(40, 4)).expect("submit");
         let events = collect(&pool, 2, Duration::from_secs(2));
         assert_eq!(kinds(&events), ["accepted", "ready"]);
-        // Il figlio si ritira: un secondo job deve finire su un rimpiazzo.
+
         pool.submit(spec(41, 0)).expect("submit");
         let deadline = Instant::now() + Duration::from_secs(2);
         let mut pids = Vec::new();
@@ -1729,7 +1728,7 @@ mod tests {
                 assert_eq!(*job, 41);
                 assert!(success);
             }
-            other => panic!("evento inatteso: {other:?}"),
+            other => panic!("unexpected event: {other:?}"),
         }
         pool.close();
         assert!(wait_stopped(&pool, Duration::from_secs(2)));

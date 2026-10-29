@@ -1,18 +1,5 @@
-//! Client del remote control (kombu `Mailbox._broadcast`).
-//!
-//! Un comando viene pubblicato sull'exchange `*.pidbox` (fanout) e, se si
-//! aspettano risposte, su una coda temporanea `{oid}.reply.*.pidbox` legata
-//! all'exchange di risposta. La semantica replicata è quella di
-//! `kombu.pidbox.Mailbox`:
-//!
-//! - `destination`/`pattern` viaggiano nel body; il filtro vero lo fa il worker.
-//! - ogni risposta porta l'header `ticket`; quelle di un altro `ticket` non
-//!   vengono restituite ma conservate in `unclaimed` (una `deque` per ticket).
-//! - le risposte con header `expires` già scaduto si scartano.
-//! - `limit` limita il numero di `drain_events`, non di risposte: un messaggio
-//!   di un altro ticket consuma comunque un giro (come in kombu).
-//! - si attende fino a `timeout` dall'ultima consegna; il timeout non
-//!   interrompe un `limit` non ancora raggiunto.
+//! Remote control requests with kombu mailbox semantics. Reply limits count received
+//! messages, including other tickets; the timeout restarts after each delivery.
 
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -20,9 +7,11 @@ use bytes::Bytes;
 use compact_str::CompactString;
 
 use crate::message::{Delivery, HeaderValue, Headers, Message, Properties};
-use crate::transport::{ExchangeDecl, ExchangeType, PublishRequest, QueueBinding, QueueDecl, Result};
+use crate::transport::{
+    ExchangeDecl, ExchangeType, PublishRequest, QueueBinding, QueueDecl, Result,
+};
 
-/// Instradamento della coda di risposta (`Mailbox.get_reply_queue`).
+/// Routing for a mailbox reply queue.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ReplyRoute {
     pub exchange: CompactString,
@@ -32,12 +21,11 @@ pub struct ReplyRoute {
     pub durable: bool,
     pub exclusive: bool,
     pub auto_delete: bool,
-    /// Argomenti già convertiti da `to_rabbitmq_queue_arguments`
-    /// (`x-expires`/`x-message-ttl` in millisecondi).
+    /// Queue arguments with expiry and TTL converted to milliseconds.
     pub arguments: Headers,
 }
 
-/// Comando remote-control da pubblicare, con l'eventuale coda di risposta.
+/// Remote control request with an optional reply queue.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ControlRequest {
     pub exchange: CompactString,
@@ -48,14 +36,14 @@ pub struct ControlRequest {
     pub headers: Headers,
     pub reply: Option<ReplyRoute>,
     pub timeout: f64,
-    /// `None`: nessun limite (si attende solo il timeout).
+    /// `None` waits until timeout without a reply limit.
     pub limit: Option<usize>,
-    /// Ticket generato dal client; obbligatorio se `reply` è impostato.
+    /// Client-generated ticket, required when `reply` is set.
     pub ticket: Option<CompactString>,
 }
 
 impl ControlRequest {
-    /// Messaggio pronto per `Transport::publish`.
+    /// Message ready for publication.
     pub fn message(&self) -> Message {
         Message {
             body: self.body.clone(),
@@ -66,7 +54,7 @@ impl ControlRequest {
         }
     }
 
-    /// Proprietà del producer di kombu: `delivery_mode=2`, `priority=0`.
+    // Returns kombu producer properties: `delivery_mode=2`, `priority=0`.
     fn properties(&self) -> Properties {
         let mut properties = Properties::new();
         properties.set_delivery_mode(2);
@@ -74,12 +62,12 @@ impl ControlRequest {
         properties
     }
 
-    /// `_publish`: exchange pidbox, routing key vuota (fanout).
+    /// Builds a pidbox publication with an empty fanout routing key.
     pub fn publish_request(&self) -> PublishRequest {
         PublishRequest::new(Some(self.exchange.clone()), "", self.message())
     }
 
-    /// Dichiarazione dell'exchange fanout del mailbox.
+    /// Returns the mailbox fanout exchange declaration.
     pub fn exchange_declaration(&self) -> ExchangeDecl {
         ExchangeDecl {
             name: self.exchange.clone(),
@@ -91,7 +79,7 @@ impl ControlRequest {
         }
     }
 
-    /// Dichiarazione dell'exchange di risposta.
+    /// Returns the reply exchange declaration.
     pub fn reply_exchange_declaration(&self, reply: &ReplyRoute) -> ExchangeDecl {
         ExchangeDecl {
             name: reply.exchange.clone(),
@@ -103,8 +91,7 @@ impl ControlRequest {
         }
     }
 
-    /// Dichiarazione della coda di risposta (`auto_delete=not durable` è già
-    /// calcolato da `get_reply_queue`).
+    /// Returns the reply queue declaration with its precomputed auto-delete setting.
     pub fn reply_queue_declaration(&self, reply: &ReplyRoute) -> QueueDecl {
         QueueDecl {
             name: Some(reply.name.clone()),
@@ -125,7 +112,7 @@ impl ControlRequest {
     }
 }
 
-/// Risposta ricevuta con i suoi header originali.
+/// Reply with its original headers.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ControlReply {
     pub body: Bytes,
@@ -134,30 +121,25 @@ pub struct ControlReply {
     pub headers: Headers,
 }
 
-/// Esito di una raccolta: risposte del nostro ticket e messaggi di altri.
+/// Collected replies and messages belonging to other tickets.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct ControlOutcome {
     pub replies: Vec<ControlReply>,
-    /// `(ticket, risposta)`: da conservare per una `_collect` successiva
-    /// con lo stesso ticket (kombu `Mailbox.unclaimed`).
+    /// Replies retained for a later collection of the same ticket.
     pub unclaimed: Vec<(CompactString, ControlReply)>,
 }
 
-/// Esito della classificazione di una consegna.
+/// Classification of a received reply.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ReplyKind {
-    /// Risposta al nostro ticket.
+    /// Reply matching the requested ticket.
     Matched,
-    /// Risposta di un altro ticket (o già scaduta).
+    /// Reply for another ticket, or an expired reply.
     Other,
 }
 
 impl ControlOutcome {
-    /// Classifica *delivery* come fa `Mailbox._collect.on_message`.
-    ///
-    /// Restituisce [`ReplyKind::Matched`] anche per una risposta scaduta: in
-    /// kombu il giro di `drain_events` è stato consumato lo stesso, e `limit`
-    /// conta i giri.
+    /// Classifies a delivery as kombu does; expired matching replies still count toward the limit.
     pub fn push(&mut self, delivery: Delivery, ticket: &str, now: f64) -> ReplyKind {
         let headers = delivery.message.headers;
         if is_expired(&headers, now) {
@@ -182,8 +164,7 @@ impl ControlOutcome {
         }
     }
 
-    /// Recupera le risposte già conservate per *ticket* (kombu
-    /// `unclaimed.pop(ticket)`).
+    /// Removes and returns replies retained for a ticket.
     pub fn take_unclaimed(&mut self, ticket: &str) -> Option<Vec<ControlReply>> {
         if !self.unclaimed.iter().any(|(id, _)| id == ticket) {
             return None;
@@ -203,19 +184,15 @@ fn is_expired(headers: &Headers, now: f64) -> bool {
     expires != 0.0 && now > expires
 }
 
-/// Secondi epoch con la stessa precisione di `time.time()`.
+/// Returns epoch seconds with `time.time()` precision.
 pub fn now_seconds() -> f64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0.0, |elapsed| elapsed.as_secs_f64())
 }
 
-/// Raccoglie le risposte da uno stream di consegne con la semantica di
-/// `Mailbox._collect`.
-///
-/// Va chiamata dopo aver creato il consumatore `no_ack`. `limit` conta i
-/// messaggi ricevuti (anche quelli scartati), `timeout` si rinnova a ogni
-/// consegna: se nessuno risponde si attende un solo `timeout` dall'inizio.
+/// Collects replies after a no_ack consumer is created. Every message counts toward
+/// the limit, and each delivery restarts the timeout, matching `Mailbox._collect`.
 pub async fn collect_replies<S>(
     mut deliveries: S,
     ticket: &str,
@@ -239,12 +216,12 @@ where
             break;
         }
         let next = if timeout.is_zero() {
-            // Poll singolo senza attesa (timeout 0 di `drain_events`).
             poll_once_now(&mut deliveries)
         } else {
-            match tokio::time::timeout_at(deadline.into(), poll_fn(|cx| {
-                std::pin::Pin::new(&mut deliveries).poll_next(cx)
-            }))
+            match tokio::time::timeout_at(
+                deadline.into(),
+                poll_fn(|cx| std::pin::Pin::new(&mut deliveries).poll_next(cx)),
+            )
             .await
             {
                 Ok(value) => value,
@@ -277,12 +254,12 @@ where
     }
 }
 
-/// Implementazione generica di [`crate::Transport::control_request`].
-///
-/// Vale per memory e AMQP: dichiara exchange/coda di risposta, pubblica e
-/// consuma con `no_ack`. Il trasporto Redis la sostituisce per riprodurre
-/// esattamente i comandi di kombu (binding con `x-expires`, script, BRPOP).
-pub async fn control_request_default<T>(transport: &T, request: ControlRequest) -> Result<ControlOutcome>
+/// Sends and collects a control request for memory or AMQP transports. Redis overrides
+/// this to match kombu's binding scripts and BRPOP commands.
+pub async fn control_request_default<T>(
+    transport: &T,
+    request: ControlRequest,
+) -> Result<ControlOutcome>
 where
     T: crate::Transport + ?Sized,
 {
@@ -303,20 +280,17 @@ where
     let Some(reply) = &request.reply else {
         return Ok(ControlOutcome::default());
     };
-    // `Consumer.declare()`: kombu ridichiara coda e binding quando crea il
-    // consumatore delle risposte.
+    // kombu redeclares the queue and binding when creating the reply consumer.
     transport
         .declare_queue(&request.reply_queue_declaration(reply))
         .await?;
     transport.bind(&request.reply_binding(reply)).await?;
 
     let ticket = request.ticket.clone().unwrap_or_default();
-    let consumer = transport
-        .consume_control_reply(&reply.name)
-        .await?;
+    let consumer = transport.consume_control_reply(&reply.name).await?;
     let outcome =
         collect_replies(consumer.deliveries, &ticket, request.timeout, request.limit).await?;
-    // Come `chan.after_reply_message_received(queue.name)` nel `finally`.
+    // Match kombu's `after_reply_message_received` cleanup.
     let _ = consumer.control.cancel().await;
     let _ = transport.after_reply_message_received(&reply.name).await;
     Ok(outcome)
@@ -378,7 +352,7 @@ mod tests {
         assert!(outcome.replies.is_empty());
         assert_eq!(outcome.unclaimed.len(), 1);
         assert_eq!(outcome.unclaimed[0].0.as_str(), "other");
-        // Recuperarle per il ticket giusto le toglie dalla coda.
+
         let mine = outcome.take_unclaimed("mine");
         assert!(mine.is_none());
         let other = outcome.take_unclaimed("other").expect("unclaimed");
@@ -399,11 +373,19 @@ mod tests {
     #[test]
     fn drops_expired_replies() {
         let mut outcome = ControlOutcome::default();
-        let kind = outcome.push(delivery(headers(Some("mine"), Some(10.0)), b"1"), "mine", 11.0);
+        let kind = outcome.push(
+            delivery(headers(Some("mine"), Some(10.0)), b"1"),
+            "mine",
+            11.0,
+        );
         assert_eq!(kind, ReplyKind::Other);
         assert!(outcome.replies.is_empty());
-        // `expires=0` (nessuna scadenza) non scarta nulla.
-        let kind = outcome.push(delivery(headers(Some("mine"), Some(0.0)), b"1"), "mine", 11.0);
+
+        let kind = outcome.push(
+            delivery(headers(Some("mine"), Some(0.0)), b"1"),
+            "mine",
+            11.0,
+        );
         assert_eq!(kind, ReplyKind::Matched);
     }
 
@@ -429,7 +411,6 @@ mod tests {
         assert_eq!(request.exchange_declaration().kind, ExchangeType::Fanout);
     }
 
-    /// Stream di prova: consegne già pronte, poi `Pending` per sempre.
     struct FakeStream {
         items: std::collections::VecDeque<Result<Delivery>>,
     }
@@ -460,16 +441,23 @@ mod tests {
     #[tokio::test]
     async fn collect_waits_the_full_timeout_without_replies() {
         let started = std::time::Instant::now();
-        let outcome = collect_replies(FakeStream { items: Default::default() }, "mine", 0.05, None)
-            .await
-            .expect("collect");
+        let outcome = collect_replies(
+            FakeStream {
+                items: Default::default(),
+            },
+            "mine",
+            0.05,
+            None,
+        )
+        .await
+        .expect("collect");
         assert!(outcome.replies.is_empty());
         assert!(started.elapsed() >= Duration::from_millis(45));
     }
 
     #[tokio::test]
     async fn collect_stops_at_limit_counting_every_message() {
-        // 3 messaggi: il secondo è di un altro ticket ma conta come giro.
+        // The other ticket still consumes one iteration of the limit.
         let stream = fake(vec![
             (Some("mine"), b"1"),
             (Some("other"), b"2"),

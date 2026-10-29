@@ -1,14 +1,9 @@
-//! Dichiarazioni del mailbox del worker (pidbox) e della coda eventi (gossip).
-//!
-//! I nomi, i tipi di exchange e gli argomenti TTL replicano quelli che
-//! costruiscono `kombu.pidbox.Mailbox.get_queue` e
-//! `celery.events.receiver.EventReceiver`: stessi byte sul broker, quindi il
-//! traffico resta identico a quello del worker di riferimento.
+//! Worker pidbox and gossip declarations matching kombu entity names, exchange types and TTL wire arguments.
 
-use celery_transport::{ExchangeDecl, ExchangeType, QueueBinding, QueueDecl};
 use celery_transport::message::{HeaderValue, Headers};
+use celery_transport::{ExchangeDecl, ExchangeType, QueueBinding, QueueDecl};
 
-/// Binding completo di una coda di servizio.
+/// Service queue declaration and binding.
 #[derive(Debug, Clone)]
 pub struct MailboxBinding {
     pub exchange: ExchangeDecl,
@@ -16,44 +11,40 @@ pub struct MailboxBinding {
     pub binding: QueueBinding,
 }
 
-/// `Mailbox.exchange_fmt % namespace`.
+/// Returns the mailbox exchange name.
 pub fn pidbox_exchange(namespace: &str) -> String {
     format!("{namespace}.pidbox")
 }
 
-/// `Mailbox.reply_exchange_fmt % namespace`.
+/// Returns the mailbox reply exchange name.
 pub fn reply_exchange(namespace: &str) -> String {
     format!("reply.{namespace}.pidbox")
 }
 
-/// `Mailbox.get_queue(hostname)`: `{hostname}.{namespace}.pidbox`.
+/// Returns the hostname's pidbox queue name.
 pub fn pidbox_queue(hostname: &str, namespace: &str) -> String {
     format!("{hostname}.{namespace}.pidbox")
 }
 
-/// `EventReceiver.queue`: `{queue_prefix}.{node_id}`.
+/// Returns the node's event queue name.
 pub fn event_queue(prefix: &str, node_id: &str) -> String {
     format!("{prefix}.{node_id}")
 }
 
-/// Argomenti RabbitMQ/Redis di una coda con scadenza
-/// (`to_rabbitmq_queue_arguments`): secondi → millisecondi interi.
+// Converts queue expiry arguments from seconds to integer milliseconds.
 fn queue_arguments(expires: Option<f64>, message_ttl: Option<f64>) -> Headers {
     let mut arguments = Headers::new();
     if let Some(expires) = expires {
         arguments.insert("x-expires", HeaderValue::Int(milliseconds(expires)));
     }
     if let Some(message_ttl) = message_ttl {
-        arguments.insert(
-            "x-message-ttl",
-            HeaderValue::Int(milliseconds(message_ttl)),
-        );
+        arguments.insert("x-message-ttl", HeaderValue::Int(milliseconds(message_ttl)));
     }
     arguments
 }
 
 fn milliseconds(seconds: f64) -> i64 {
-    // `int(seconds * 1000)` di Python, senza `unwrap` su valori non finiti.
+    // Match Python int(seconds * 1000), rejecting nonfinite values.
     if seconds.is_finite() {
         (seconds * 1000.0) as i64
     } else {
@@ -61,7 +52,7 @@ fn milliseconds(seconds: f64) -> i64 {
     }
 }
 
-/// Coda del nodo pidbox e binding sull'exchange fanout.
+/// Returns the node's pidbox queue and fanout binding.
 pub fn pidbox(
     hostname: &str,
     namespace: &str,
@@ -80,12 +71,12 @@ pub fn pidbox(
             arguments: queue_arguments(expires, message_ttl),
             passive: false,
         },
-        // Il fanout non usa la routing key: kombu la lascia vuota.
+        // kombu leaves fanout routing keys empty.
         binding: QueueBinding::new(queue_name, exchange_name, ""),
     }
 }
 
-/// Coda del gossip e binding sull'exchange eventi.
+/// Returns the gossip queue and event exchange binding.
 #[allow(clippy::too_many_arguments)]
 pub fn events(
     prefix: &str,
@@ -100,8 +91,7 @@ pub fn events(
 ) -> MailboxBinding {
     let queue_name = event_queue(prefix, node_id);
     let mut exchange_decl = ExchangeDecl::new(exchange, exchange_type);
-    // `celery.events.event_exchange`: Exchange('celeryev', type='topic') ha i
-    // default di kombu (durable=True, auto_delete=False).
+    // Celery's event exchange uses kombu defaults: durable and not auto-delete.
     exchange_decl.durable = true;
     MailboxBinding {
         exchange: exchange_decl,
@@ -117,7 +107,7 @@ pub fn events(
     }
 }
 
-/// Messaggio di risposta del pidbox: exchange direct transiente.
+/// Builds a pidbox reply on a transient direct exchange.
 pub fn reply_binding(namespace: &str) -> ExchangeDecl {
     ExchangeDecl::new(reply_exchange(namespace), ExchangeType::Direct)
 }

@@ -10,7 +10,7 @@ name = "_celery_rs"
 crate-type = ["cdylib"]
 
 [features]
-# Solo diagnostica: nessun costo atomico nei percorsi di produzione.
+# Diagnostics only; production paths incur no atomic overhead.
 memory-probe = []
 
 [dependencies]

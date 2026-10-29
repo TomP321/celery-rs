@@ -1,13 +1,13 @@
-//! Helper per leggere/scrivere `str` Python, anche con surrogati isolati.
+//! Python string helpers preserving lone surrogates.
 
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyString};
 
-/// Contenuto di una `str` Python.
+/// Python string contents.
 pub enum PyStrData<'a> {
-    /// UTF-8 valido, prestato dall'oggetto Python.
+    /// Valid UTF-8 borrowed from Python.
     Utf8(&'a str),
-    /// Surrogati isolati: sequenza di code point.
+    /// Code points containing lone surrogates.
     Code(Vec<u32>),
 }
 
@@ -20,15 +20,14 @@ impl PyStrData<'_> {
     }
 }
 
-/// Estrae i code point di una `str`, senza perdere i surrogati isolati.
+/// Extracts string code points without losing lone surrogates.
 pub fn py_str_data<'a>(s: &'a Bound<'_, PyString>) -> PyResult<PyStrData<'a>> {
     match s.to_str() {
         Ok(v) => Ok(PyStrData::Utf8(v)),
         Err(_) => {
-            // `to_str` ha lasciato un'eccezione attiva: va consumata.
+            // Consume the exception left by to_str before continuing.
             let _ = PyErr::take(s.py());
-            // SAFETY: `s` è una str viva; la chiamata restituisce un nuovo riferimento
-            // o NULL, e non modifica l'oggetto.
+            // SAFETY: s is a live string; the call returns a new reference or NULL without mutation.
             let encoded = unsafe {
                 pyo3::ffi::PyUnicode_AsEncodedString(
                     s.as_ptr(),
@@ -39,14 +38,14 @@ pub fn py_str_data<'a>(s: &'a Bound<'_, PyString>) -> PyResult<PyStrData<'a>> {
             if encoded.is_null() {
                 return Err(PyErr::fetch(s.py()));
             }
-            // SAFETY: `encoded` è un riferimento posseduto non NULL.
+            // SAFETY: encoded is a non-NULL owned reference.
             let bytes = unsafe { Bound::from_owned_ptr(s.py(), encoded) }.cast_into::<PyBytes>()?;
             Ok(PyStrData::Code(decode_wtf8(bytes.as_bytes())))
         }
     }
 }
 
-/// Decodifica UTF-8 stretto, come `bytes.decode('utf-8')`.
+/// Decodes strict UTF-8 as bytes.decode('utf-8') does.
 pub fn decode_utf8_strict<'py>(py: Python<'py>, data: &[u8]) -> PyResult<Bound<'py, PyString>> {
     PyBytes::new(py, data)
         .call_method1("decode", ("utf-8",))?
@@ -54,7 +53,7 @@ pub fn decode_utf8_strict<'py>(py: Python<'py>, data: &[u8]) -> PyResult<Bound<'
         .map_err(Into::into)
 }
 
-/// Costruisce una `str` Python da code point, inclusi surrogati isolati.
+/// Builds a Python string from code points, including lone surrogates.
 pub fn py_str_from_code_points<'py>(
     py: Python<'py>,
     cps: &[u32],
@@ -69,7 +68,7 @@ pub fn py_str_from_code_points<'py>(
         .map_err(Into::into)
 }
 
-/// Decodifica UTF-8/WTF-8 in code point.
+/// Decodes UTF-8 or WTF-8 to code points.
 pub fn decode_wtf8(src: &[u8]) -> Vec<u32> {
     let mut out = Vec::with_capacity(src.len());
     let mut i = 0;

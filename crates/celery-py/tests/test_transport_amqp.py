@@ -1,11 +1,4 @@
-"""Interoperabilità del trasporto AMQP 0.9.1: kombu (py-amqp) vs ``_celery_rs``.
-
-Broker: ``CELERY_RS_TEST_AMQP`` (default ``amqp://guest:guest@127.0.0.1:5673//``).
-Management API: ``CELERY_RS_TEST_RABBIT_API`` (default ``http://127.0.0.1:15673/api``).
-
-Ogni test dichiara entità con prefisso ``rs.`` e nomi unici; la fixture autouse
-le elimina prima di ogni test.
-"""
+"""Compare AMQP transport behavior with kombu using unique entities and real RabbitMQ."""
 
 from __future__ import annotations
 
@@ -73,7 +66,7 @@ def clean_broker():
                     f"/exchanges/%2F/{urllib.parse.quote(exchange['name'], safe='')}",
                 )
     except OSError:
-        # Il broker è comunque raggiungibile via AMQP: la pulizia è best-effort.
+        # AMQP remains reachable; management cleanup is best effort.
         pass
     yield
     try:
@@ -133,7 +126,7 @@ def rs_declare(connection, exchange, *queues):
 
 
 def normalize_delivery_info(info: dict) -> dict:
-    """`delivery_tag` e `message_count` dipendono dal canale/connessione."""
+    """Exclude delivery tags and message counts because they depend on the channel."""
     return {
         key: value
         for key, value in dict(info).items()
@@ -142,13 +135,13 @@ def normalize_delivery_info(info: dict) -> dict:
 
 
 def body_bytes(body) -> bytes:
-    """kombu decodifica il body JSON in ``str``: normalizziamo a bytes."""
+    """Normalize kombu's decoded JSON body to bytes."""
     return body.encode("utf-8") if isinstance(body, str) else body
 
 
 def kombu_message(message) -> tuple:
     if message is None:
-        raise AssertionError("messaggio kombu assente")
+        raise AssertionError("missing kombu message")
     return (
         body_bytes(message.body),
         dict(message.headers),
@@ -215,7 +208,7 @@ def take_rs(connection, queue_name, *, timeout=2.0):
 
 
 def wait_size(connection, queue_name, expected, *, timeout=5.0):
-    """Attende che il broker abbia instradato i publish (sono asincroni)."""
+    """Wait for the broker to route asynchronous publications."""
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         size = connection.size(queue_name)
@@ -223,12 +216,12 @@ def wait_size(connection, queue_name, expected, *, timeout=5.0):
             return
         time.sleep(0.02)
     raise AssertionError(
-        f"coda {queue_name}: attesi {expected} messaggi, trovati {connection.size(queue_name)}"
+        f"queue {queue_name}: expected {expected} messages, got {connection.size(queue_name)}"
     )
 
 
 def publish_both(kombu_producer, ours, body, exchange, routing_key, **kwargs):
-    """Stesso messaggio via kombu e via Rust (nello stesso ordine della coda)."""
+    """Compare messages from kombu and Rust in queue order."""
     kombu_producer.publish(
         body, exchange=exchange, routing_key=routing_key, **kwargs
     )
@@ -244,8 +237,8 @@ def publish_both(kombu_producer, ours, body, exchange, routing_key, **kwargs):
         )
         if key in kwargs
     }
-    # In kombu `expiration` è in secondi e diventa millisecondi nella
-    # proprietà AMQP; sul lato Rust la proprietà è già la stringa in ms.
+    # kombu converts expiration from seconds; Rust accepts the AMQP millisecond string.
+
     if isinstance(properties.get("expiration"), (int, float)):
         properties["expiration"] = str(int(properties["expiration"] * 1000))
     for key in ("type", "app_id"):
@@ -300,7 +293,7 @@ def test_publish_consume_ack_interop():
     }
     publish_both(producer, ours, body, exchange, "rk", **kwargs)
 
-    # Il primo è quello pubblicato da kombu, il secondo da Rust.
+
     expected = kombu_message(queue(channel).get(no_ack=False))
     delivery = take_rs(ours, queue.name)
     received = rs_message(delivery)
@@ -355,12 +348,12 @@ def test_header_types_decoded_like_py_amqp():
         "negative_price": decimal.Decimal("-0.05"),
     }
 
-    # Rust publish -> kombu consumer.
+
     ours.publish(b"body", exchange=exchange.name, routing_key="rk", headers=headers)
     wait_size(ours, queue.name, 1)
     received = queue(channel).get(no_ack=True)
-    # Riferimento: lo stesso publish fatto da kombu, letto da kombu. Cattura
-    # anche le normalizzazioni di py-amqp (es. bytes UTF-8 -> str).
+    # Capture py-amqp normalization through a kombu-to-kombu reference publication.
+
     producer.publish(b"body", exchange=exchange, routing_key="rk", headers=headers)
     wait_size(ours, queue.name, 1)
     expected = queue(channel).get(no_ack=True)
@@ -373,7 +366,7 @@ def test_header_types_decoded_like_py_amqp():
     assert received.headers["price"] == decimal.Decimal("1.25")
     assert isinstance(received.headers["price"], decimal.Decimal)
 
-    # kombu publish -> Rust consumer.
+
     producer.publish(b"body", exchange=exchange, routing_key="rk", headers=headers)
     delivery = take_rs(ours, queue.name)
     assert delivery[0] == b"body"
@@ -387,11 +380,7 @@ def test_header_types_decoded_like_py_amqp():
 
 
 def test_exchange_types_and_routing():
-    """Direct/topic/fanout/headers: stesse rotte per kombu e Rust.
-
-    Per ogni tipo usiamo due code: quella ``_k`` riceve i publish di kombu,
-    quella ``_r`` quelli di Rust. Così i due lati non si rubano i messaggi.
-    """
+    """Compare direct, topic, fanout and headers routing using separate queues for each publisher."""
     suffix = uuid.uuid4().hex
     direct_ex = Exchange(f"rs.direct.{suffix}", type="direct", durable=False)
     topic_ex = Exchange(f"rs.topic.{suffix}", type="topic", durable=False)
@@ -469,7 +458,7 @@ def test_exchange_types_and_routing():
         else:
             ours.bind(queue.name, queue.exchange.name, queue.routing_key or "")
 
-    # Direct: Rust publish -> kombu consumer e kombu publish -> Rust consumer.
+
     ours.publish(b"rust", exchange=direct_ex.name, routing_key="r")
     producer.publish(b"kombu", exchange=direct_ex, routing_key="k")
     wait_size(ours, direct_r.name, 1)
@@ -480,13 +469,13 @@ def test_exchange_types_and_routing():
     wait_size(ours, direct_r.name, 1)
     assert direct_r(channel).get(no_ack=True).body == b"anonymous"
 
-    # Topic: confronto dei conteggi di routing.
+
     keys = ["account.1.created", "account.created", "account", "x.created"]
     expected_by_pattern = {
         "all": 4,
-        # k.*.created: k.account.created e k.x.created
+
         "star": 2,
-        # k.account.#: include il segmento "account" da solo
+        # The account segment alone also matches.
         "account": 3,
     }
     for key in keys:
@@ -497,7 +486,7 @@ def test_exchange_types_and_routing():
         wait_size(ours, queue_k.name, expected)
         wait_size(ours, queue_r.name, expected)
 
-    # Fanout: un broadcast raggiunge tutte le code di ciascun lato.
+
     producer.publish(b"broadcast", exchange=fanout_k_ex, routing_key="")
     ours.publish(b"broadcast", exchange=fanout_r_ex.name, routing_key="")
     for queue in fanout_k:
@@ -507,7 +496,7 @@ def test_exchange_types_and_routing():
         wait_size(ours, queue.name, 1)
         assert [delivery[0] for delivery in collect_rs(ours, [queue.name], 1)] == [b"broadcast"]
 
-    # Headers: x-match all, con formato diverso per lato.
+
     producer.publish(
         b"kombu-header",
         exchange=headers_ex,
@@ -590,15 +579,15 @@ def test_queue_expiry_ttl_and_quorum():
     suffix = uuid.uuid4().hex
     ours = rs.Connection(AMQP_URL)
 
-    # x-expires: coda eliminata dopo l'inattività. Ogni `declare` la "usa",
-    # quindi si attende senza interrogarla e si fa un solo controllo.
+    # Declarations reset idle expiry; wait without querying and check once.
+
     expiry = f"rs.expires.{suffix}"
     ours.declare_queue(expiry, durable=False, arguments={"x-expires": 400})
     time.sleep(1.2)
     with pytest.raises(LookupError):
         ours.declare_queue(expiry, passive=True)
 
-    # x-message-ttl.
+
     ttl = f"rs.ttl.{suffix}"
     ours.declare_queue(ttl, durable=False, arguments={"x-message-ttl": 1500})
     ours.publish(b"expiring", routing_key=ttl)
@@ -608,7 +597,7 @@ def test_queue_expiry_ttl_and_quorum():
         time.sleep(0.05)
     assert ours.size(ttl) == 0
 
-    # Quorum queue (durable).
+    # Quorum queues require durability.
     quorum = f"rs.quorum.{suffix}"
     ours.declare_queue(
         quorum, durable=True, arguments={"x-queue-type": "quorum"}
@@ -667,7 +656,7 @@ def test_ack_reject_and_prefetch():
     rs_declare(ours, exchange, prefetch_q, reject_q)
     producer = Producer(channel)
 
-    # ack e prefetch (basic.qos): 2 in volo, poi altri dopo l'ack.
+
     for index in range(5):
         producer.publish(
             str(index).encode(), exchange=exchange, routing_key="prefetch"
@@ -682,7 +671,7 @@ def test_ack_reject_and_prefetch():
     for delivery in first[1:] + third:
         ours.ack(delivery[4])
 
-    # reject senza requeue (basic_get: nessun buffer del consumatore).
+    # Use basic_get to exclude consumer buffering from rejection checks.
     producer.publish(b"discard", exchange=exchange, routing_key="reject")
     wait_size(ours, reject_q.name, 1)
     delivery = ours.get(reject_q.name)
@@ -690,7 +679,7 @@ def test_ack_reject_and_prefetch():
     ours.reject(delivery[4], requeue=False)
     assert ours.size(reject_q.name) == 0
 
-    # reject con requeue: riconsegnato con redelivered=True.
+
     producer.publish(b"again", exchange=exchange, routing_key="reject")
     wait_size(ours, reject_q.name, 1)
     delivery = ours.get(reject_q.name)
@@ -714,11 +703,11 @@ def wait_kombu_size(channel, queue_name, expected, *, timeout=5.0):
         if size == expected:
             return
         time.sleep(0.02)
-    raise AssertionError(f"coda kombu {queue_name}: attesi {expected}")
+    raise AssertionError(f"kombu queue {queue_name}: expected {expected}")
 
 
 def test_prefetch_changes_match_kombu():
-    """Stessi cambi di prefetch a caldo con consumer attivo: kombu vs Rust."""
+    """Compare prefetch changes while consumers are active."""
 
     def measure(global_flag):
         suffix = uuid.uuid4().hex
@@ -734,7 +723,7 @@ def test_prefetch_changes_match_kombu():
         wait_kombu_size(channel, queue_k, 8)
         wait_kombu_size(channel, queue_r, 8)
 
-        # Riferimento kombu: stesso qos_global usato da Celery sul broker.
+        # Use Celery's qos_global setting for this broker.
         channel.basic_qos(0, 2, global_flag)
         received = []
 
@@ -766,8 +755,8 @@ def test_prefetch_changes_match_kombu():
         drain_kombu()
         decreased_k = len(received) - initial_k - increased_k
 
-        # Rust: stessa finestra temporale di kombu, cambiando prefetch sul
-        # consumer già attivo.
+        # Change prefetch on an active consumer over the same interval as kombu.
+
         def drain_rust(connection, queue, prefetch, seconds=0.3):
             collected = []
             end = time.monotonic() + seconds
@@ -825,8 +814,8 @@ def test_publisher_confirms():
         ours.publish(str(index).encode(), routing_key=queue_name)
     assert ours.size(queue_name) == 50
 
-    # Un publish su un exchange inesistente chiude il canale; il successivo
-    # deve funzionare su un canale nuovo.
+    # A missing exchange closes the channel; the next publication needs a fresh one.
+
     with pytest.raises(RuntimeError):
         ours.publish(b"x", exchange=f"rs.missing.{suffix}", routing_key="rk")
     ours.publish(b"after-error", routing_key=queue_name)
@@ -836,7 +825,7 @@ def test_publisher_confirms():
 
 
 def _close_rust_connection(connection_name, timeout=20.0):
-    """Chiude via management API la connessione con `connection_name`."""
+    """Close the named connection through the management API."""
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         connections = []
@@ -853,7 +842,7 @@ def _close_rust_connection(connection_name, timeout=20.0):
             return len(connections)
         time.sleep(0.1)
     raise AssertionError(
-        f"connessione {connection_name!r} non visibile all'API di management"
+        f"connection {connection_name!r} not visible in management API"
     )
 
 
@@ -868,7 +857,7 @@ def test_reconnect_after_broker_closes_connection():
     for index in range(4):
         ours.publish(str(index).encode(), routing_key=queue_name)
 
-    # Due messaggi confermati prima della caduta.
+
     first = collect_rs(ours, [queue_name], 2, timeout=2, prefetch=2)
     assert [delivery[0] for delivery in first] == [b"0", b"1"]
 
@@ -881,15 +870,15 @@ def test_reconnect_after_broker_closes_connection():
     deadline = time.monotonic() + 30
     thread = threading.Thread(target=closer)
     thread.start()
-    # I messaggi già prefetchati possono arrivare subito: si continua a
-    # svuotare (senza ack, così restano in volo) finché la connessione cade.
+    # Drain prefetched deliveries without acknowledgment until disconnection is detected.
+
     while True:
         try:
             ours.drain([queue_name], timeout=5)
         except ConnectionError:
             break
         if time.monotonic() > deadline:
-            raise AssertionError("la caduta della connessione non è stata rilevata")
+            raise AssertionError("connection loss was not detected")
     thread.join()
     assert closed.get("count", 0) >= 1
     try:
@@ -897,8 +886,8 @@ def test_reconnect_after_broker_closes_connection():
     except ConnectionError:
         pass
 
-    # Nuova connessione: i non confermati (2, 3) sono tornati in coda,
-    # i confermati non vengono duplicati.
+    # Reconnect to verify pending deliveries return without duplicating acknowledged ones.
+
     reconnected = rs.Connection(AMQP_URL)
     remaining = collect_rs(reconnected, [queue_name], 2, timeout=5, prefetch=2)
     assert [delivery[0] for delivery in remaining] == [b"2", b"3"]
@@ -929,21 +918,21 @@ def test_passive_declare_and_delete_exchange():
 
     producer.publish(b"keep", exchange=exchange, routing_key="full")
     ours.publish(b"keep", exchange=exchange.name, routing_key="full")
-    # Elimina Rust; kombu verifica lo stato sul broker.
+
     ours.delete_exchange(exchange.name)
 
     with pytest.raises(ChannelError):
         Exchange(exchange.name, durable=False).declare(passive=True, channel=channel)
     with pytest.raises(LookupError):
         ours.declare_exchange(exchange.name, passive=True)
-    # AMQP puro: exchange.delete elimina solo exchange e binding; le code
-    # restano, compresa quella vuota.
+    # AMQP exchange deletion preserves all queues, including empty ones.
+
     assert empty.queue_declare(passive=True, channel=channel)[1] == 0
     assert ours.declare_queue(empty.name, passive=True) == empty.name
     assert full.queue_declare(passive=True, channel=channel)[1] == 2
     assert ours.size(full.name) == 2
 
-    # Stessa semantica quando elimina kombu: lo stato visto da Rust combacia.
+
     other_exchange = Exchange(f"rs.delete.other.{suffix}", type="direct", durable=False)
     other_queue = Queue(
         f"rs.delete.other.q.{suffix}",
@@ -956,7 +945,7 @@ def test_passive_declare_and_delete_exchange():
     channel.exchange_delete(exchange=other_exchange.name)
     with pytest.raises(LookupError):
         ours.declare_exchange(other_exchange.name, passive=True)
-    # AMQP puro: la coda resta (il broker elimina solo i binding).
+    # AMQP deletes bindings but preserves the queue.
     assert ours.declare_queue(other_queue.name, passive=True) == other_queue.name
     ours.delete_queue(other_queue.name)
 
@@ -1006,7 +995,7 @@ def test_get_no_ack_and_requeue():
 
 
 def test_wire_publish_records_match_kombu():
-    """Bundle di conformità: gli stessi publish producono record identici."""
+    """Verify identical publications produce identical normalized records."""
     from celery_compat import wire
 
     wire.enable_rabbit_trace()

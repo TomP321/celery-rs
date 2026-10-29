@@ -1,4 +1,4 @@
-//! Le risorse asincrone ereditate non possono risvegliare i thread del padre.
+//! Prevents inherited asynchronous resources from waking the parent's threads.
 
 use std::mem::ManuallyDrop;
 use std::ops::Deref;
@@ -28,7 +28,7 @@ impl<T> Deref for ForkSafe<T> {
 impl<T> Drop for ForkSafe<T> {
     fn drop(&mut self) {
         if self.pid == std::process::id() {
-            // SAFETY: siamo nel processo proprietario e questo è l'unico Drop.
+            // SAFETY: this is the owning process and the value is dropped only once.
             unsafe { ManuallyDrop::drop(&mut self.value) };
         }
     }

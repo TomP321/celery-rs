@@ -1,18 +1,15 @@
-//! Parser dei campi crontab: stessa semantica di `crontab_parser` del riferimento.
-//!
-//! Il riferimento usa `re.match` (ancorato solo all'inizio) e `int()` di Python:
-//! qui i pattern, i messaggi e l'ordine dei controlli sono gli stessi.
+//! Crontab field parser matching Celery's pattern order, Python re.match semantics and errors.
 
 use crate::error::Error;
 
-/// Parser con `max_`/`min_` come il riferimento (interi Python, anche negativi).
+/// Crontab parser with signed bounds matching the reference.
 #[derive(Debug, Clone, Copy)]
 pub struct CrontabParser {
     pub max_: i64,
     pub min_: i64,
 }
 
-/// Espande un campo completo (`'*'`, `'1-5/2'`, `'1,3,5'`, nomi, ...).
+/// Expands a complete field containing wildcards, ranges, steps, lists or names.
 pub fn parse(spec: &str, max_: i64, min_: i64) -> Result<Vec<i64>, Error> {
     CrontabParser { max_, min_ }.parse(spec)
 }
@@ -36,8 +33,7 @@ impl CrontabParser {
     }
 
     fn parse_part(&self, part: &str) -> Result<Vec<i64>, Error> {
-        // Stessi quattro pattern di `crontab_parser.pats`, in ordine, con la
-        // semantica di `re.match` (ancorato all'inizio, gruppi greedy).
+        // Preserve crontab_parser.pats order, start anchoring and greedy groups.
         if let Some((from, to, step)) = range_steps_captures(part) {
             return self.range_steps(from, to, step);
         }
@@ -59,7 +55,7 @@ impl CrontabParser {
             Some(to) => {
                 let to = self.expand_number(to)?;
                 if to < fr {
-                    // Wrap su `max_`, come il riferimento.
+                    // Wrap at max_, matching the reference.
                     let mut values: Vec<i64> = (fr..self.min_ + self.max_).collect();
                     values.extend(self.min_..=to);
                     Ok(values)
@@ -71,16 +67,11 @@ impl CrontabParser {
         }
     }
 
-    fn range_steps(
-        &self,
-        from: &str,
-        to: &str,
-        step: Option<&str>,
-    ) -> Result<Vec<i64>, Error> {
+    fn range_steps(&self, from: &str, to: &str, step: Option<&str>) -> Result<Vec<i64>, Error> {
         let Some(step) = step.filter(|s| !s.is_empty()) else {
             return Err(Error::EmptyFilter);
         };
-        // Il riferimento espande il range prima di convertire lo step.
+        // The reference expands the range before converting the step.
         let values = self.expand_range(Some(from), Some(to))?;
         let step = self.expand_step(step)?;
         Ok(slice_step(values, step))
@@ -98,7 +89,7 @@ impl CrontabParser {
         (self.min_..self.max_ + self.min_).collect()
     }
 
-    /// `int(toks[...])` del riferimento: solo ValueError con il suo testo.
+    // Converts a token with the reference's integer error text.
     fn expand_step(&self, s: &str) -> Result<usize, Error> {
         match parse_python_int(s) {
             Some(Number::Value(value)) => {
@@ -106,7 +97,7 @@ impl CrontabParser {
                     return Err(Error::ZeroStep);
                 }
                 if value < 0 {
-                    // Irraggiungibile: i pattern non accettano il segno.
+                    // Unreachable because the patterns reject signs.
                     return Err(Error::InvalidInt {
                         literal: s.to_string(),
                     });
@@ -169,12 +160,10 @@ impl CrontabParser {
     }
 }
 
-/// `\w` dei pattern (le cifre/caratteri Unicode alfanumerici più `_`).
 fn is_word(ch: char) -> bool {
     ch.is_alphanumeric() || ch == '_'
 }
 
-/// Primo `-` con prefisso non vuoto di soli `\w`: gruppo 1 non-greedy.
 fn first_range(part: &str) -> Option<(&str, &str)> {
     let dash = part.find('-')?;
     if dash == 0 || !part[..dash].chars().all(is_word) {
@@ -183,7 +172,6 @@ fn first_range(part: &str) -> Option<(&str, &str)> {
     Some((&part[..dash], &part[dash + 1..]))
 }
 
-/// Corsa massima di `\w` (gruppo greedy); `None` se vuota.
 fn word_run(text: &str) -> Option<(&str, &str)> {
     let end = text
         .char_indices()
@@ -197,7 +185,6 @@ fn word_run(text: &str) -> Option<(&str, &str)> {
     }
 }
 
-/// `^(\w+?)-(\w+)/(\w+)?`
 fn range_steps_captures(part: &str) -> Option<(&str, &str, Option<&str>)> {
     let (from, rest) = first_range(part)?;
     let (to, rest) = word_run(rest)?;
@@ -206,14 +193,12 @@ fn range_steps_captures(part: &str) -> Option<(&str, &str, Option<&str>)> {
     Some((from, to, step))
 }
 
-/// `^(\w+?)-(\w+)`
 fn range_captures(part: &str) -> Option<(&str, &str)> {
     let (from, rest) = first_range(part)?;
     let (to, _) = word_run(rest)?;
     Some((from, to))
 }
 
-/// `^\*/(\w+)?`
 fn star_steps_captures(part: &str) -> Option<Option<&str>> {
     let rest = part.strip_prefix("*/")?;
     Some(word_run(rest).map(|(run, _)| run))
@@ -229,14 +214,15 @@ fn slice_step(values: Vec<i64>, step: usize) -> Vec<i64> {
 #[derive(Debug, PartialEq, Eq)]
 enum Number {
     Value(i64),
-    /// Valore oltre `i64`: serve solo per il messaggio d'errore.
-    Huge { negative: bool, text: String },
+    /// Retains out-of-range integers only for error formatting.
+    Huge {
+        negative: bool,
+        text: String,
+    },
 }
 
-/// `int(s)` di Python per base 10.
-///
-/// Accetta spazi Unicode ai bordi, un segno e underscore tra le cifre, come
-/// `int()`; le cifre Unicode non ASCII (es. `int('٣')`) non sono coperte.
+// Parses base-ten integers with Python whitespace, sign and underscore rules.
+// Non-ASCII Unicode digits are not supported.
 fn parse_python_int(s: &str) -> Option<Number> {
     let s = s.trim();
     let (negative, body) = match s.as_bytes().first() {
@@ -266,7 +252,11 @@ fn parse_python_int(s: &str) -> Option<Number> {
         return None;
     }
     let normalized = digits.trim_start_matches('0');
-    let normalized = if normalized.is_empty() { "0" } else { normalized };
+    let normalized = if normalized.is_empty() {
+        "0"
+    } else {
+        normalized
+    };
     match normalizes_to_i64(normalized, negative) {
         Some(value) => Some(Number::Value(value)),
         None => Some(Number::Huge {
@@ -383,7 +373,7 @@ mod tests {
 
     #[test]
     fn python_int_compat() {
-        // int('1_0') == 10, ma int('1__0')/int('_1') sono ValueError.
+        // Python permits single underscores between digits, rejecting consecutive or leading ones.
         assert_eq!(p(60, 0, "1_0").unwrap(), vec![10]);
         assert_eq!(
             p(60, 0, "1__0"),
@@ -391,15 +381,12 @@ mod tests {
                 literal: "1__0".into()
             })
         );
-        assert_eq!(
-            p(60, 0, "*/1_0").unwrap(),
-            vec![0, 10, 20, 30, 40, 50]
-        );
+        assert_eq!(p(60, 0, "*/1_0").unwrap(), vec![0, 10, 20, 30, 40, 50]);
     }
 
     #[test]
     fn regex_parity_edge_cases() {
-        // `re.match` non è ancorato in fondo: il gruppo greedy si prende il resto.
+        // re.match is not end-anchored, so the greedy group takes the remaining word characters.
         assert_eq!(
             p(60, 0, "1-3x"),
             Err(Error::InvalidWeekday {

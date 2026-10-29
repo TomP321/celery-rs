@@ -1,4 +1,4 @@
-//! `json_dumps` / `json_loads` compatibili con `kombu.utils.json`.
+//! JSON dumps and loads compatible with kombu.utils.json.
 
 use std::collections::HashSet;
 
@@ -15,12 +15,8 @@ use celery_proto::json::write::{write_float, write_int, write_str, write_str_cod
 
 use crate::util::{PyStrData, decode_utf8_strict, py_str_data, py_str_from_code_points};
 
-/// Limite dell'encoder C di CPython 3.13: `Py_C_RECURSION_LIMIT` vale 10000
-/// su POSIX non-debug (`Include/internal/pycore_ceval.h`,
-/// `cpython/pystate.h`). Il percorso `kombu.dumps` -> `_json` consuma 3 slot
-/// prima della struttura utente, quindi la soglia misurata è 9997. Usiamo un
-/// valore costante per avere lo stesso comportamento in qualunque thread,
-/// indipendentemente dalla dimensione dello stack nativo.
+/// CPython 3.13's non-debug POSIX encoder allows 10000 C recursion slots; kombu
+/// consumes three before user data. A fixed limit matches this across threads and stack sizes.
 const MAX_DEPTH: usize = 9_997;
 
 static BUILTIN_INT: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
@@ -102,8 +98,7 @@ impl<'py> DumpEngine<'py> {
             return Ok(());
         }
         let ptr = obj.as_ptr();
-        // SAFETY: `ptr` punta a un oggetto Python vivo; i check di tipo non
-        // dereferenziano dati dell'oggetto oltre l'header.
+        // SAFETY: ptr references a live Python object; type checks read only its header.
         unsafe {
             if ffi::PyBool_Check(ptr) != 0 {
                 if obj.is_truthy()? {
@@ -147,7 +142,7 @@ impl<'py> DumpEngine<'py> {
                     return Err(PyValueError::new_err("Circular reference detected"));
                 }
                 self.out.push(b'{');
-                // Per le sottoclassi CPython usa `.items()`.
+                // CPython uses items() for dictionary subclasses.
                 if ffi::PyDict_CheckExact(ptr) != 0 {
                     let dict = obj.cast::<PyDict>()?.clone();
                     self.stack.push(Frame {
@@ -221,7 +216,7 @@ impl<'py> DumpEngine<'py> {
             FrameKind::DictExact { dict, pos } => {
                 let mut key: *mut ffi::PyObject = std::ptr::null_mut();
                 let mut value: *mut ffi::PyObject = std::ptr::null_mut();
-                // SAFETY: `dict` è vivo e `pos` è lo stato dell'iterazione.
+                // SAFETY: dict is alive and pos holds the iteration state.
                 let has = unsafe { ffi::PyDict_Next(dict.as_ptr(), pos, &mut key, &mut value) };
                 (has, key, value)
             }
@@ -231,8 +226,7 @@ impl<'py> DumpEngine<'py> {
             self.close_frame(idx, b'}');
             return Ok(());
         }
-        // SAFETY: i puntatori sono riferimenti borrowed validi finché il dict
-        // (posseduto dal frame) resta vivo.
+        // SAFETY: borrowed pointers remain valid while the frame owns the live dictionary.
         let key = unsafe { Bound::from_borrowed_ptr(self.py, key_ptr) };
         let value = unsafe { Bound::from_borrowed_ptr(self.py, value_ptr) };
         self.emit_pair(idx, &key, value)
@@ -291,7 +285,7 @@ pub fn json_dumps(
 
 fn write_py_int(py: Python<'_>, obj: &Bound<'_, PyAny>, out: &mut Vec<u8>) -> PyResult<()> {
     let mut overflow: i32 = 0;
-    // SAFETY: `obj` è un PyLong (o sottoclasse) vivo e `overflow` è un intero valido.
+    // SAFETY: obj is a live PyLong or subclass and overflow points to a valid integer.
     let v = unsafe { ffi::PyLong_AsLongLongAndOverflow(obj.as_ptr(), &mut overflow) };
     if v == -1
         && let Some(err) = PyErr::take(py)
@@ -302,7 +296,7 @@ fn write_py_int(py: Python<'_>, obj: &Bound<'_, PyAny>, out: &mut Vec<u8>) -> Py
         write_int(out, v as i64);
         return Ok(());
     }
-    // Interi arbitrari: usa `int.__repr__`, che ignora eventuali override della sottoclasse.
+    // int.__repr__ bypasses subclass overrides for arbitrary integers.
     let s = builtin_int(py)?.call_method1("__repr__", (obj,))?;
     out.extend_from_slice(s.cast::<PyString>()?.to_str()?.as_bytes());
     Ok(())
@@ -321,15 +315,14 @@ fn type_name(obj: &Bound<'_, PyAny>) -> PyResult<String> {
     Ok(obj.get_type().name()?.to_string_lossy().into_owned())
 }
 
-/// Nome usato da CPython per `tp_name`: per i tipi statici include il modulo
-/// (tranne `builtins`), per gli heap type è solo `__name__`.
+/// Returns CPython's type name, including modules for static types except builtins.
 fn dict_key_type_name(obj: &Bound<'_, PyAny>) -> PyResult<String> {
     let ty = obj.get_type();
-    // SAFETY: `ty` è un tipo Python vivo; `PyType_GetFlags` non lo modifica.
+    // SAFETY: ty is a live Python type; PyType_GetFlags does not modify it.
     let flags = unsafe { ffi::PyType_GetFlags(ty.as_ptr().cast()) };
     let name = ty.name()?.to_string_lossy().into_owned();
-    // Gli heap type definiti in Python usano solo __name__; i tipi C (anche
-    // heap type immutabili come Decimal) hanno tp_name con il modulo.
+    // Python heap types use __name__; C types, including immutable heap types such
+    // as Decimal, include the module in tp_name.
     if flags & ffi::Py_TPFLAGS_HEAPTYPE != 0 && flags & ffi::Py_TPFLAGS_IMMUTABLETYPE == 0 {
         return Ok(name);
     }
@@ -347,7 +340,7 @@ fn dict_key_type_name(obj: &Bound<'_, PyAny>) -> PyResult<String> {
 
 fn write_dict_key(py: Python<'_>, key: &Bound<'_, PyAny>, out: &mut Vec<u8>) -> PyResult<()> {
     let ptr = key.as_ptr();
-    // SAFETY: `ptr` punta a una chiave Python viva; i check di tipo sono sicuri.
+    // SAFETY: ptr references a live Python key; type checks do not modify it.
     unsafe {
         if ffi::PyUnicode_Check(ptr) != 0 {
             out.push(b'"');
@@ -400,7 +393,7 @@ fn write_dict_key(py: Python<'_>, key: &Bound<'_, PyAny>, out: &mut Vec<u8>) -> 
         return Ok(());
     }
 
-    // Chiavi non ammesse: stesso errore di CPython (default non viene chiamato).
+    // Match CPython's invalid key error without calling default.
     let name = dict_key_type_name(key)?;
     Err(PyTypeError::new_err(format!(
         "keys must be str, int, float, bool or None, not {name}"
@@ -441,7 +434,7 @@ pub fn json_loads(
         match reader.next_event() {
             Ok(Some(event)) => builder.handle(event)?,
             Ok(None) => break,
-            Err(err) if err.message == "Maximum JSON depth exceeded" => {
+            Err(err) if err.message == "maximum JSON depth exceeded" => {
                 return Err(pyo3::exceptions::PyRecursionError::new_err(
                     "maximum recursion depth exceeded while decoding a JSON value",
                 ));
@@ -547,7 +540,7 @@ impl<'py> Builder<'py> {
             }
             Event::EndArray => {
                 let Some(Container::List(list)) = self.stack.pop() else {
-                    return Err(PyValueError::new_err("parser: array non atteso"));
+                    return Err(PyValueError::new_err("parser: unexpected array"));
                 };
                 self.attach(list.into_any())
             }
@@ -560,7 +553,7 @@ impl<'py> Builder<'py> {
             }
             Event::EndObject => {
                 let Some(Container::Dict { dict, .. }) = self.stack.pop() else {
-                    return Err(PyValueError::new_err("parser: oggetto non atteso"));
+                    return Err(PyValueError::new_err("parser: unexpected object"));
                 };
                 let value = self.apply_hook(dict.into_any())?;
                 self.attach(value)
@@ -585,9 +578,9 @@ impl<'py> Builder<'py> {
                 list.append(value)?;
             }
             Some(Container::Dict { dict, key }) => {
-                let key = key.take().ok_or_else(|| {
-                    PyValueError::new_err("parser: valore in oggetto senza chiave")
-                })?;
+                let key = key
+                    .take()
+                    .ok_or_else(|| PyValueError::new_err("parser: object value without key"))?;
                 dict.set_item(key, value)?;
             }
             None => self.root = Some(value),
@@ -603,12 +596,12 @@ fn int_from_text<'py>(py: Python<'py>, text: &str) -> PyResult<Bound<'py, PyAny>
     let mut buf = Vec::with_capacity(text.len() + 1);
     buf.extend_from_slice(text.as_bytes());
     buf.push(0);
-    // SAFETY: `buf` è NUL-terminato e resta vivo durante la chiamata.
+    // SAFETY: buf is NUL-terminated and remains alive throughout the call.
     let ptr = unsafe { ffi::PyLong_FromString(buf.as_ptr().cast(), std::ptr::null_mut(), 10) };
     if ptr.is_null() {
         return Err(PyErr::fetch(py));
     }
-    // SAFETY: `ptr` è un nuovo riferimento posseduto restituito da `PyLong_FromString`.
+    // SAFETY: ptr is a new owned reference returned by PyLong_FromString.
     Ok(unsafe { Bound::from_owned_ptr(py, ptr) })
 }
 

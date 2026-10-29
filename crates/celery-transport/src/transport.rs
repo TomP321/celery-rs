@@ -1,44 +1,5 @@
-//! Trait comune dei trasporti, errori e politica di riconnessione.
-//!
-//! # Contratto per le implementazioni (02b Redis, 02c AMQP)
-//!
-//! - **ack/reject**: ogni [`Delivery`] va confermata esattamente una volta.
-//!   `ack` e `reject(requeue=false)` rimuovono il tag dall'insieme in volo e
-//!   sono no-op se il tag è sconosciuto (come `QoS` di kombu); il messaggio
-//!   scartato non torna in coda. `reject(requeue=true)` rimette il messaggio in
-//!   coda secondo la semantica del broker (memory: in fondo; Redis: `lpush`,
-//!   quindi in testa; AMQP: il broker decide) e restituisce
-//!   [`Error::UnknownDeliveryTag`] se il tag non esiste (kombu solleva
-//!   `KeyError`). `redelivered` deve essere `true` alla riconsegna.
-//! - **prefetch**: lo stream non restituisce più di `prefetch` consegne non
-//!   ancora confermate; `0` significa illimitato (come `QoS.can_consume` di
-//!   kombu virtual). [`ConsumerControl::set_prefetch`] si applica subito:
-//!   aumentarlo risveglia lo stream, diminuirlo blocca le consegne finché gli
-//!   ack non riportano le consegne in volo sotto la soglia. `add_queue` e
-//!   `cancel_queue` hanno effetto immediato senza perdere i messaggi in volo.
-//!   `cancel` ferma le consegne e lo stream termina con `None`; come
-//!   `basic_cancel` di kombu i messaggi già consegnati restano confermabili
-//!   (`ack`/`reject`) finché la connessione resta aperta. Il controllo è
-//!   `Send + Sync`: può essere usato da un thread diverso da quello che polla
-//!   lo stream (il worker lo fa per `basic_qos`/`add_consumer`).
-//! - **ConnectionLost**: se la connessione cade in modo non recuperabile lo
-//!   stream emette **esattamente una** `Err(Error::ConnectionLost(..))` e poi
-//!   termina con `None`. I messaggi in volo sono persi per questo consumatore:
-//!   il worker riconnette e crea un nuovo [`Consumer`]; il broker ripristina i
-//!   non confermati secondo le proprie regole (Redis: visibility timeout;
-//!   AMQP: requeue alla chiusura del canale). Dopo ConnectionLost le chiamate
-//!   `ack`/`reject` possono fallire: il worker non deve assumere che il tag sia
-//!   ancora valido sulla nuova connessione.
-//! - **get** (`basic_get`): non passa dal consumatore e ignora il prefetch.
-//!   Con `no_ack=false` entra nell'insieme in volo del trasporto e va
-//!   confermato con `ack`/`reject`; con `no_ack=true` non va confermato.
-//! - **dichiarazioni passive**: `passive=true` non crea nulla; se l'entità non
-//!   esiste restituisce [`Error::NotFound`], altrimenti riporta lo stato
-//!   corrente (per le code il numero di messaggi pronti). Un exchange passivo
-//!   non verifica l'equivalenza dei parametri (come AMQP/kombu).
-//! - **delete_exchange**: elimina l'exchange e i binding; come in
-//!   `virtual.Channel.exchange_delete` elimina anche le code vuote che vi sono
-//!   legate. `unbind` su un binding inesistente è un no-op.
+//! Shared transport contract, errors and reconnection policy. Delivery streams emit
+//! one connection error before termination; pending tags belong to their original connection.
 
 use std::future::Future;
 use std::pin::Pin;
@@ -53,40 +14,35 @@ use crate::url::{TransportOptions, Url};
 
 use crate::control::{ControlOutcome, ControlRequest};
 
-/// Risultato delle operazioni di trasporto.
+/// Result of a transport operation.
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// Future boxed: mantiene il trait object-safe (`Box<dyn Transport>`).
+/// Boxed future preserving trait object safety.
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
-/// Stream di consegne restituito da [`Transport::consume`].
+/// Delivery stream returned by [`Transport::consume`].
 pub type DeliveryStream = Pin<Box<dyn Stream<Item = Result<Delivery>> + Send>>;
 
-/// Client library il cui testo d'errore va riprodotto.
-///
-/// Le due librerie di riferimento formattano gli errori di connessione in modo
-/// diverso: redis-py `"Error 111 connecting to host:port. Connection refused."`,
-/// py-amqp `"[Errno 111] Connection refused"`.
+/// Client library whose connection error formatting must be reproduced.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ClientKind {
     Redis,
     Amqp,
 }
 
-/// Causa di un errore di connessione, nei termini della libreria client.
+/// Connection failure cause in client library terms.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConnectFailure {
-    /// Errore di sistema: `errno` e testo di `strerror` (`"Connection refused"`).
+    /// System error number and strerror text.
     Errno { code: i32, text: String },
-    /// Timeout di connessione.
+    /// Connection timeout.
     Timeout,
-    /// Errore senza errno (handshake TLS, protocollo, ...).
+    /// Failure without an errno, such as TLS or protocol errors.
     Other(String),
 }
 
 impl ConnectFailure {
-    /// Classifica un messaggio di errore già formattato (utile per redis-rs,
-    /// che non espone l'`io::Error` nella catena delle cause).
+    /// Classifies an error message when the client library does not expose an I/O cause.
     pub fn from_message(text: &str) -> Self {
         let text = text.trim();
         let lowered = text.to_ascii_lowercase();
@@ -94,8 +50,7 @@ impl ConnectFailure {
             return Self::Timeout;
         }
         if let Some(rest) = text.strip_prefix("failed to lookup address information: ") {
-            // `getaddrinfo` non ha un errno positivo: redis-py/socket usano -2
-            // e il testo di `gai_strerror` ("Name or service not known").
+            // getaddrinfo uses -2 and gai_strerror text rather than a positive errno.
             return Self::Errno {
                 code: -2,
                 text: rest.trim_end_matches('.').to_string(),
@@ -113,7 +68,7 @@ impl ConnectFailure {
         Self::Other(text.to_string())
     }
 
-    /// Classifica un errore guardando la catena delle cause.
+    /// Classifies an error through its source chain.
     pub fn from_error(error: &(dyn std::error::Error + 'static)) -> Self {
         let mut source: Option<&(dyn std::error::Error + 'static)> = Some(error);
         while let Some(current) = source {
@@ -136,33 +91,32 @@ impl ConnectFailure {
     }
 }
 
-/// Errori comuni a tutti i trasporti.
+/// Errors shared by broker transports.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error("URL del broker non valido: {0}")]
+    #[error("invalid broker URL: {0}")]
     InvalidUrl(String),
-    #[error("trasporto non supportato: {0}")]
+    #[error("unsupported transport: {0}")]
     UnsupportedTransport(String),
-    #[error("non implementato: {0}")]
+    #[error("not implemented: {0}")]
     NotImplemented(String),
-    #[error("opzione di trasporto non valida: {0}")]
+    #[error("invalid transport option: {0}")]
     InvalidTransportOption(String),
-    #[error("argomento non valido: {0}")]
+    #[error("invalid argument: {0}")]
     InvalidArgument(String),
-    #[error("exchange non equivalente a quello già dichiarato: {0}")]
+    #[error("exchange differs from its existing declaration: {0}")]
     ExchangeNotEquivalent(String),
-    /// Il broker ha rifiutato una dichiarazione con 406 PRECONDITION_FAILED.
+    /// Declaration rejected with 406 PRECONDITION_FAILED.
     #[error("{method_name}: ({reply_code}) {reply_text}")]
     PreconditionFailed {
         reply_code: u16,
         reply_text: String,
-        /// `(class_id, method_id)` del metodo AMQP, come py-amqp.
+        // AMQP class and method IDs, matching py-amqp.
         method_sig: (u16, u16),
         method_name: &'static str,
     },
-    /// Connessione al broker fallita: `errno` e host servono per riprodurre il
-    /// messaggio della libreria client di riferimento.
-    #[error("connessione a {host}:{port} fallita: {message}")]
+    /// Connection failure details used to reproduce the reference client's message.
+    #[error("connection to {host}:{port} failed: {message}")]
     Connect {
         host: CompactString,
         port: u16,
@@ -171,31 +125,30 @@ pub enum Error {
         timeout: bool,
         client: ClientKind,
     },
-    #[error("tipo di exchange non supportato: {0}")]
+    #[error("unsupported exchange type: {0}")]
     UnsupportedExchangeType(String),
-    #[error("exchange non dichiarato: {0}")]
+    #[error("exchange not declared: {0}")]
     UnknownExchange(String),
-    #[error("pattern di routing non valido: {0}")]
+    #[error("invalid routing pattern: {0}")]
     InvalidPattern(String),
-    #[error("errore di connessione: {0}")]
+    #[error("connection error: {0}")]
     Connection(String),
-    #[error("errore del canale: {0}")]
+    #[error("channel error: {0}")]
     Channel(String),
-    #[error("tag di consegna sconosciuto: {0}")]
+    #[error("unknown delivery tag: {0}")]
     UnknownDeliveryTag(String),
-    /// Entità dichiarata in modo passivo ma assente sul broker.
-    #[error("NOT_FOUND - entità non trovata: {0}")]
+    /// Entity missing during a passive declaration.
+    #[error("not_found - entity not found: {0}")]
     NotFound(String),
-    /// Connessione persa: lo stream la emette una volta e poi termina.
-    #[error("connessione al broker persa: {0}")]
+    /// Connection lost; emitted once before the stream terminates.
+    #[error("broker connection lost: {0}")]
     ConnectionLost(String),
-    #[error("trasporto chiuso")]
+    #[error("transport closed")]
     Closed,
 }
 
 impl Error {
-    /// Errore di connessione con i dati necessari al messaggio della libreria
-    /// client (`host:port`, errno, testo).
+    /// Builds a connection failure with host, port and client error details.
     pub fn connect(url: &Url, client: ClientKind, failure: ConnectFailure) -> Self {
         let info = url.info();
         let port = info.port.unwrap_or_default();
@@ -214,8 +167,7 @@ impl Error {
         }
     }
 
-    /// Messaggio identico a quello che produrrebbe la libreria client di
-    /// riferimento per lo stesso errore; `None` per gli altri errori.
+    /// Returns the reference client's connection error text, or None for other errors.
     pub fn client_message(&self) -> Option<String> {
         let Self::Connect {
             host,
@@ -250,7 +202,7 @@ impl Error {
     }
 }
 
-/// Tipo di exchange (i quattro tipi standard AMQP 0.9.1).
+/// Standard AMQP 0.9.1 exchange type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum ExchangeType {
     #[default]
@@ -280,13 +232,13 @@ impl ExchangeType {
         }
     }
 
-    /// True se il routing è risolto dal client (trasporti virtuali).
+    /// Returns whether routing is resolved by the client.
     pub fn is_virtual(self) -> bool {
         matches!(self, Self::Direct | Self::Topic | Self::Fanout)
     }
 }
 
-/// Dichiarazione di un exchange.
+/// Exchange declaration.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct ExchangeDecl {
     pub name: CompactString,
@@ -294,7 +246,7 @@ pub struct ExchangeDecl {
     pub durable: bool,
     pub auto_delete: bool,
     pub arguments: Headers,
-    /// Dichiarazione passiva: verifica solo che l'exchange esista.
+    /// Checks existence without creating the exchange or validating its parameters.
     pub passive: bool,
 }
 
@@ -308,7 +260,7 @@ impl ExchangeDecl {
     }
 }
 
-/// Dichiarazione di una coda. `name` assente: nome generato dal broker.
+/// Queue declaration; a missing name requests a broker-generated name.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct QueueDecl {
     pub name: Option<CompactString>,
@@ -316,7 +268,7 @@ pub struct QueueDecl {
     pub auto_delete: bool,
     pub exclusive: bool,
     pub arguments: Headers,
-    /// Dichiarazione passiva: verifica solo che la coda esista.
+    /// Checks existence without creating the queue.
     pub passive: bool,
 }
 
@@ -329,16 +281,16 @@ impl QueueDecl {
     }
 }
 
-/// Esito della dichiarazione di una coda.
+/// Queue declaration result.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct QueueInfo {
-    /// Nome effettivo (generato se non fornito).
+    /// Effective queue name, generated when omitted.
     pub name: CompactString,
-    /// Messaggi pronti (non in volo) al momento della dichiarazione.
+    /// Ready message count at declaration time, excluding pending deliveries.
     pub message_count: u64,
 }
 
-/// Binding coda/exchange.
+/// Queue-to-exchange binding.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct QueueBinding {
     pub queue: CompactString,
@@ -362,10 +314,10 @@ impl QueueBinding {
     }
 }
 
-/// Richiesta di pubblicazione.
+/// Publication request.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PublishRequest {
-    /// `None` o stringa vuota: exchange anonimo (`routing_key` è la coda).
+    /// None or an empty string selects the default exchange and routes to the named queue.
     pub exchange: Option<CompactString>,
     pub routing_key: CompactString,
     pub message: Message,
@@ -385,15 +337,12 @@ impl PublishRequest {
     }
 }
 
-/// Politica di riconnessione con backoff lineare limitato.
-///
-/// I default sono quelli di Celery per la connessione al broker:
-/// `broker_connection_retry=True`, `broker_connection_max_retries=100` e gli
-/// intervalli di `kombu.Connection._ensure_connection` (2s, +2s, max 30s).
+/// Bounded linear reconnection backoff with Celery defaults: 100 retries,
+/// starting at two seconds, increasing by two seconds up to thirty seconds.
 #[derive(Debug, Clone, PartialEq)]
 pub struct RetryPolicy {
     pub enabled: bool,
-    /// `None`: nessun limite (kombu con `max_retries=None`).
+    /// None allows unlimited retries.
     pub max_retries: Option<u32>,
     pub interval_start: Duration,
     pub interval_step: Duration,
@@ -413,7 +362,7 @@ impl Default for RetryPolicy {
 }
 
 impl RetryPolicy {
-    /// Vera se, dopo `retries` tentativi falliti, se ne può fare un altro.
+    /// Returns whether another attempt is allowed after the given number of failures.
     pub fn should_retry(&self, retries: u32) -> bool {
         if !self.enabled {
             return false;
@@ -424,7 +373,7 @@ impl RetryPolicy {
         }
     }
 
-    /// Attesa prima del tentativo successivo (`retries` fallimenti già avvenuti).
+    /// Returns the delay after the given number of failed attempts.
     pub fn delay(&self, retries: u32) -> Duration {
         let extra = self.interval_step.saturating_mul(retries);
         self.interval_start
@@ -433,98 +382,79 @@ impl RetryPolicy {
     }
 }
 
-/// Configurazione di una connessione: opzioni del trasporto e politica di
-/// riconnessione (usata dalle implementazioni che hanno un socket).
+/// Connection options and retry policy for socket transports.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct ConnectConfig {
     pub transport_options: TransportOptions,
     pub retry_policy: RetryPolicy,
 }
 
-/// Controllo di un consumatore attivo.
-///
-/// È un trait object (`Arc<dyn ConsumerControl>`) perché il worker lo usa da
-/// thread diversi dal loop che polla lo stream. Tutti i metodi hanno effetto
-/// immediato sul consumatore e possono essere chiamati mentre lo stream è in
-/// attesa (i waker vengono risvegliati).
+/// Controls a consumer from any thread, waking pending polls when settings change.
 pub trait ConsumerControl: Send + Sync {
-    /// Cambia il prefetch a runtime (kombu `basic_qos`/`QoS.set`).
-    /// `0` = illimitato. Restituisce [`Error::Closed`] se il consumatore è già
-    /// stato cancellato. `increment_eventually`/`decrement_eventually` di Celery
-    /// restano nel wrapper QoS del worker, che qui imposta il valore assoluto.
+    /// Sets an absolute prefetch limit immediately; zero is unlimited.
+    ///
+    /// # Errors
+    /// Returns [`Error::Closed`] if the consumer was cancelled.
     fn set_prefetch<'a>(&'a self, prefetch: u16) -> BoxFuture<'a, Result<()>>;
 
-    /// Aggiunge una coda al consumatore (Celery `add_task_queue`).
+    /// Adds a queue to the consumer.
     fn add_queue<'a>(&'a self, queue: &'a str) -> BoxFuture<'a, Result<()>>;
 
-    /// Smetti di consumare da una coda (Celery `cancel_task_queue`); i
-    /// messaggi già consegnati restano in volo e vanno confermati.
+    /// Stops consuming a queue while preserving pending acknowledgments.
     fn cancel_queue<'a>(&'a self, queue: &'a str) -> BoxFuture<'a, Result<()>>;
 
-    /// Cancella il consumatore: lo stream termina con `None`. Come
-    /// `basic_cancel` di kombu, i messaggi già consegnati restano ackabili;
-    /// vengono persi alla chiusura della connessione (memory non li ripristina).
+    /// Cancels the stream while preserving pending acknowledgments until connection close.
     fn cancel<'a>(&'a self) -> BoxFuture<'a, Result<()>>;
 }
 
-/// Consumatore attivo: stream di consegne + handle di controllo.
+/// Active delivery stream and its control handle.
 pub struct Consumer {
-    /// Consegne: fine (`None`) dopo `cancel` o dopo un `ConnectionLost`.
+    /// Stream ending after cancellation or one connection error.
     pub deliveries: DeliveryStream,
-    /// Handle per modificare prefetch/code o cancellare il consumatore.
+    /// Handle for changing prefetch, queues or cancellation state.
     pub control: Arc<dyn ConsumerControl>,
 }
 
 impl Consumer {
-    /// Consuma solo lo stream, scartando l'handle di controllo.
+    /// Returns the delivery stream, discarding the control handle.
     pub fn into_stream(self) -> DeliveryStream {
         self.deliveries
     }
 }
 
-/// Trasporto asincrono verso un broker.
-///
-/// Un'istanza rappresenta una connessione logica; `consume` crea un
-/// [`Consumer`] indipendente con la propria finestra di prefetch. I metodi sono
-/// `BoxFuture` per permettere `Box<dyn Transport>` (usato da `connect` e dal
-/// binding Python). Il contratto dettagliato è nel commento di modulo.
+/// Asynchronous broker connection with independent consumer prefetch windows.
+/// Boxed futures allow use through a trait object.
 pub trait Transport: Send + Sync {
-    /// Dichiara o verifica un exchange. Con `passive` non crea nulla e
-    /// restituisce [`Error::NotFound`] se manca.
+    /// Declares an exchange or passively checks its existence without creating it.
+    ///
+    /// # Errors
+    /// Returns [`Error::NotFound`] if a passive exchange is missing.
     fn declare_exchange<'a>(&'a self, declaration: &'a ExchangeDecl) -> BoxFuture<'a, Result<()>>;
 
-    /// Dichiara o verifica una coda; `passive` non crea nulla.
+    /// Declares a queue or passively checks its existence without creating it.
     fn declare_queue<'a>(&'a self, declaration: &'a QueueDecl) -> BoxFuture<'a, Result<QueueInfo>>;
 
     fn bind<'a>(&'a self, binding: &'a QueueBinding) -> BoxFuture<'a, Result<()>>;
 
-    /// Rimuove un binding; binding inesistente o exchange assente sono no-op.
+    /// Removes a binding; missing bindings or exchanges are ignored.
     fn unbind<'a>(&'a self, binding: &'a QueueBinding) -> BoxFuture<'a, Result<()>>;
 
-    /// Elimina l'exchange (e le code vuote che vi sono legate, come
-    /// `virtual.Channel.exchange_delete`).
+    /// Deletes an exchange and bound empty queues, matching kombu's virtual transport.
     fn delete_exchange<'a>(&'a self, exchange: &'a str) -> BoxFuture<'a, Result<()>>;
 
     fn publish<'a>(&'a self, request: PublishRequest) -> BoxFuture<'a, Result<()>>;
 
     fn publish_batch<'a>(&'a self, requests: Vec<PublishRequest>) -> BoxFuture<'a, Result<()>>;
 
-    /// Crea un consumatore con prefetch iniziale (`0` = illimitato).
-    ///
-    /// Stream e controllo condividono lo stato; vedi il contratto di modulo
-    /// per prefetch, ack/reject e ConnectionLost.
+    // Creates a consumer with an initial prefetch limit; zero is unlimited.
     fn consume<'a>(
         &'a self,
         queues: &'a [CompactString],
         prefetch: u16,
     ) -> BoxFuture<'a, Result<Consumer>>;
 
-    /// Consumatore con `basic.consume(no_ack=true)`: il broker considera
-    /// consegnato ogni messaggio e non serve `ack`/`reject`.
-    ///
-    /// Il default delega a [`Transport::consume`]: il chiamante deve confermare
-    /// subito le consegne (il binding Python lo fa) per non lasciarle in volo.
-    /// I trasporti che possono omettere l'ack (AMQP) lo sovrascrivono.
+    // Creates a no_ack consumer. The default implementation requires callers to
+    // acknowledge deliveries immediately; native implementations omit acknowledgments.
     fn consume_no_ack<'a>(
         &'a self,
         queues: &'a [CompactString],
@@ -533,9 +463,8 @@ pub trait Transport: Send + Sync {
         self.consume(queues, prefetch)
     }
 
-    /// Risposte temporanee pidbox: niente ack né QoS, cancellate prima del ritorno.
-    /// Il trasporto può riusare il canale delle dichiarazioni senza alterare
-    /// l'isolamento dei consumatori ordinari.
+    // Collects temporary pidbox replies without QoS or acknowledgments, cancelling
+    // the consumer before returning. May share the declaration channel.
     fn consume_control_reply<'a>(
         &'a self,
         queue: &'a CompactString,
@@ -543,24 +472,17 @@ pub trait Transport: Send + Sync {
         self.consume_no_ack(std::slice::from_ref(queue), 0)
     }
 
-    /// Pulizia della risposta temporanea nei trasporti virtuali.
-    /// AMQP lascia al broker l'auto-delete, come il canale di kombu.
+    /// Cleans up temporary replies; AMQP relies on broker auto-delete as kombu does.
     fn after_reply_message_received<'a>(&'a self, queue: &'a str) -> BoxFuture<'a, Result<()>> {
         self.delete_queue(queue)
     }
 
-    /// `basic_get`: un messaggio dalla coda, senza passare dal consumatore.
-    /// Con `no_ack=false` entra nell'insieme in volo del trasporto e va
-    /// confermato con [`Transport::ack`]/[`Transport::reject`].
+    /// Fetches one message independently of consumers and prefetch. Unless no_ack is set,
+    /// the caller must acknowledge or reject the delivery.
     fn get<'a>(&'a self, queue: &'a str, no_ack: bool) -> BoxFuture<'a, Result<Option<Delivery>>>;
 
-    /// Comando remote-control: pubblica sul mailbox e, se c'è una coda di
-    /// risposta, raccoglie le risposte con la semantica di `kombu.pidbox`.
-    ///
-    /// Il default dichiara exchange e coda di risposta, pubblica, consuma con
-    /// `no_ack` e cancella la coda (`Mailbox._broadcast`/`_collect`). Il
-    /// trasporto Redis lo sostituisce per riprodurre gli stessi comandi di
-    /// kombu (script di binding e BRPOP con il suo timeout).
+    // Publishes a mailbox command and optionally collects replies using kombu semantics.
+    // Redis overrides the default to preserve binding scripts and BRPOP wire commands.
     fn control_request<'a>(
         &'a self,
         request: ControlRequest,
@@ -568,12 +490,13 @@ pub trait Transport: Send + Sync {
         Box::pin(crate::control::control_request_default(self, request))
     }
 
-    /// Conferma una consegna. No-op se il tag è sconosciuto (come il QoS di
-    /// kombu), così un ack tardivo dopo un reconnect non fa cadere il worker.
+    /// Acknowledges a delivery, ignoring unknown tags so late acknowledgments are harmless.
     fn ack<'a>(&'a self, delivery_tag: &'a DeliveryTag) -> BoxFuture<'a, Result<()>>;
 
-    /// Scarta (`requeue=false`, no-op se sconosciuto) o rimette in coda
-    /// (`requeue=true`, [`Error::UnknownDeliveryTag`] se sconosciuto).
+    // Rejects or requeues a delivery.
+    //
+    // # Errors
+    // Returns [`Error::UnknownDeliveryTag`] when requeuing an unknown tag; otherwise ignores it.
     fn reject<'a>(
         &'a self,
         delivery_tag: &'a DeliveryTag,
@@ -586,9 +509,8 @@ pub trait Transport: Send + Sync {
 
     fn delete_queue<'a>(&'a self, queue: &'a str) -> BoxFuture<'a, Result<()>>;
 
-    /// Chiude la connessione. Gli stream creati da questa istanza emettono una
-    /// [`Error::ConnectionLost`] e poi terminano; i non confermati sono persi
-    /// secondo la semantica del trasporto.
+    /// Closes the connection; its streams emit one connection error and terminate.
+    /// Pending deliveries follow the transport's restoration rules.
     fn close<'a>(&'a self) -> BoxFuture<'a, Result<()>>;
 }
 

@@ -1,7 +1,6 @@
-//! Scrittura JSON con i default di `json.dumps` usati da kombu:
-//! `ensure_ascii=True`, separatori `", "` / `": "`, `allow_nan=True`.
+//! JSON encoding with kombu's ASCII escaping, default separators and nonfinite floats.
 
-/// Scrive una stringa Rust (code point validi) come stringa JSON.
+/// Writes a Rust string as JSON.
 pub fn write_str(out: &mut Vec<u8>, s: &str) {
     out.push(b'"');
     for ch in s.chars() {
@@ -10,9 +9,7 @@ pub fn write_str(out: &mut Vec<u8>, s: &str) {
     out.push(b'"');
 }
 
-/// Scrive una sequenza di code point come stringa JSON.
-///
-/// Accetta anche surrogati isolati: le `str` Python possono contenerli.
+/// Writes code points as JSON, accepting Python's lone surrogates.
 pub fn write_str_code_points<I>(out: &mut Vec<u8>, code_points: I)
 where
     I: IntoIterator<Item = u32>,
@@ -34,10 +31,10 @@ fn write_code_point(out: &mut Vec<u8>, cp: u32) {
         0x08 => out.extend_from_slice(b"\\b"),
         0x0c => out.extend_from_slice(b"\\f"),
         0x20..=0x7e => out.push(cp as u8),
-        // Control characters, DEL, BMP e surrogati isolati.
+
         0x0000..=0xffff => write_u_escape(out, cp),
         _ => {
-            // Astrali: coppia surrogata UTF-16, come l'encoder C di CPython.
+            // Encode astral characters as UTF-16 surrogate pairs, matching CPython's C encoder.
             let v = cp - 0x1_0000;
             write_u_escape(out, 0xd800 + (v >> 10));
             write_u_escape(out, 0xdc00 + (v & 0x3ff));
@@ -54,13 +51,13 @@ fn write_u_escape(out: &mut Vec<u8>, v: u32) {
     out.push(HEX[(v & 0xf) as usize]);
 }
 
-/// Scrive un intero come farebbe `json.dumps`.
+/// Writes an integer as Python json.dumps does.
 pub fn write_int(out: &mut Vec<u8>, v: i64) {
     let mut buf = itoa::Buffer::new();
     out.extend_from_slice(buf.format(v).as_bytes());
 }
 
-/// Scrive un float con la stessa rappresentazione di `float.__repr__`.
+/// Writes a float using Python float representation.
 pub fn write_float(out: &mut Vec<u8>, value: f64) {
     if value.is_nan() {
         out.extend_from_slice(b"NaN");
@@ -88,15 +85,12 @@ pub fn write_float(out: &mut Vec<u8>, value: f64) {
     write_python_repr(out, repr);
 }
 
-/// Converte l'output di ryu (shortest round-trip) nel formato di Python.
-///
-/// Nessuna allocazione heap: le cifre finiscono in un buffer sullo stack.
+// Converts ryu's shortest round-trip output to Python formatting using stack storage.
 fn write_python_repr(out: &mut Vec<u8>, repr: &str) {
     let bytes = repr.as_bytes();
     let start = usize::from(bytes.first() == Some(&b'-'));
     let negative = start == 1;
 
-    // Separa mantissa ed esponente decimale.
     let (mantissa_end, exp10) = match bytes.iter().position(|&b| b == b'e' || b == b'E') {
         Some(pos) => {
             let mut j = pos + 1;
@@ -119,7 +113,6 @@ fn write_python_repr(out: &mut Vec<u8>, repr: &str) {
         None => (bytes.len(), 0),
     };
 
-    // Copia le cifre (parte intera + parte frazionaria) senza zeri di formato.
     let dot = bytes[start..mantissa_end]
         .iter()
         .position(|&b| b == b'.')
@@ -204,7 +197,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn escapes_come_cpython() {
+    fn escapes_match_cpython() {
         let mut out = Vec::new();
         write_str(&mut out, "\"\\\n\r\t\u{8}\u{c}\u{1}\u{7f}\u{e9}\u{1f600}");
         assert_eq!(
@@ -214,15 +207,15 @@ mod tests {
     }
 
     #[test]
-    fn surrogati_isolati() {
+    fn lone_surrogates() {
         let mut out = Vec::new();
         write_str_code_points(&mut out, [0xd800, 0x61, 0xdc00]);
         assert_eq!(String::from_utf8(out).unwrap(), "\"\\ud800a\\udc00\"");
     }
 
     #[test]
-    fn float_formato_python() {
-        let casi = [
+    fn float_python_format() {
+        let cases = [
             (0.0, "0.0"),
             (-0.0, "-0.0"),
             (1.0, "1.0"),
@@ -237,10 +230,10 @@ mod tests {
             (f64::NEG_INFINITY, "-Infinity"),
             (f64::NAN, "NaN"),
         ];
-        for (v, atteso) in casi {
+        for (v, expected) in cases {
             let mut out = Vec::new();
             write_float(&mut out, v);
-            assert_eq!(String::from_utf8(out).unwrap(), atteso, "valore {v:?}");
+            assert_eq!(String::from_utf8(out).unwrap(), expected, "value {v:?}");
         }
     }
 }

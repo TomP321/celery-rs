@@ -1,5 +1,4 @@
-//! Binding del worker master: [`Waker`] condiviso dal loop,
-//! [`WorkerConsumer`] del broker e pool di processi.
+//! Master worker bindings for wake notifications, broker consumption and process pools.
 
 use crate::fork::ForkSafe;
 use std::sync::Arc;
@@ -27,9 +26,8 @@ use crate::transport::{
 pub(crate) fn _set_pdeathsig(signum: i32) -> PyResult<()> {
     #[cfg(target_os = "linux")]
     {
-        // SAFETY: prctl riceve solo interi, non conserva puntatori e modifica
-        // esclusivamente il segnale di morte del padre del chiamante.
-        // Billiard ignora il valore di ritorno anche per segnali non validi.
+        // SAFETY: prctl receives only integers, retains no pointers and changes only
+        // the caller's parent-death signal. Billiard also ignores errors for invalid signals.
         unsafe { libc::prctl(libc::PR_SET_PDEATHSIG, signum, 0, 0, 0) };
         Ok(())
     }
@@ -50,8 +48,7 @@ pub(crate) fn _release_task_memory(force: bool) {
     }
 }
 
-/// `_celery_rs.Waker`: il loop Python dorme in `wait` finché un componente
-/// Rust (consumer, pool) non chiama `notify`.
+/// Wakes the Python loop when a Rust consumer or pool posts a notification.
 #[pyclass(name = "Waker", module = "_celery_rs", frozen)]
 pub struct PyWaker {
     pub(crate) inner: ForkSafe<RustWaker>,
@@ -70,7 +67,7 @@ impl PyWaker {
         self.inner.notify();
     }
 
-    /// `wait(timeout=None) -> bool`; il GIL è rilasciato durante l'attesa.
+    /// Waits for a notification, releasing the GIL.
     #[pyo3(signature = (timeout=None))]
     fn wait(&self, py: Python<'_>, timeout: Option<f64>) -> PyResult<bool> {
         let timeout = timeout_from_py(timeout)?;
@@ -78,15 +75,13 @@ impl PyWaker {
         Ok(py.detach(move || waker.wait(timeout)))
     }
 
-    /// fd leggibile quando c'è una notifica (`-1` se non disponibile).
-    ///
-    /// Il loop Python lo registra nel poller dell'hub (`add_reader`); la
-    /// callback chiama :meth:`drain` per consumare la notifica.
+    /// Returns a readable notification descriptor, or -1 when unavailable. The Python
+    /// hub registers it with add_reader and drains it in the callback.
     fn fileno(&self) -> i32 {
         self.inner.fileno()
     }
 
-    /// Consuma la notifica pendente (svuota il fd e lo stato `pending`).
+    /// Consumes the pending notification and drains its descriptor.
     fn drain(&self) {
         self.inner.drain();
     }
@@ -96,15 +91,12 @@ fn timeout_from_py(timeout: Option<f64>) -> PyResult<Option<Duration>> {
     match timeout {
         None => Ok(None),
         Some(t) if t.is_finite() && t >= 0.0 => Ok(Some(Duration::from_secs_f64(t))),
-        Some(_) => Err(PyValueError::new_err("timeout deve essere >= 0")),
+        Some(_) => Err(PyValueError::new_err("timeout must be >= 0")),
     }
 }
 
-/// `_celery_rs.WorkerConsumer`: consumer del worker sopra il trasporto Rust.
-///
-/// Il GIL è rilasciato per tutto l'I/O; `drain` non blocca mai. `waker` è il
-/// [`PyWaker`] su cui dorme il loop Python: viene svegliato a ogni consegna,
-/// alla connessione persa e alla chiusura.
+/// Worker broker consumer with nonblocking drain and GIL-free I/O. Wakes the Python
+/// loop on delivery, disconnection and closure.
 #[pyclass(name = "WorkerConsumer", module = "_celery_rs")]
 pub struct PyWorkerConsumer {
     inner: ForkSafe<WorkerConsumer>,
@@ -157,7 +149,7 @@ impl PyWorkerConsumer {
         })
     }
 
-    /// Avvia il consumatore sulle code indicate (lista di nomi).
+    /// Starts consuming the named queues.
     fn consume(&self, py: Python<'_>, queues: Vec<String>) -> PyResult<()> {
         let queues = queues
             .into_iter()
@@ -166,7 +158,7 @@ impl PyWorkerConsumer {
         py.detach(|| block(self.inner.start(Some(queues))))
     }
 
-    /// Come :meth:`consume` ma con `basic.consume(no_ack=true)`.
+    /// Starts consuming without master acknowledgments.
     fn consume_no_ack(&self, py: Python<'_>, queues: Vec<String>) -> PyResult<()> {
         let queues = queues
             .into_iter()
@@ -187,8 +179,7 @@ impl PyWorkerConsumer {
         py.detach(|| block(self.inner.set_prefetch(prefetch)))
     }
 
-    /// Consegne già pronte (nessuna attesa); i body diventano `bytes` qui,
-    /// una sola volta.
+    /// Returns ready deliveries, converting bodies to Python bytes once.
     fn drain<'py>(&self, py: Python<'py>, max: usize) -> PyResult<Bound<'py, PyList>> {
         let deliveries = self.inner.drain(max);
         let out = PyList::empty(py);
@@ -208,7 +199,7 @@ impl PyWorkerConsumer {
         self.inner.pending()
     }
 
-    /// Errore di connessione pendente, consumato una sola volta.
+    /// Returns and clears a pending connection error.
     fn take_error(&self) -> Option<String> {
         self.inner.take_error()
     }
@@ -244,8 +235,7 @@ impl PyWorkerConsumer {
         py.detach(|| block(self.inner.reject(&tag, requeue)))
     }
 
-    /// Cancella il consumatore lasciando la connessione aperta (come
-    /// `basic_cancel`: i tag già consegnati restano confermabili).
+    /// Cancels consumption while preserving the connection and pending acknowledgments.
     fn cancel(&self, py: Python<'_>) -> PyResult<()> {
         py.detach(|| block(self.inner.cancel()))
     }
@@ -254,7 +244,7 @@ impl PyWorkerConsumer {
         py.detach(|| block(self.inner.close()))
     }
 
-    /// Un consumer ausiliario (pidbox/gossip) che condivide questa connessione.
+    /// Creates an auxiliary consumer sharing this connection.
     fn aux_consumer(&self) -> PyWorkerConsumer {
         PyWorkerConsumer {
             inner: ForkSafe::new(self.inner.aux(0)),
@@ -266,8 +256,6 @@ impl PyWorkerConsumer {
     fn is_closed(&self) -> bool {
         self.inner.is_closed()
     }
-
-    // ------------------------------------------------------------ dichiarazioni
 
     #[allow(clippy::too_many_arguments)]
     #[pyo3(signature = (name, exchange_type="direct", durable=false, auto_delete=false, passive=false, arguments=None))]
@@ -337,10 +325,7 @@ impl PyWorkerConsumer {
         py.detach(|| block(self.inner.bind(&binding)))
     }
 
-    /// Dichiara exchange fanout, coda del nodo e binding del pidbox.
-    ///
-    /// Nomi e argomenti TTL sono costruiti in Rust (`celery_worker::mailbox`),
-    /// così restano identici a `kombu.pidbox.Mailbox.get_queue`.
+    /// Declares pidbox entities with kombu-compatible names and TTL arguments.
     #[pyo3(signature = (hostname, namespace="celery", expires=None, message_ttl=None))]
     fn declare_pidbox(
         &self,
@@ -354,7 +339,7 @@ impl PyWorkerConsumer {
         self.declare_mailbox(py, &binding)
     }
 
-    /// Dichiara exchange eventi, coda del nodo e binding `worker.#`.
+    /// Declares the event exchange, node queue and worker.# binding.
     #[allow(clippy::too_many_arguments)]
     #[pyo3(signature = (prefix, node_id, exchange="celeryev", exchange_type="topic",
                         routing_key="worker.#", expires=None, message_ttl=None,
@@ -387,7 +372,7 @@ impl PyWorkerConsumer {
         self.declare_mailbox(py, &binding)
     }
 
-    /// Pubblica un messaggio sulla connessione del consumer (risposte pidbox).
+    /// Publishes on the consumer connection for pidbox replies.
     #[allow(clippy::too_many_arguments)]
     #[pyo3(signature = (body, exchange=None, routing_key="", headers=None, content_type=None,
                         content_encoding=None, delivery_mode=1, priority=0))]
@@ -439,7 +424,7 @@ impl PyWorkerConsumer {
     }
 }
 
-/// Un evento del pool, consumato dal loop del master.
+/// Pool event consumed by the master loop.
 #[pyclass(name = "PoolEvent", module = "_celery_rs", frozen)]
 pub struct PyPoolEvent {
     #[pyo3(get)]
@@ -564,7 +549,7 @@ fn event(py: Python<'_>, event: pool_impl::PoolEvent) -> PyPoolEvent {
     }
 }
 
-/// `_celery_rs.Pool`: supervisore dei figli Python.
+/// Supervises Python child processes.
 #[pyclass(name = "Pool", module = "_celery_rs")]
 pub struct PyPool {
     inner: ForkSafe<Arc<pool_impl::Pool>>,
@@ -597,8 +582,7 @@ impl PyPool {
         })
     }
 
-    /// `submit(job, payload, soft=None, hard=None)`: accoda un job; il payload
-    /// è il pickle di `(target, args, kwargs)`.
+    /// Submits a job whose payload is a pickled target, args and kwargs tuple.
     #[pyo3(signature = (job, payload, soft=None, hard=None))]
     fn submit(
         &self,
@@ -623,7 +607,7 @@ impl PyPool {
         .map_err(pool_error)
     }
 
-    /// Eventi pronti (non bloccante).
+    /// Returns ready events without blocking.
     fn drain_events(&self, py: Python<'_>) -> Vec<PyPoolEvent> {
         self.inner
             .drain_events()
@@ -655,9 +639,8 @@ impl PyPool {
         py.detach(move || pool.reset_backend(broker));
     }
 
-    /// Uccide i figli dopo la perdita dello zygote: i job in corso arrivano
-    /// come ``worker-lost`` (WorkerLostError) e i messaggi vengono
-    /// riconsegnati secondo ``acks_late``/``reject_on_worker_lost``.
+    /// Terminates children after zygote loss, reporting active jobs as worker-lost
+    /// so acknowledgments and redelivery follow the configured worker-loss policy.
     fn abandon_children(&self) {
         self.inner.abandon_children();
     }
@@ -703,8 +686,7 @@ impl PyPool {
         self.inner.zygote_lost()
     }
 
-    /// `(totale, conteggi per figlio)`: alimenta la chiave `writes` di
-    /// `TaskPool.info`, come `human_write_stats` in prefork.
+    /// Returns total and per-child write counts for TaskPool.info statistics.
     fn write_stats(&self) -> (u64, Vec<u64>) {
         self.inner.write_stats()
     }
@@ -726,7 +708,6 @@ fn pool_error(error: PoolError) -> PyErr {
     }
 }
 
-/// Evita il warning "trait inutilizzato" se `Spawner` serve solo ai test.
 #[allow(dead_code)]
 fn _assert_spawner(_: &dyn Spawner) {}
 
@@ -738,7 +719,7 @@ mod tests {
     fn pdeathsig_matches_billiard_return_value() {
         assert!(_set_pdeathsig(libc::SIGKILL).is_ok());
         let mut signal: libc::c_int = 0;
-        // SAFETY: signal è un intero scrivibile, valido per tutta la syscall.
+        // SAFETY: signal is writable and remains valid throughout the syscall.
         let result = unsafe { libc::prctl(libc::PR_GET_PDEATHSIG, &mut signal, 0, 0, 0) };
         assert!(_set_pdeathsig(0).is_ok());
         assert_eq!(result, 0);

@@ -1,14 +1,5 @@
-//! Trasporto in-process, con registro globale per virtual host.
-//!
-//! Riproduce la semantica di `kombu/transport/memory.py`: code FIFO, routing
-//! virtuale, nessun TTL/priorità (la proprietà `priority` viene conservata ma
-//! non cambia l'ordine), messaggi non confermati persi alla chiusura
-//! (`do_restore = False` nel riferimento).
-//!
-//! Unica differenza voluta: `close` non svuota il registro globale (kombu lo fa
-//! perché le code sono un attributo di classe). Qui il broker in-process deve
-//! sopravvivere alla chiusura di una singola connessione: client e worker nello
-//! stesso processo hanno connessioni distinte.
+//! In-process FIFO transport with shared state per virtual host. Unacknowledged
+//! messages are lost on close, but queues survive individual connection closures.
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::pin::Pin;
@@ -27,13 +18,11 @@ use crate::transport::{
 };
 use crate::url::TransportOptions;
 
-/// Registro globale dei virtual host `memory://`.
 static HOSTS: LazyLock<Mutex<HashMap<CompactString, Arc<Host>>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
-    // Un panic di un consumatore non deve rendere inutilizzabile il broker
-    // in-process: lo stato resta coerente (nessun invariante spezzato a metà).
+    // Consumer panics leave broker invariants intact; recover the lock.
     mutex
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
@@ -100,7 +89,6 @@ struct Stored {
     redelivered: bool,
 }
 
-/// Stato condiviso di un consumatore (lo stream e il controllo lo leggono).
 #[derive(Debug)]
 struct ConsumerState {
     in_flight: usize,
@@ -116,16 +104,14 @@ struct InFlight {
     stored: Arc<Stored>,
 }
 
-/// Trasporto in-memory. Tutte le istanze sullo stesso virtual host condividono
-/// lo stato (client e worker nello stesso processo).
+/// In-memory transport sharing state across connections to the same virtual host.
 #[derive(Debug)]
 pub struct MemoryTransport {
     host: Arc<Host>,
     vhost: CompactString,
     options: TransportOptions,
     closed: Arc<AtomicBool>,
-    /// Id "consumatore" usato dalle chiamate get di questa connessione: serve
-    /// a ripulire solo i propri messaggi in volo alla chiusura.
+    // Identifies this connection's get deliveries for cleanup on close.
     get_consumer: u64,
 }
 
@@ -178,7 +164,7 @@ impl MemoryTransport {
         Error::NotFound(format!("no {kind} '{name}' in vhost '{}'", self.vhost))
     }
 
-    /// Accoda le richieste e risveglia i consumatori in attesa.
+    // Enqueues publications and wakes waiting consumers.
     fn enqueue_all(&self, requests: Vec<PublishRequest>) -> Result<()> {
         self.ensure_open()?;
         let wakers = {
@@ -203,7 +189,7 @@ fn enqueue(state: &mut State, request: PublishRequest, options: &TransportOption
     let exchange_name = exchange.clone().unwrap_or_default();
 
     let mut targets = if exchange_name.is_empty() {
-        // Exchange anonimo: la routing key è il nome della coda.
+        // The default exchange routes directly to the named queue.
         vec![routing_key.clone()]
     } else {
         match state.exchanges.get(&exchange_name) {
@@ -213,8 +199,7 @@ fn enqueue(state: &mut State, request: PublishRequest, options: &TransportOption
     };
 
     if targets.is_empty() {
-        // Nessuna coda: come `_lookup` con `deadletter_queue`, altrimenti il
-        // messaggio viene scartato (kombu emette solo un warning).
+        // Match kombu's deadletter fallback; discard messages when no route exists.
         match &options.deadletter_queue {
             Some(deadletter) => targets.push(deadletter.clone()),
             None => return,
@@ -240,17 +225,15 @@ fn take_waiters(state: &mut State) -> Vec<Waker> {
     state.waiters.drain().map(|(_, waker)| waker).collect()
 }
 
-/// I waker vanno chiamati senza tenere il lock: possono rientrare nel trasporto.
+// Wake outside the lock because wakers may reenter the transport.
 fn wake(wakers: Vec<Waker>) {
     for waker in wakers {
         waker.wake();
     }
 }
 
-/// Rimuove un consumatore; restituisce il waker dell'eventuale poll in attesa
-/// (da svegliare fuori dal lock). `drop_deliveries` distingue la cancellazione
-/// "morbida" (`basic_cancel`: i non confermati restano ackabili) dalla perdita
-/// della connessione o dal drop dello stream.
+// Removes a consumer, returning its waker for use outside the lock. Cancellation
+// preserves pending acknowledgments; disconnection or stream drop discards them.
 fn remove_consumer(state: &mut State, consumer_id: u64, drop_deliveries: bool) -> Option<Waker> {
     state.consumers.remove(&consumer_id);
     if drop_deliveries {
@@ -372,7 +355,7 @@ impl Transport for MemoryTransport {
                 exchange: binding.exchange.clone(),
                 routing_key: binding.routing_key.clone(),
             });
-            // Come `queue_unbind`: exchange assente => no-op.
+            // kombu treats a missing exchange as a no-op for unbind.
             if let Some(exchange) = state.exchanges.get_mut(&binding.exchange) {
                 exchange.table.retain(|row| {
                     !(row.queue == binding.queue && row.routing_key == binding.routing_key)
@@ -392,8 +375,7 @@ impl Transport for MemoryTransport {
             };
             let queues: Vec<CompactString> =
                 declared.table.iter().map(|row| row.queue.clone()).collect();
-            // Come `virtual.Channel.exchange_delete`: elimina le code vuote
-            // legate all'exchange (e i loro binding su tutti gli exchange).
+            // Match virtual.Channel.exchange_delete: remove empty queues and all their bindings.
             let mut seen = HashSet::new();
             for queue in queues {
                 if !seen.insert(queue.clone()) {
@@ -430,7 +412,7 @@ impl Transport for MemoryTransport {
             self.ensure_open()?;
             if queues.is_empty() {
                 return Err(Error::InvalidArgument(
-                    "consume richiede almeno una coda".to_string(),
+                    "consume requires at least one queue".to_string(),
                 ));
             }
             let consumer_id = {
@@ -527,7 +509,7 @@ impl Transport for MemoryTransport {
                 let mut guard = lock(&self.host.state);
                 let state: &mut State = &mut guard;
                 let Some(in_flight) = state.deliveries.remove(delivery_tag) else {
-                    // Come il QoS di kombu: ack/reject senza requeue sono no-op.
+                    // kombu ignores unknown tags unless requeue is requested.
                     return if requeue {
                         Err(Error::UnknownDeliveryTag(delivery_tag.to_string()))
                     } else {
@@ -606,9 +588,8 @@ impl Transport for MemoryTransport {
             let wakers = {
                 let mut guard = lock(&self.host.state);
                 let state: &mut State = &mut guard;
-                // I get non confermati di questa connessione sono persi
-                // (memory ha `do_restore = False`); gli stream ancora aperti
-                // ripuliscono i propri quando ricevono ConnectionLost.
+                // Memory has do_restore=False; open streams discard their own pending deliveries
+                // when they receive ConnectionLost.
                 state
                     .deliveries
                     .retain(|_, in_flight| in_flight.consumer != self.get_consumer);
@@ -620,7 +601,6 @@ impl Transport for MemoryTransport {
     }
 }
 
-/// Controllo di un consumatore memory: agisce sullo stato condiviso del host.
 #[derive(Debug)]
 struct MemoryConsumerControl {
     host: Arc<Host>,
@@ -683,7 +663,7 @@ impl ConsumerControl for MemoryConsumerControl {
             let waiter = {
                 let mut guard = lock(&self.host.state);
                 let state: &mut State = &mut guard;
-                // Come `basic_cancel`: i messaggi in volo restano confermabili.
+                // basic_cancel preserves pending acknowledgments.
                 remove_consumer(state, self.consumer_id, false)
             };
             if let Some(waiter) = waiter {
@@ -694,7 +674,6 @@ impl ConsumerControl for MemoryConsumerControl {
     }
 }
 
-/// Consumatore memory: stream `poll`-based; prefetch e code stanno nel host.
 #[derive(Debug)]
 struct MemoryStream {
     host: Arc<Host>,
@@ -719,7 +698,7 @@ impl Stream for MemoryStream {
             let state: &mut State = &mut guard;
             remove_consumer(state, this.consumer_id, true);
             return Poll::Ready(Some(Err(Error::ConnectionLost(
-                "trasporto memory chiuso".to_string(),
+                "memory transport closed".to_string(),
             ))));
         }
         let mut guard = lock(&this.host.state);
@@ -762,7 +741,6 @@ impl Drop for MemoryStream {
     }
 }
 
-/// Estrae il prossimo messaggio ruotando sulle code (round-robin).
 fn pop_next(
     queues: &[CompactString],
     cursor: &mut usize,
@@ -804,12 +782,11 @@ mod tests {
     async fn recv(stream: &mut DeliveryStream) -> Delivery {
         tokio::time::timeout(WAIT, next(stream))
             .await
-            .expect("timeout in attesa di un messaggio")
-            .expect("stream terminato")
-            .expect("errore di consegna")
+            .expect("timed out waiting for a message")
+            .expect("stream ended")
+            .expect("delivery error")
     }
 
-    /// Crea exchange, coda e binding su un virtual host isolato.
     async fn setup(
         vhost: &str,
         exchange: &str,
@@ -825,7 +802,7 @@ mod tests {
         transport
             .declare_queue(&QueueDecl::new(queue))
             .await
-            .expect("coda");
+            .expect("queue");
         transport
             .bind(&QueueBinding::new(queue, exchange, routing_key))
             .await
@@ -924,7 +901,7 @@ mod tests {
             .await
             .expect("requeue");
 
-        // In memory il requeue va in fondo (Queue.put), non in testa.
+        // Memory requeues at the tail, matching Queue.put.
         let second = recv(&mut stream).await;
         assert_eq!(second.message.body, Bytes::from_static(b"two"));
         let third = recv(&mut stream).await;
@@ -952,7 +929,7 @@ mod tests {
         let second = recv(&mut stream).await;
         assert_eq!(first.message.body, Bytes::from_static(b"m0"));
         assert_eq!(second.message.body, Bytes::from_static(b"m1"));
-        // Prefetch raggiunto: niente terzo messaggio.
+
         assert!(
             tokio::time::timeout(Duration::from_millis(50), next(&mut stream))
                 .await
@@ -975,7 +952,7 @@ mod tests {
             transport
                 .declare_queue(&QueueDecl::new(queue))
                 .await
-                .expect("coda");
+                .expect("queue");
             transport
                 .bind(&QueueBinding::new(queue, "fan", ""))
                 .await
@@ -1016,7 +993,7 @@ mod tests {
             transport
                 .declare_queue(&QueueDecl::new(queue))
                 .await
-                .expect("coda");
+                .expect("queue");
             transport
                 .bind(&QueueBinding::new(queue, "topics", routing_key))
                 .await
@@ -1052,7 +1029,7 @@ mod tests {
             );
         }
 
-        // "account.#" non copre "account" (kombu richiede il punto).
+        // kombu requires the dot: `account.#` does not match `account`.
         transport
             .publish(PublishRequest::new(
                 Some("topics"),
@@ -1160,7 +1137,7 @@ mod tests {
             .expect("publish");
         transport.delete_queue("q").await.expect("delete");
         assert_eq!(transport.queue_size("q").await.expect("size"), 0);
-        // Il binding è stato rimosso: il messaggio non viene più accodato.
+
         transport
             .publish(PublishRequest::new(Some("ex"), "rk", message("lost")))
             .await
@@ -1185,7 +1162,6 @@ mod tests {
         assert_eq!(delivery.message.body, Bytes::from_static(b"shared"));
         consumer.ack(&delivery.delivery_tag).await.expect("ack");
 
-        // Virtual host diversi sono indipendenti.
         let other = MemoryTransport::new("t11-other");
         assert_eq!(other.queue_size("q").await.expect("size"), 0);
     }
@@ -1196,7 +1172,7 @@ mod tests {
         transport
             .bind(&QueueBinding::new("q", "ex", "a.#"))
             .await
-            .expect("secondo binding");
+            .expect("second binding");
         transport
             .publish(PublishRequest::new(Some("ex"), "a.b", message("once")))
             .await
@@ -1210,7 +1186,7 @@ mod tests {
         transport
             .declare_exchange(&ExchangeDecl::new("ex", ExchangeType::Direct))
             .await
-            .expect("prima dichiarazione");
+            .expect("first declaration");
         assert!(matches!(
             transport
                 .declare_exchange(&ExchangeDecl::new("ex", ExchangeType::Topic))
@@ -1295,7 +1271,7 @@ mod tests {
                 .expect("consume")
                 .into_stream();
             let _ = recv(&mut stream).await;
-            // come `do_restore = False` del trasporto memory
+            // Match the memory transport's do_restore=False.
         }
         assert_eq!(transport.queue_size("q").await.expect("size"), 0);
         let mut empty_stream = transport
@@ -1324,11 +1300,11 @@ mod tests {
             .get("q", true)
             .await
             .expect("get")
-            .expect("messaggio");
+            .expect("message");
         assert_eq!(first.message.body, Bytes::from_static(b"a"));
         assert_eq!(first.exchange, "ex");
         assert_eq!(first.routing_key, "rk");
-        // no_ack: il tag non è tracciato, ack è un no-op.
+
         transport.ack(&first.delivery_tag).await.expect("ack no-op");
         assert_eq!(transport.queue_size("q").await.expect("size"), 1);
 
@@ -1336,7 +1312,7 @@ mod tests {
             .get("q", false)
             .await
             .expect("get")
-            .expect("messaggio");
+            .expect("message");
         assert_eq!(second.message.body, Bytes::from_static(b"b"));
         assert_eq!(transport.queue_size("q").await.expect("size"), 0);
         transport
@@ -1349,7 +1325,7 @@ mod tests {
             .get("q", false)
             .await
             .expect("get")
-            .expect("messaggio");
+            .expect("message");
         assert_eq!(third.message.body, Bytes::from_static(b"b"));
         assert!(third.redelivered);
         transport.ack(&third.delivery_tag).await.expect("ack");
@@ -1399,7 +1375,6 @@ mod tests {
                 .is_err()
         );
 
-        // Aumento del prefetch a runtime: si sbloccano subito due consegne.
         control.set_prefetch(4).await.expect("set_prefetch");
         let third = recv(&mut stream).await;
         let fourth = recv(&mut stream).await;
@@ -1408,13 +1383,11 @@ mod tests {
         transport.ack(&first.delivery_tag).await.expect("ack");
         transport.ack(&second.delivery_tag).await.expect("ack");
 
-        // add_queue: il consumatore inizia a leggere da q2.
         control.add_queue("q2").await.expect("add_queue");
         let fifth = recv(&mut stream).await;
         assert_eq!(fifth.message.body, Bytes::from_static(b"q2-0"));
         assert_eq!(fifth.routing_key, "q2");
 
-        // Riduzione del prefetch: con 3 in volo e soglia 2 non arriva altro.
         control.set_prefetch(2).await.expect("set_prefetch");
         assert!(
             tokio::time::timeout(Duration::from_millis(50), next(&mut stream))
@@ -1431,7 +1404,6 @@ mod tests {
         let sixth = recv(&mut stream).await;
         assert_eq!(sixth.message.body, Bytes::from_static(b"q2-1"));
 
-        // cancel_queue: q2 non viene più consumata.
         control.cancel_queue("q2").await.expect("cancel_queue");
         assert!(
             tokio::time::timeout(Duration::from_millis(50), next(&mut stream))
@@ -1439,12 +1411,11 @@ mod tests {
                 .is_err()
         );
 
-        // cancel: lo stream termina.
         control.cancel().await.expect("cancel");
         assert!(
             tokio::time::timeout(WAIT, next(&mut stream))
                 .await
-                .expect("nessun timeout")
+                .expect("no timeout")
                 .is_none()
         );
         assert!(matches!(control.set_prefetch(1).await, Err(Error::Closed)));
@@ -1467,18 +1438,16 @@ mod tests {
         assert!(
             tokio::time::timeout(WAIT, next(&mut stream))
                 .await
-                .expect("nessun timeout")
+                .expect("no timeout")
                 .is_none()
         );
-        // Come `basic_cancel`: il messaggio non torna in coda ma resta
-        // confermabile (non è stato scartato da cancel).
+        // basic_cancel preserves pending acknowledgments without requeuing.
         assert_eq!(transport.queue_size("q").await.expect("size"), 0);
         transport
             .ack(&delivery.delivery_tag)
             .await
-            .expect("ack dopo cancel");
+            .expect("ack after cancel");
 
-        // Un secondo consumatore non lo rivede.
         let mut stream = transport
             .consume(&[CompactString::from("q")], 0)
             .await
@@ -1509,12 +1478,12 @@ mod tests {
             .expect("publish");
         assert_eq!(transport.queue_size("q").await.expect("size"), 1);
 
-        // unbind su exchange inesistente: no-op (come kombu).
+        // kombu ignores unbind on a missing exchange.
         transport
             .unbind(&QueueBinding::new("q", "missing", "rk"))
             .await
             .expect("unbind no-op");
-        // Il percorso è ancora consumabile e vuoto dopo il drain.
+
         let first = transport.get("q", true).await.expect("get").expect("msg");
         assert_eq!(first.message.body, Bytes::from_static(b"first"));
         assert!(transport.get("q", true).await.expect("get").is_none());
@@ -1531,7 +1500,7 @@ mod tests {
             transport
                 .declare_queue(&QueueDecl::new(queue))
                 .await
-                .expect("coda");
+                .expect("queue");
             transport
                 .bind(&QueueBinding::new(queue, "ex", queue))
                 .await
@@ -1547,7 +1516,6 @@ mod tests {
             .await
             .expect("delete_exchange");
 
-        // Exchange eliminato.
         assert!(matches!(
             transport
                 .declare_exchange(&ExchangeDecl {
@@ -1557,7 +1525,7 @@ mod tests {
                 .await,
             Err(Error::NotFound(_))
         ));
-        // Coda vuota eliminata, coda piena conservata.
+
         assert!(matches!(
             transport
                 .declare_queue(&QueueDecl {
@@ -1573,10 +1541,9 @@ mod tests {
                 ..QueueDecl::new("full")
             })
             .await
-            .expect("coda piena");
+            .expect("nonempty queue");
         assert_eq!(full.message_count, 1);
 
-        // Nuovi publish sull'exchange eliminato vengono scartati.
         transport
             .publish(PublishRequest::new(Some("ex"), "full", message("lost")))
             .await
@@ -1617,27 +1584,27 @@ mod tests {
         transport
             .declare_queue(&QueueDecl::new("q"))
             .await
-            .expect("coda");
+            .expect("queue");
         transport
             .publish(PublishRequest::new(None::<&str>, "q", message("x")))
             .await
             .expect("publish");
 
-        // Passivo non verifica l'equivalenza (qui il tipo è diverso).
+        // Passive declarations do not check parameter equivalence.
         transport
             .declare_exchange(&ExchangeDecl {
                 passive: true,
                 ..ExchangeDecl::new("ex", ExchangeType::Direct)
             })
             .await
-            .expect("exchange passivo");
+            .expect("passive exchange");
         let info = transport
             .declare_queue(&QueueDecl {
                 passive: true,
                 ..QueueDecl::new("q")
             })
             .await
-            .expect("coda passiva");
+            .expect("passive queue");
         assert_eq!(info.name, "q");
         assert_eq!(info.message_count, 1);
     }
@@ -1650,7 +1617,7 @@ mod tests {
             .await
             .expect("consume")
             .into_stream();
-        // Registra il waker: nessun messaggio disponibile.
+
         assert!(
             tokio::time::timeout(Duration::from_millis(50), next(&mut stream))
                 .await
@@ -1660,18 +1627,18 @@ mod tests {
         transport.close().await.expect("close");
         match tokio::time::timeout(WAIT, next(&mut stream))
             .await
-            .expect("nessun timeout")
+            .expect("no timeout")
         {
             Some(Err(Error::ConnectionLost(_))) => {}
-            Some(Err(other)) => panic!("atteso ConnectionLost, ottenuto {other}"),
-            Some(Ok(delivery)) => panic!("consegna inattesa: {delivery:?}"),
-            None => panic!("lo stream è terminato senza ConnectionLost"),
+            Some(Err(other)) => panic!("expected ConnectionLost, got {other}"),
+            Some(Ok(delivery)) => panic!("unexpected delivery: {delivery:?}"),
+            None => panic!("stream ended without ConnectionLost"),
         }
-        // Dopo ConnectionLost lo stream termina.
+
         assert!(
             tokio::time::timeout(WAIT, next(&mut stream))
                 .await
-                .expect("nessun timeout")
+                .expect("no timeout")
                 .is_none()
         );
     }
@@ -1689,13 +1656,13 @@ mod tests {
         other
             .publish(PublishRequest::new(Some("ex"), "rk", message("still")))
             .await
-            .expect_err("il trasporto chiuso rifiuta i publish");
+            .expect_err("closed transport rejects publications");
         assert!(
             tokio::time::timeout(Duration::from_millis(50), next(&mut stream))
                 .await
                 .is_err()
         );
-        // La connessione ancora aperta può pubblicare e consegnare.
+
         transport
             .publish(PublishRequest::new(Some("ex"), "rk", message("alive")))
             .await
@@ -1712,15 +1679,11 @@ mod tests {
             .publish(PublishRequest::new(Some("ex"), "rk", message("pending")))
             .await
             .expect("publish");
-        let delivery = other
-            .get("q", false)
-            .await
-            .expect("get")
-            .expect("messaggio");
+        let delivery = other.get("q", false).await.expect("get").expect("message");
         publisher.close().await.expect("close");
         other
             .ack(&delivery.delivery_tag)
             .await
-            .expect("ack sulla connessione ancora aperta");
+            .expect("ack on open connection");
     }
 }

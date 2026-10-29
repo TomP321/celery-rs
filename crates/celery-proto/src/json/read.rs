@@ -1,19 +1,17 @@
-//! Parser JSON pull, senza albero intermedio, con la semantica di `json.loads`.
-//!
-//! L'input è una sequenza di byte UTF-8/WTF-8 (le `str` Python possono contenere
-//! surrogati isolati). Gli offset negli errori sono in code point, come CPython.
+//! JSON pull parser without an intermediate tree. Input accepts UTF-8 and WTF-8
+//! for Python's lone surrogates; error offsets count code points as CPython does.
 
 use std::borrow::Cow;
 use std::fmt;
 
-/// Stringa JSON decodificata.
+/// Decoded JSON string.
 #[derive(Debug, Clone, PartialEq)]
 pub enum JsonStr<'a> {
-    /// Nessun escape e UTF-8 valido: prestito dell'input.
+    /// Unescaped UTF-8 borrowed from the input.
     Borrowed(&'a str),
-    /// Contiene escape ma nessun surrogato isolato.
+    /// Escaped string without lone surrogates.
     Owned(String),
-    /// Contiene surrogati isolati.
+    /// String containing lone surrogates.
     Code(Vec<u32>),
 }
 
@@ -39,7 +37,7 @@ impl JsonStr<'_> {
 pub enum Event<'a> {
     Null,
     Bool(bool),
-    /// Intero come testo decimale (arbitrario, il chiamante decide il tipo).
+    /// Arbitrary decimal integer text; the caller chooses its representation.
     Int(&'a str),
     Float(f64),
     Str(JsonStr<'a>),
@@ -50,7 +48,7 @@ pub enum Event<'a> {
     EndObject,
 }
 
-/// Errore con posizione in code point, come `JSONDecodeError.pos`.
+/// Error position in code points, matching JSONDecodeError.pos.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParseError {
     pub message: &'static str,
@@ -67,17 +65,17 @@ impl std::error::Error for ParseError {}
 
 #[derive(Debug, Clone, Copy)]
 enum ArrState {
-    /// Subito dopo `[`: ammette `]` (array vuoto).
+    /// Allows an empty array immediately after the opening bracket.
     First,
-    /// Dopo una virgola: `]` è un errore di trailing comma.
+    /// Rejects a closing bracket after a comma.
     NeedValue { comma: usize },
-    /// Dopo un valore: `,` oppure `]`.
+    /// Requires a comma or closing bracket after a value.
     Delim,
 }
 
 #[derive(Debug, Clone, Copy)]
 enum ObjState {
-    /// Subito dopo `{`: ammette `}` (oggetto vuoto).
+    /// Allows an empty object immediately after the opening brace.
     KeyFirst,
     KeyAfterComma {
         comma: usize,
@@ -93,7 +91,7 @@ enum Ctx {
     Obj(ObjState),
 }
 
-/// Parser a eventi. `next()` restituisce `None` a fine documento.
+/// Event parser returning None at the end of the document.
 pub struct Reader<'a> {
     src: &'a [u8],
     i: usize,
@@ -107,7 +105,7 @@ impl<'a> Reader<'a> {
         Self::with_max_depth(src, 9_997)
     }
 
-    /// Limite separato per i consumer ricorsivi degli envelope.
+    /// Separate depth limit for recursive envelope consumers.
     pub fn with_max_depth(src: &'a [u8], max_depth: usize) -> Self {
         Self {
             src,
@@ -274,7 +272,7 @@ impl<'a> Reader<'a> {
             return Err(self.error("Expecting value", start));
         };
         if matches!(b, b'[' | b'{') && self.stack.len() >= self.max_depth {
-            return Err(self.error("Maximum JSON depth exceeded", start));
+            return Err(self.error("maximum JSON depth exceeded", start));
         }
         match b {
             b'[' => {
@@ -368,7 +366,7 @@ impl<'a> Reader<'a> {
         }
 
         let token = &self.src[start..self.i];
-        // Il token è sempre ASCII per costruzione.
+        // The token is ASCII by construction.
         let text = std::str::from_utf8(token).map_err(|_| self.error("Expecting value", start))?;
         if is_float {
             let value = text
@@ -384,7 +382,7 @@ impl<'a> Reader<'a> {
         let quote = self.i;
         self.i += 1;
         let content_start = self.i;
-        // `None` = nessun escape visto finora (prestito possibile).
+        // Delay allocation until an escape requires copying.
         let mut buf: Option<Vec<u32>> = None;
 
         loop {
@@ -405,7 +403,6 @@ impl<'a> Reader<'a> {
                 }
                 b'\\' => {
                     if buf.is_none() {
-                        // Copia il prefisso già letto e prosegui in modalità code point.
                         buf = Some(decode_wtf8(&self.src[content_start..self.i]));
                     }
                     self.i += 1;
@@ -425,7 +422,7 @@ impl<'a> Reader<'a> {
                         cps.push(cp);
                         self.i = next;
                     } else {
-                        // Il byte non è un carattere speciale ASCII: si può saltare.
+                        // This byte cannot be an ASCII special character.
                         self.i += 1;
                     }
                 }
@@ -433,7 +430,6 @@ impl<'a> Reader<'a> {
         }
     }
 
-    /// Ritorna code point decodificato e nuova posizione (dopo l'escape).
     fn parse_escape(&self, quote: usize) -> Result<Escape, ParseError> {
         let backslash = self.i - 1;
         let Some(b) = self.peek() else {
@@ -459,7 +455,7 @@ impl<'a> Reader<'a> {
         if b != b'u' {
             return Err(self.error("Invalid \\escape", backslash));
         }
-        // Posizione di CPython: backslash + 1 (la 'u').
+        // CPython reports the character after the backslash for Unicode escape errors.
         let bad = self.error("Invalid \\uXXXX escape", backslash + 1);
         let hex = self
             .src
@@ -468,7 +464,7 @@ impl<'a> Reader<'a> {
         let cp = parse_hex4(hex).ok_or(bad)?;
         let next = self.i + 5;
 
-        // Coppia surrogata solo se il basso segue immediatamente come \uXXXX.
+        // Combine surrogates only when the low surrogate immediately follows as a Unicode escape.
         if (0xd800..=0xdbff).contains(&cp)
             && self.src.get(next) == Some(&b'\\')
             && self.src.get(next + 1) == Some(&b'u')
@@ -536,7 +532,7 @@ fn count_code_points(src: &[u8], byte_pos: usize) -> usize {
     n
 }
 
-/// Decodifica un code point UTF-8 o WTF-8 (surrogati isolati inclusi).
+// Decodes one UTF-8 or WTF-8 code point, including lone surrogates.
 fn decode_one(src: &[u8], i: usize) -> Result<(u32, usize), ()> {
     let b0 = *src.get(i).ok_or(())?;
     if b0 < 0x80 {
@@ -599,12 +595,12 @@ mod tests {
         }
         assert_eq!(
             reader.next_event().unwrap_err().message,
-            "Maximum JSON depth exceeded"
+            "maximum JSON depth exceeded"
         );
     }
 
     #[test]
-    fn eventi_base() {
+    fn basic_events() {
         assert_eq!(
             parse("[1, \"a\", true, null]").unwrap(),
             vec![
@@ -619,7 +615,7 @@ mod tests {
     }
 
     #[test]
-    fn oggetto_e_chiavi() {
+    fn object_and_keys() {
         assert_eq!(
             parse("{\"a\": 1, \"a\": 2}").unwrap(),
             vec![
@@ -634,25 +630,25 @@ mod tests {
     }
 
     #[test]
-    fn numeri_grandi_come_testo() {
+    fn large_numbers_as_text() {
         let ev = parse("123456789012345678901234567890").unwrap();
         assert_eq!(ev, vec![Event::Int("123456789012345678901234567890")]);
     }
 
     #[test]
-    fn escape_e_surrogati() {
+    fn escapes_and_surrogates() {
         let ev = parse(r#""\u00e9\ud83d\ude00\ud800""#).unwrap();
         match &ev[0] {
             Event::Str(JsonStr::Code(cps)) => {
                 assert_eq!(cps, &[0xe9, 0x1f600, 0xd800]);
             }
-            other => panic!("evento inatteso: {other:?}"),
+            other => panic!("unexpected event: {other:?}"),
         }
     }
 
     #[test]
-    fn errori_con_posizione() {
-        let casi = [
+    fn errors_with_positions() {
+        let cases = [
             ("", "Expecting value", 0),
             (" ", "Expecting value", 1),
             ("[1 2]", "Expecting ',' delimiter", 3),
@@ -668,14 +664,14 @@ mod tests {
             ("\"\\x\"", "Invalid \\escape", 1),
             ("\"a\u{1}b\"", "Invalid control character at", 2),
         ];
-        for (s, msg, pos) in casi {
+        for (s, msg, pos) in cases {
             let err = parse(s).unwrap_err();
             assert_eq!((err.message, err.pos), (msg, pos), "input {s:?}");
         }
     }
 
     #[test]
-    fn costanti_non_standard() {
+    fn nonstandard_constants() {
         let ev = parse("[NaN, Infinity, -Infinity]").unwrap();
         assert!(matches!(ev[1], Event::Float(v) if v.is_nan()));
         assert!(matches!(ev[2], Event::Float(v) if v == f64::INFINITY));

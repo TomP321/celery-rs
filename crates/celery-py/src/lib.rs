@@ -1,4 +1,4 @@
-//! Modulo di estensione `_celery_rs`: espone il core Rust al guscio Python.
+//! Exposes the Rust core to Python through the _celery_rs extension.
 use pyo3::prelude::*;
 
 mod backend_redis;

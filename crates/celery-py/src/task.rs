@@ -1,4 +1,4 @@
-//! `encode_task_v2`: equivalente Rust di `AMQP.as_task_v2` + JSON + compressione.
+//! Task v2 encoding equivalent to AMQP.as_task_v2, JSON serialization and compression.
 
 use pyo3::exceptions::{PyKeyError, PyTypeError};
 use pyo3::prelude::*;
@@ -20,7 +20,7 @@ fn mapping_type(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
 }
 
 fn is_list_or_tuple(obj: &Bound<'_, PyAny>) -> bool {
-    // SAFETY: `obj` è vivo; i check di tipo non lo modificano.
+    // SAFETY: obj is alive; type checks do not modify it.
     unsafe {
         pyo3::ffi::PyList_Check(obj.as_ptr()) != 0 || pyo3::ffi::PyTuple_Check(obj.as_ptr()) != 0
     }
@@ -112,7 +112,7 @@ pub fn encode_task_v2(
     compression: Option<String>,
     default: Option<Bound<'_, PyAny>>,
 ) -> PyResult<Py<PyTuple>> {
-    // `args = args or ()`, `kwargs = kwargs or {}`.
+    // Match Python's truthiness fallback for args and kwargs.
     let args_value = match args {
         Some(value) if value.is_truthy()? => {
             if !is_list_or_tuple(&value) {
@@ -220,8 +220,7 @@ pub fn encode_task_v2(
             let data = body_bytes.as_bytes();
             let addr = data.as_ptr() as usize;
             let len = data.len();
-            // SAFETY: `body_bytes` resta vivo e i bytes sono immutabili; il GIL
-            // viene rilasciato ma nessun codice Python può mutare l'oggetto.
+            // SAFETY: body_bytes remains alive and immutable while the GIL is released.
             let out = py.detach(move || unsafe {
                 compression::compress(
                     name.as_str(),

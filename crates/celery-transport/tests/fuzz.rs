@@ -3,7 +3,7 @@ mod support;
 use celery_transport::redis::json;
 
 #[test]
-#[ignore = "campagna di almeno dieci minuti: tools/fuzz/run"]
+#[ignore = "run for at least ten minutes: tools/fuzz/run"]
 fn fuzz_redis_envelope() {
     let seeds = [
         br#"{"body":"W1tdLHt9LHt9XQ==","content-type":"application/json","content-encoding":"utf-8","headers":{"task":"t","id":"id"},"properties":{"delivery_tag":"tag","body_encoding":"base64","delivery_info":{"exchange":"","routing_key":"q"}}}"#.to_vec(),

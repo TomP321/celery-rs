@@ -3,7 +3,7 @@ mod support;
 use celery_proto::{compression, json::Reader};
 
 #[test]
-#[ignore = "campagna di almeno dieci minuti: tools/fuzz/run"]
+#[ignore = "run for at least ten minutes: tools/fuzz/run"]
 fn fuzz_json() {
     let seeds = [
         br#"[[1,"text",null],{}, {"callbacks":null,"errbacks":null,"chain":null,"chord":null}]"#
@@ -24,7 +24,7 @@ fn fuzz_json() {
 }
 
 #[test]
-#[ignore = "campagna di almeno dieci minuti: tools/fuzz/run"]
+#[ignore = "run for at least ten minutes: tools/fuzz/run"]
 fn fuzz_compression() {
     let names = ["gzip", "bzip2", "xz", "brotli", "zstd"];
     let seeds: Vec<_> = names

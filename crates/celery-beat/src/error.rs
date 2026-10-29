@@ -1,4 +1,4 @@
-//! Errori delle schedule, con i testi del riferimento (`celery/schedules.py`).
+//! Schedule errors with reference exception text from celery/schedules.py.
 
 use crate::ErrorKind;
 
@@ -26,13 +26,13 @@ pub enum Error {
     EmptyMax,
     #[error("unable to rollover, time specification is probably invalid")]
     Rollover,
-    /// Set vuoto dopo una modifica a runtime: `list index out of range`.
+    /// Empty set after runtime mutation, matching list index out of range.
     #[error("list index out of range")]
     Index,
 }
 
 impl Error {
-    /// Classe dell'eccezione Python del riferimento che questo errore rappresenta.
+    /// Returns the corresponding reference Python exception class.
     pub fn kind(&self) -> ErrorKind {
         match self {
             Error::EmptyPart | Error::EmptyFilter | Error::NegativeNumber => ErrorKind::Parse,

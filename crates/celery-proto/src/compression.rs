@@ -1,8 +1,8 @@
-//! Compressione compatibile con `kombu.compression` (stessi content type/alias).
+//! Kombu-compatible compression content types and aliases.
 
 use std::io::{Read, Write};
 
-/// Algoritmo di compressione selezionato da un nome o alias.
+// Compression algorithm selected by name or alias.
 #[derive(Clone, Copy)]
 enum Method {
     Zlib,
@@ -23,21 +23,21 @@ fn method(name: &str) -> Option<(Method, &'static str)> {
     })
 }
 
-/// Content type canonico per un nome o alias, come `get_encoder`.
+/// Returns the canonical content type for a name or alias.
 pub fn canonical_content_type(name: &str) -> Option<&'static str> {
     method(name).map(|(_, content_type)| content_type)
 }
 
 #[derive(Debug, thiserror::Error)]
 pub enum CompressionError {
-    /// Equivale al `KeyError` che solleva kombu.
+    /// Equivalent to kombu's KeyError.
     #[error("{0}")]
     UnknownMethod(String),
     #[error("compression error: {0}")]
     Codec(String),
 }
 
-/// Comprime `data`; ritorna anche il content type canonico.
+/// Compresses data and returns its canonical content type.
 pub fn compress(name: &str, data: &[u8]) -> Result<(Vec<u8>, &'static str), CompressionError> {
     let (method, content_type) =
         method(name).ok_or_else(|| CompressionError::UnknownMethod(name.to_string()))?;
@@ -84,10 +84,10 @@ pub fn compress(name: &str, data: &[u8]) -> Result<(Vec<u8>, &'static str), Comp
     Ok((out, content_type))
 }
 
-/// Limite del body decompresso e della memoria del decoder (64 MiB).
+/// Limits decompressed bodies and decoder memory to 64 MiB.
 pub const MAX_DECOMPRESSED_SIZE: usize = 64 * 1024 * 1024;
 
-/// Decomprime `data` secondo il content type (o alias).
+/// Decompresses data using a content type or alias.
 pub fn decompress(content_type: &str, data: &[u8]) -> Result<Vec<u8>, CompressionError> {
     decompress_limited(content_type, data, MAX_DECOMPRESSED_SIZE)
 }
@@ -143,7 +143,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn alias_canonici() {
+    fn canonical_aliases() {
         for (alias, ct) in [
             ("gzip", "application/x-gzip"),
             ("zlib", "application/x-gzip"),
@@ -157,11 +157,11 @@ mod tests {
         ] {
             assert_eq!(canonical_content_type(alias), Some(ct));
         }
-        assert_eq!(canonical_content_type("sconosciuto"), None);
+        assert_eq!(canonical_content_type("unknown"), None);
     }
 
     #[test]
-    fn roundtrip_tutti_gli_algoritmi() {
+    fn roundtrip_all_algorithms() {
         let payloads: [&[u8]; 4] = [b"", b"a", b"hello world hello world", &[0u8; 4096]];
         for name in ["gzip", "bzip2", "xz", "brotli", "zstd"] {
             for payload in payloads {
@@ -182,7 +182,7 @@ mod tests {
     }
 
     #[test]
-    fn nome_sconosciuto() {
+    fn unknown_name() {
         assert!(matches!(
             compress("nope", b"x"),
             Err(CompressionError::UnknownMethod(_))

@@ -1,4 +1,4 @@
-//! Contatori diagnostici dell'heap Rust; assenti dalla build normale.
+//! Optional Rust heap diagnostics, excluded from normal builds.
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -23,11 +23,11 @@ impl CountingAllocator {
     }
 }
 
-// SAFETY: ogni operazione delega a System con puntatore e layout originali;
-// i contatori atomici non allocano né alterano allineamento o durata dei blocchi.
+// SAFETY: operations forward original pointers and layouts to System. Atomic
+// counters neither allocate nor change block alignment or lifetime.
 unsafe impl GlobalAlloc for CountingAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        // SAFETY: il layout valido è quello ricevuto dal chiamante.
+        // SAFETY: the caller supplies a valid layout.
         let pointer = unsafe { System.alloc(layout) };
         if !pointer.is_null() {
             self.add(layout.size());
@@ -36,7 +36,7 @@ unsafe impl GlobalAlloc for CountingAllocator {
     }
 
     unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
-        // SAFETY: System mantiene layout e inizializzazione richiesti.
+        // SAFETY: System preserves the required layout and initialization.
         let pointer = unsafe { System.alloc_zeroed(layout) };
         if !pointer.is_null() {
             self.add(layout.size());
@@ -45,13 +45,13 @@ unsafe impl GlobalAlloc for CountingAllocator {
     }
 
     unsafe fn dealloc(&self, pointer: *mut u8, layout: Layout) {
-        // SAFETY: puntatore e layout appartengono all'allocazione del chiamante.
+        // SAFETY: pointer and layout describe the caller's allocation.
         unsafe { System.dealloc(pointer, layout) };
         self.live.fetch_sub(layout.size(), Ordering::Relaxed);
     }
 
     unsafe fn realloc(&self, pointer: *mut u8, layout: Layout, size: usize) -> *mut u8 {
-        // SAFETY: valgono le stesse precondizioni di GlobalAlloc::realloc.
+        // SAFETY: the caller satisfies GlobalAlloc::realloc preconditions.
         let fresh = unsafe { System.realloc(pointer, layout, size) };
         if !fresh.is_null() {
             if size >= layout.size() {
@@ -84,8 +84,7 @@ mod tests {
         let allocator = CountingAllocator::new();
         let small = Layout::from_size_align(32, 8).unwrap();
         let large = Layout::from_size_align(96, 8).unwrap();
-        // SAFETY: tutti i layout hanno lo stesso allineamento e ogni blocco
-        // viene liberato una sola volta con il suo layout corrente.
+        // SAFETY: layouts share an alignment; each block is freed once using its current layout.
         unsafe {
             let pointer = allocator.alloc_zeroed(small);
             assert!(!pointer.is_null());

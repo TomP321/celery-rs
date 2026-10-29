@@ -1,13 +1,5 @@
-//! Client Redis per il result backend.
-//!
-//! Implementa il sottoinsieme di redis-py usato da `celery/backends/redis.py`:
-//! comandi singoli, pipeline (MULTI/EXEC con `transaction=True`) e pub/sub su
-//! connessione dedicata. I valori restano [`Bytes`] fino al binding Python:
-//! niente conversioni JSON o `serde_json::Value` nel percorso caldo.
-//!
-//! La connessione multiplexata di redis-rs gestisce la riconnessione; il pool
-//! qui sotto serve solo a evitare un handshake per ogni pipeline (come fa il
-//! pool di redis-py) e a poterlo scartare dopo `fork()` o su `reset()`.
+//! Redis commands, pipelines and dedicated pub/sub for the result backend. Values
+//! remain Bytes until the Python boundary; pooled connections can be reset after fork.
 
 use std::collections::VecDeque;
 use std::path::PathBuf;
@@ -22,44 +14,46 @@ use ::redis::{AsyncConnectionConfig, IntoConnectionInfo, Value};
 use bytes::Bytes;
 use futures_core::Stream;
 
-/// Dimensione massima della coda di messaggi pub/sub.
-///
-/// Il drainer del backend consuma subito; il limite evita crescita illimitata
-/// se un chiamante smette di leggere mentre i risultati continuano ad arrivare.
+// Bounds pub/sub memory when callers stop reading while results continue arriving.
 const PUBSUB_QUEUE_LIMIT: usize = 1024;
 
-/// Numero massimo di connessioni inattive tenute nel pool.
 const POOL_LIMIT: usize = 64;
 
-/// Indirizzo del server.
+/// Redis server address.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Address {
-    Tcp { host: String, port: u16 },
-    Tls { host: String, port: u16, insecure: bool },
+    Tcp {
+        host: String,
+        port: u16,
+    },
+    Tls {
+        host: String,
+        port: u16,
+        insecure: bool,
+    },
     Unix(PathBuf),
 }
 
-/// Configurazione della connessione, già risolta dal backend Python.
+/// Connection settings resolved by the Python backend.
 #[derive(Clone, Debug)]
 pub struct Config {
     pub address: Address,
     pub db: i64,
     pub username: Option<String>,
     pub password: Option<String>,
-    /// `socket_timeout` di redis-py: tempo massimo di attesa della risposta.
+    /// Maximum response wait, matching redis-py's socket_timeout.
     pub response_timeout: Option<Duration>,
-    /// `socket_connect_timeout`: tempo massimo per stabilire la connessione.
+    /// Maximum time to establish a connection.
     pub connect_timeout: Option<Duration>,
-    /// `redis_client_name`: inviato con `CLIENT SETNAME` alla connessione.
+    /// Client name sent with CLIENT SETNAME on connection.
     pub client_name: Option<String>,
-    /// `max_connections`: limite del pool; `None` = default di redis-py.
+    /// Pool connection limit; None uses redis-py's default.
     pub max_connections: Option<usize>,
-    /// `redis_backend_health_check_interval`: PING prima di un comando se la
-    /// connessione è rimasta inattiva più a lungo.
+    /// Idle interval after which a PING precedes the next command.
     pub health_check_interval: Option<Duration>,
 }
 
-/// Errore del client, mappato sulle eccezioni di redis-py dal binding.
+/// Client error mapped to redis-py exceptions by the binding.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("{0}")]
@@ -88,7 +82,7 @@ impl Error {
     }
 }
 
-/// Valore restituito da un comando, con i tipi di redis-py.
+/// Command result using redis-py value types.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Reply {
     Nil,
@@ -114,14 +108,11 @@ impl Reply {
                     .collect(),
             ),
             Value::Attribute { data, .. } => Reply::from_value(*data),
-            Value::Set(items) => {
-                Reply::Array(items.into_iter().map(Reply::from_value).collect())
-            }
+            Value::Set(items) => Reply::Array(items.into_iter().map(Reply::from_value).collect()),
             Value::Double(value) => Reply::Bytes(Bytes::from(format!("{value}"))),
             Value::Boolean(value) => Reply::Bool(value),
             Value::BigNumber(_) | Value::VerbatimString { .. } | Value::Push { .. } => {
-                // Il backend non usa questi tipi (RESP2, nessun comando che li
-                // produce): un valore inatteso è meglio segnalarlo che perderlo.
+                // RESP2 backend commands never produce these types; report rather than discard them.
                 Reply::Nil
             }
             Value::ServerError(error) => Reply::Bytes(Bytes::from(error.to_string())),
@@ -130,27 +121,69 @@ impl Reply {
     }
 }
 
-/// Comandi del sottoinsieme usato dal backend.
-///
-/// Gli argomenti numerici arrivano dal guscio Python già formattati come li
-/// scriverebbe redis-py (`repr`), così il traffico resta identico.
+/// Backend command subset. Python formats numeric arguments using repr to preserve wire data.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Command {
-    Get { key: Bytes },
-    MGet { keys: Vec<Bytes> },
-    Set { key: Bytes, value: Bytes, ex: Option<u64> },
-    SetEx { key: Bytes, seconds: u64, value: Bytes },
-    Delete { keys: Vec<Bytes> },
-    Incr { key: Bytes, amount: Option<i64> },
-    Expire { key: Bytes, seconds: i64 },
-    Ttl { key: Bytes },
-    Publish { channel: Bytes, message: Bytes },
-    ZAdd { key: Bytes, pairs: Vec<(Bytes, Bytes)> },
-    ZCount { key: Bytes, min: Bytes, max: Bytes },
-    ZRange { key: Bytes, start: i64, stop: i64 },
-    RPush { key: Bytes, values: Vec<Bytes> },
-    LLen { key: Bytes },
-    LRange { key: Bytes, start: i64, stop: i64 },
+    Get {
+        key: Bytes,
+    },
+    MGet {
+        keys: Vec<Bytes>,
+    },
+    Set {
+        key: Bytes,
+        value: Bytes,
+        ex: Option<u64>,
+    },
+    SetEx {
+        key: Bytes,
+        seconds: u64,
+        value: Bytes,
+    },
+    Delete {
+        keys: Vec<Bytes>,
+    },
+    Incr {
+        key: Bytes,
+        amount: Option<i64>,
+    },
+    Expire {
+        key: Bytes,
+        seconds: i64,
+    },
+    Ttl {
+        key: Bytes,
+    },
+    Publish {
+        channel: Bytes,
+        message: Bytes,
+    },
+    ZAdd {
+        key: Bytes,
+        pairs: Vec<(Bytes, Bytes)>,
+    },
+    ZCount {
+        key: Bytes,
+        min: Bytes,
+        max: Bytes,
+    },
+    ZRange {
+        key: Bytes,
+        start: i64,
+        stop: i64,
+    },
+    RPush {
+        key: Bytes,
+        values: Vec<Bytes>,
+    },
+    LLen {
+        key: Bytes,
+    },
+    LRange {
+        key: Bytes,
+        start: i64,
+        stop: i64,
+    },
 }
 
 impl Command {
@@ -163,7 +196,7 @@ impl Command {
         payload.len() >= 1024 * 1024
     }
 
-    /// Tipo di risposta atteso, per convertire il risultato come redis-py.
+    // Expected response type for redis-py-compatible conversion.
     fn is_set(&self) -> bool {
         matches!(self, Command::Set { .. } | Command::SetEx { .. })
     }
@@ -189,13 +222,13 @@ impl Command {
                 pipe.cmd("GET").arg(key.as_ref());
             }
             Command::MGet { keys } => {
-                pipe.cmd("MGET").arg(keys.iter().map(Bytes::as_ref).collect::<Vec<_>>());
+                pipe.cmd("MGET")
+                    .arg(keys.iter().map(Bytes::as_ref).collect::<Vec<_>>());
             }
             Command::Set { key, value, ex } => {
                 pipe.cmd("SET").arg(key.as_ref()).arg(value.as_ref());
                 if let Some(ex) = ex {
-                    // `Redis.set(..., ex=)` di redis-py invia SET ... EX,
-                    // non SETEX (`setex` è un comando distinto).
+                    // redis-py's set(ex=) sends SET EX; SETEX is a separate command.
                     pipe.arg("EX").arg(*ex);
                 }
             }
@@ -210,11 +243,11 @@ impl Command {
                     .arg(value.as_ref());
             }
             Command::Delete { keys } => {
-                pipe.cmd("DEL").arg(keys.iter().map(Bytes::as_ref).collect::<Vec<_>>());
+                pipe.cmd("DEL")
+                    .arg(keys.iter().map(Bytes::as_ref).collect::<Vec<_>>());
             }
             Command::Incr { key, amount } => {
-                // redis-py 8 ha `incr = incrby`: anche `incr(key)` invia
-                // INCRBY key 1, quindi il traffico deve coincidere.
+                // redis-py 8 aliases incr to incrby, so incr(key) sends INCRBY key 1.
                 pipe.cmd("INCRBY")
                     .arg(key.as_ref())
                     .arg(amount.unwrap_or(1));
@@ -226,7 +259,9 @@ impl Command {
                 pipe.cmd("TTL").arg(key.as_ref());
             }
             Command::Publish { channel, message } => {
-                pipe.cmd("PUBLISH").arg(channel.as_ref()).arg(message.as_ref());
+                pipe.cmd("PUBLISH")
+                    .arg(channel.as_ref())
+                    .arg(message.as_ref());
             }
             Command::ZAdd { key, pairs } => {
                 pipe.cmd("ZADD").arg(key.as_ref());
@@ -282,7 +317,7 @@ impl Command {
     }
 }
 
-/// Pipeline di comandi, eseguita in un solo round trip.
+/// Command pipeline executed in one round trip.
 #[derive(Debug, Clone, Default)]
 pub struct Pipeline {
     pub transaction: bool,
@@ -317,16 +352,15 @@ thread_local! {
 }
 
 fn release_scratch_pages(large: bool) {
-    // I buffer RESP temporanei superano di molte volte il body; glibc ne
-    // trattiene le pagine libere nelle arene anche dopo il Drop. Il future
-    // interno deve essere già distrutto, inclusi comandi e pipeline packed.
+    // glibc retains large temporary RESP buffers after Drop. Release them only after
+    // the inner future, commands and packed pipelines have been destroyed.
     #[cfg(all(target_os = "linux", target_env = "gnu"))]
     {
         if large {
             LARGE_TASK_IO.set(true);
         }
         if RECLAIM_PENDING.replace(large) || large {
-            // Recupera anche le copie Python liberate dopo il comando precedente.
+            // Also reclaim Python copies freed after the previous command.
             trim_free_pages();
         }
     }
@@ -334,7 +368,7 @@ fn release_scratch_pages(large: bool) {
     let _ = large;
 }
 
-/// Rilascia le pagine temporanee quando il figlio ha finito il task grande.
+/// Releases temporary pages after a child finishes a large task.
 pub fn release_task_memory() {
     #[cfg(all(target_os = "linux", target_env = "gnu"))]
     if LARGE_TASK_IO.replace(false) {
@@ -343,7 +377,7 @@ pub fn release_task_memory() {
     }
 }
 
-/// Restituisce le pagine libere prima del fork o dopo il riscaldamento del figlio.
+/// Releases free pages before fork or after child warmup.
 pub fn release_idle_memory() {
     #[cfg(all(target_os = "linux", target_env = "gnu"))]
     trim_free_pages();
@@ -351,18 +385,19 @@ pub fn release_idle_memory() {
 
 #[cfg(all(target_os = "linux", target_env = "gnu"))]
 fn trim_free_pages() {
-    // SAFETY: malloc_trim è thread-safe, non conserva puntatori e opera
-    // solo su pagine libere dell'allocatore di sistema.
+    // SAFETY: malloc_trim is thread-safe, retains no pointers and touches only free allocator pages.
     unsafe {
         libc::malloc_trim(0);
     }
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
-    mutex.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    mutex
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
-/// Client Redis con pool di connessioni multiplexate.
+/// Redis client with a multiplexed connection pool.
 pub struct Client {
     config: Config,
     redis: ::redis::Client,
@@ -373,7 +408,7 @@ pub struct Client {
 }
 
 impl Client {
-    /// Crea il client senza aprire socket (come `redis-py`).
+    /// Creates a client without opening sockets, matching redis-py.
     pub fn open(config: Config) -> Result<Self, Error> {
         install_crypto_provider_if_needed(&config.address);
         let mut redis_info = ::redis::RedisConnectionInfo::default().set_db(config.db);
@@ -384,9 +419,7 @@ impl Client {
             redis_info = redis_info.set_password(password);
         }
         let address = match &config.address {
-            Address::Tcp { host, port } => {
-                ::redis::ConnectionAddr::Tcp(host.clone(), *port)
-            }
+            Address::Tcp { host, port } => ::redis::ConnectionAddr::Tcp(host.clone(), *port),
             Address::Tls {
                 host,
                 port,
@@ -403,19 +436,21 @@ impl Client {
             .into_connection_info()
             .map_err(|error| Error::Invalid(error.to_string()))?
             .set_redis_settings(redis_info);
-        let redis = ::redis::Client::open(info).map_err(|error| Error::Invalid(error.to_string()))?;
+        let redis =
+            ::redis::Client::open(info).map_err(|error| Error::Invalid(error.to_string()))?;
         let mut connection_config = AsyncConnectionConfig::new();
         if let Some(timeout) = config.response_timeout {
-            connection_config = connection_config
-                .set_response_timeout(Some(Duration::from_secs_f64(timeout.as_secs_f64().max(0.001))));
+            connection_config = connection_config.set_response_timeout(Some(
+                Duration::from_secs_f64(timeout.as_secs_f64().max(0.001)),
+            ));
         } else {
-            // Senza `socket_timeout` redis-py attende all'infinito; il default
-            // di redis-rs (500 ms) renderebbe un blocco del server un timeout.
+            // redis-py waits indefinitely without socket_timeout; redis-rs defaults to 500 ms.
             connection_config = connection_config.set_response_timeout(None);
         }
         if let Some(timeout) = config.connect_timeout {
-            connection_config = connection_config
-                .set_connection_timeout(Some(Duration::from_secs_f64(timeout.as_secs_f64().max(0.001))));
+            connection_config = connection_config.set_connection_timeout(Some(
+                Duration::from_secs_f64(timeout.as_secs_f64().max(0.001)),
+            ));
         }
         Ok(Self {
             config,
@@ -431,20 +466,13 @@ impl Client {
         &self.config
     }
 
-    /// Nel figlio di `fork()` le connessioni del padre non sono usabili:
-    /// il pid diverso le scarta alla prima operazione.
-    ///
-    /// Non si possono *droppare*: ogni `MultiplexedConnection` porta con sé
-    /// waker del runtime tokio del padre, che nel figlio non esiste più.
-    /// Il `Drop` risveglierebbe il driver morto (eventfd chiuso) e, con
-    /// `panic=abort`, farebbe abortire il processo. Si abbandonano: i loro fd
-    /// sono già stati chiusi dal figlio e la memoria è quella di un solo
-    /// processo figlio, quindi il costo è limitato e una tantum.
+    // Abandons inherited connections on PID change. Dropping them would wake the
+    // parent's absent tokio driver and abort the child. Their descriptors are already
+    // closed, so the one-time leak is bounded to each child.
     fn ensure_process(&self) {
         let pid = std::process::id();
         if self.pid.load(Ordering::Relaxed) != pid {
-            let stale: Vec<MultiplexedConnection> =
-                std::mem::take(&mut *lock(&self.idle));
+            let stale: Vec<MultiplexedConnection> = std::mem::take(&mut *lock(&self.idle));
             for connection in stale {
                 std::mem::forget(connection);
             }
@@ -477,9 +505,7 @@ impl Client {
         self.create_connection().await
     }
 
-    /// Come `Connection.check_health()` di redis-py: se è passato
-    /// `health_check_interval` dall'ultima attività, invia PING sulla stessa
-    /// connessione prima del comando.
+    // Pings idle connections before a command, matching redis-py's health check interval.
     async fn check_health(&self, connection: &mut MultiplexedConnection) -> Result<(), Error> {
         let Some(interval) = self.config.health_check_interval else {
             return Ok(());
@@ -511,13 +537,12 @@ impl Client {
         }
     }
 
-    /// Scarta le connessioni inattive: redis-py fa lo stesso con
-    /// `ConnectionPool.reset()` (per esempio dopo una riconnessione).
+    /// Discards idle connections, matching redis-py's pool reset.
     pub fn reset(&self) {
         lock(&self.idle).clear();
     }
 
-    /// Esegue un comando su una connessione del pool.
+    /// Executes a command on a pooled connection.
     pub async fn execute(&self, command: Command) -> Result<Reply, Error> {
         let large = command.has_large_payload();
         let reply = self.execute_inner(command).await;
@@ -539,11 +564,10 @@ impl Client {
             .into_iter()
             .next()
             .map(|value| command.decode(value))
-            .ok_or_else(|| Error::Response("risposta Redis vuota".to_string()))
+            .ok_or_else(|| Error::Response("empty Redis response".to_string()))
     }
 
-    /// Esegue la pipeline in un solo round trip; con `transaction` la racchiude
-    /// in MULTI/EXEC come il `Pipeline` di redis-py.
+    /// Executes a pipeline in one round trip, wrapping transactions in MULTI/EXEC.
     pub async fn execute_pipeline(&self, pipeline: Pipeline) -> Result<Vec<Reply>, Error> {
         let large = pipeline.commands.iter().any(Command::has_large_payload);
         let reply = self.execute_pipeline_inner(pipeline).await;
@@ -571,7 +595,7 @@ impl Client {
         self.release(connection);
         if values.len() != pipeline.commands.len() {
             return Err(Error::Response(format!(
-                "pipeline: attesi {} risultati, ricevuti {}",
+                "pipeline: expected {} results, got {}",
                 pipeline.commands.len(),
                 values.len()
             )));
@@ -584,7 +608,7 @@ impl Client {
             .collect())
     }
 
-    /// Apre una connessione pub/sub dedicata (come `Redis.pubsub()`).
+    /// Opens a dedicated pub/sub connection.
     pub async fn pubsub(&self) -> Result<PubSubConnection, Error> {
         self.ensure_process();
         let pubsub = self
@@ -603,14 +627,14 @@ impl Client {
     }
 }
 
-/// Messaggio pub/sub (solo canali: il backend non usa i pattern).
+/// Pub/sub channel message; pattern subscriptions are not used by the backend.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PubSubMessage {
     pub channel: String,
     pub payload: Bytes,
 }
 
-/// Connessione pub/sub su socket dedicato.
+/// Pub/sub connection with a dedicated socket.
 pub struct PubSubConnection {
     sink: Mutex<PubSubSink>,
     stream: Mutex<Option<PubSubStream>>,
@@ -622,20 +646,18 @@ pub struct PubSubConnection {
 impl PubSubConnection {
     fn ensure_open(&self) -> Result<(), Error> {
         if self.closed.load(Ordering::Relaxed) {
-            return Err(Error::Connection("connessione pub/sub chiusa".to_string()));
+            return Err(Error::Connection("pub/sub connection closed".to_string()));
         }
         let pid = std::process::id();
         if self.pid.load(Ordering::Relaxed) != pid {
             return Err(Error::Connection(
-                "connessione pub/sub ereditata da un altro processo".to_string(),
+                "pub/sub connection inherited from another process".to_string(),
             ));
         }
         Ok(())
     }
 
-    /// Invia SUBSCRIBE senza attendere la conferma, come redis-py (che non
-    /// legge la risposta in `subscribe`). La conferma resta in volo sul
-    /// driver: il comando è già stato accodato al primo poll.
+    /// Queues SUBSCRIBE without waiting for its acknowledgment, matching redis-py.
     pub fn subscribe(&self, channels: &[String]) -> Result<(), Error> {
         self.ensure_open()?;
         if channels.is_empty() {
@@ -645,7 +667,7 @@ impl PubSubConnection {
         poll_send(sink.subscribe(channels))
     }
 
-    /// La conferma garantisce che il runtime abbia inviato il comando prima di close.
+    /// Waits for acknowledgment so the runtime sends the command before closure.
     pub async fn unsubscribe(&self, channels: &[String]) -> Result<(), Error> {
         self.ensure_open()?;
         if channels.is_empty() {
@@ -655,14 +677,13 @@ impl PubSubConnection {
         sink.unsubscribe(channels).await.map_err(Error::from_redis)
     }
 
-    /// Chiude la connessione: come `PubSub.close()` di redis-py non invia
-    /// comandi, scarta il socket.
+    /// Closes the socket without sending commands, matching redis-py PubSub.close.
     pub fn close(&self) {
         if self.closed.swap(true, Ordering::Relaxed) {
             return;
         }
         lock(&self.queue).clear();
-        // Droppare lo stream ferma il driver della connessione.
+
         lock(&self.stream).take();
     }
 
@@ -670,7 +691,7 @@ impl PubSubConnection {
         lock(&self.queue).pop_front()
     }
 
-    /// Attende un messaggio al massimo `timeout`; `None` = indefinitamente.
+    // Waits up to the timeout for a message; None waits indefinitely.
     async fn read_once(&self, timeout: Option<Duration>) -> Result<Option<PubSubMessage>, Error> {
         self.ensure_open()?;
         if let Some(message) = self.pop_queued() {
@@ -683,7 +704,7 @@ impl PubSubConnection {
         let result: Option<Option<PubSubMessage>> = match timeout {
             None => Some(wait_message(&mut stream).await),
             Some(duration) if duration.is_zero() => poll_now(&mut stream),
-            // Timeout: nessun messaggio, la connessione è ancora viva.
+
             Some(duration) => tokio::time::timeout(duration, wait_message(&mut stream))
                 .await
                 .ok(),
@@ -692,19 +713,17 @@ impl PubSubConnection {
             *lock(&self.stream) = Some(stream);
         }
         match result {
-            // timeout o nessun dato pronto
             None => Ok(None),
             Some(Some(message)) => Ok(Some(message)),
-            // Stream terminato senza che il chiamante avesse chiuso: il
-            // server ha chiuso il socket. redis-py solleverebbe
-            // ConnectionError e il backend riconnette (_reconnect_pubsub).
+            // An unexpected stream end means server disconnection; raise a connection error
+            // so Python's _reconnect_pubsub can reconnect.
             Some(None) => Err(Error::Connection(
-                "connessione pub/sub chiusa dal server".to_string(),
+                "pub/sub connection closed by server".to_string(),
             )),
         }
     }
 
-    /// `can_read(timeout=0)` di redis-py: un messaggio già disponibile.
+    /// Returns an already available message, matching can_read(timeout=0).
     pub async fn can_read(&self, timeout: Option<Duration>) -> Result<bool, Error> {
         self.ensure_open()?;
         if !lock(&self.queue).is_empty() {
@@ -718,7 +737,7 @@ impl PubSubConnection {
         Ok(false)
     }
 
-    /// `get_message(timeout)` di redis-py.
+    /// Gets a message with redis-py's timeout semantics.
     pub async fn get_message(
         &self,
         timeout: Option<Duration>,
@@ -729,17 +748,17 @@ impl PubSubConnection {
     fn buffer(&self, message: PubSubMessage) {
         let mut queue = lock(&self.queue);
         if queue.len() >= PUBSUB_QUEUE_LIMIT {
-            // Coda piena: il chiamante non sta leggendo. Si scarta il più
-            // vecchio, come una coda limitata con overflow esplicito.
+            // Bound memory by dropping the oldest message when the caller falls behind.
             queue.pop_front();
         }
         queue.push_back(message);
     }
 }
 
-/// Accoda il comando e ritorna subito: `Ready` se il sink l'ha rifiutato,
-/// `Pending` quando la conferma è in volo (non serve aspettarla).
-fn poll_send(future: impl std::future::Future<Output = ::redis::RedisResult<()>>) -> Result<(), Error> {
+// Queues a command without waiting for acknowledgment; Ready indicates rejection.
+fn poll_send(
+    future: impl std::future::Future<Output = ::redis::RedisResult<()>>,
+) -> Result<(), Error> {
     let mut future = Box::pin(future);
     let waker = std::task::Waker::noop();
     let mut context = Context::from_waker(waker);
@@ -754,7 +773,7 @@ async fn wait_message(stream: &mut PubSubStream) -> Option<PubSubMessage> {
     message_to_pubsub(message)
 }
 
-/// `None` = in attesa; `Some(None)` = stream terminato; `Some(Some(_))` = messaggio.
+// Distinguishes pending, terminated and ready message states.
 fn poll_now(stream: &mut PubSubStream) -> Option<Option<PubSubMessage>> {
     let waker = std::task::Waker::noop();
     let mut context = Context::from_waker(waker);
@@ -773,8 +792,7 @@ fn message_to_pubsub(message: ::redis::Msg) -> Option<PubSubMessage> {
 
 fn install_crypto_provider_if_needed(address: &Address) {
     if matches!(address, Address::Tls { .. }) {
-        // Una sola installazione per processo; se un'altra libreria l'ha già
-        // fatto, `install_default` restituisce un errore innocuo.
+        // Installing a provider twice is harmless; another library may have installed it.
         static ONCE: std::sync::Once = std::sync::Once::new();
         ONCE.call_once(|| {
             let _ = rustls::crypto::ring::default_provider().install_default();
@@ -874,7 +892,13 @@ mod tests {
     #[test]
     fn reply_types_follow_redis_py() {
         for ttl in [-2, -1, 60] {
-            assert_eq!(Command::Ttl { key: Bytes::from_static(b"k") }.decode(Value::Int(ttl)), Reply::Int(ttl));
+            assert_eq!(
+                Command::Ttl {
+                    key: Bytes::from_static(b"k")
+                }
+                .decode(Value::Int(ttl)),
+                Reply::Int(ttl)
+            );
         }
         assert_eq!(
             Command::Set {
@@ -908,27 +932,26 @@ mod tests {
                 Value::BulkString(b"v".to_vec()),
                 Value::Nil
             ])),
-            Reply::Array(vec![
-                Reply::Bytes(Bytes::from_static(b"v")),
-                Reply::Nil
-            ])
+            Reply::Array(vec![Reply::Bytes(Bytes::from_static(b"v")), Reply::Nil])
         );
     }
 
     #[test]
     fn error_kinds_map_to_redis_py_exceptions() {
-        let error: ::redis::RedisError = (::redis::ErrorKind::AuthenticationFailed, "no auth").into();
-        assert!(matches!(Error::from_redis(error), Error::Authentication(_)));
         let error: ::redis::RedisError =
-            (::redis::ErrorKind::Server(::redis::ServerErrorKind::ResponseError), "bad type").into();
+            (::redis::ErrorKind::AuthenticationFailed, "no auth").into();
+        assert!(matches!(Error::from_redis(error), Error::Authentication(_)));
+        let error: ::redis::RedisError = (
+            ::redis::ErrorKind::Server(::redis::ServerErrorKind::ResponseError),
+            "bad type",
+        )
+            .into();
         assert!(matches!(Error::from_redis(error), Error::Response(_)));
         let error: ::redis::RedisError = (::redis::ErrorKind::InvalidClientConfig, "bad").into();
         assert!(matches!(Error::from_redis(error), Error::Invalid(_)));
     }
 
-    // ------------------------------------------------------------------
-    // Test contro Redis reale (db 14, chiavi univoche: nessun FLUSH).
-    // ------------------------------------------------------------------
+    // Real Redis tests use unique keys in database 14 without flushing.
 
     fn test_url() -> String {
         std::env::var("CELERY_RS_REDIS_URL")
@@ -1070,10 +1093,7 @@ mod tests {
             client
                 .execute(Command::ZAdd {
                     key: zset.clone(),
-                    pairs: vec![
-                        (bytes(b"1"), bytes(b"a")),
-                        (bytes(b"+inf"), bytes(b"b")),
-                    ],
+                    pairs: vec![(bytes(b"1"), bytes(b"a")), (bytes(b"+inf"), bytes(b"b")),],
                 })
                 .await
                 .expect("ZADD"),
@@ -1143,10 +1163,12 @@ mod tests {
         subscriber
             .subscribe(&[String::from_utf8_lossy(&channel).into_owned()])
             .expect("subscribe");
-        assert!(!subscriber
-            .can_read(Some(Duration::from_millis(0)))
-            .await
-            .expect("can_read"));
+        assert!(
+            !subscriber
+                .can_read(Some(Duration::from_millis(0)))
+                .await
+                .expect("can_read")
+        );
         assert_eq!(
             client
                 .execute(Command::Publish {
@@ -1157,15 +1179,17 @@ mod tests {
                 .expect("PUBLISH"),
             Reply::Int(1)
         );
-        assert!(subscriber
-            .can_read(Some(Duration::from_secs(5)))
-            .await
-            .expect("can_read"));
+        assert!(
+            subscriber
+                .can_read(Some(Duration::from_secs(5)))
+                .await
+                .expect("can_read")
+        );
         let message = subscriber
             .get_message(Some(Duration::from_secs(1)))
             .await
             .expect("get_message")
-            .expect("messaggio");
+            .expect("message");
         assert_eq!(message.payload, Bytes::from_static(b"payload"));
         assert_eq!(message.channel.as_bytes(), channel.as_ref());
         subscriber
@@ -1173,16 +1197,21 @@ mod tests {
             .await
             .expect("unsubscribe");
         assert_eq!(
-            client.execute(Command::Publish {
-                channel,
-                message: Bytes::from_static(b"after unsubscribe"),
-            }).await.expect("PUBLISH"),
+            client
+                .execute(Command::Publish {
+                    channel,
+                    message: Bytes::from_static(b"after unsubscribe"),
+                })
+                .await
+                .expect("PUBLISH"),
             Reply::Int(0),
         );
         subscriber.close();
-        assert!(subscriber
-            .get_message(Some(Duration::from_millis(1)))
-            .await
-            .is_err());
+        assert!(
+            subscriber
+                .get_message(Some(Duration::from_millis(1)))
+                .await
+                .is_err()
+        );
     }
 }

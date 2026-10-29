@@ -1,4 +1,4 @@
-//! Binding Python del core beat: parser crontab e calcolo del prossimo `ffwd`.
+//! Python bindings for crontab parsing and ffwd calendar calculations.
 
 use pyo3::create_exception;
 use pyo3::exceptions::{PyException, PyIndexError, PyRuntimeError, PyValueError};
@@ -8,7 +8,7 @@ use celery_beat::{CronSpec, Error, FfwdArgs, LastRun};
 
 create_exception!(_celery_rs, CronParseError, PyException);
 
-/// Argomenti di `ffwd`: `(year, month, weeks, weekday, day, hour, minute)`.
+/// ffwd arguments: year, month, weeks, weekday, day, hour and minute.
 type FfwdTuple = (
     Option<i32>,
     Option<u32>,
@@ -29,13 +29,13 @@ fn to_py_err(error: Error) -> PyErr {
     }
 }
 
-/// `crontab_parser(max_, min_).parse(spec)`: stessi risultati e stessi errori.
+/// Parses a crontab field with the reference's results and errors.
 #[pyfunction]
 pub fn cron_parse(spec: &str, max_: i64, min_: i64) -> PyResult<Vec<i64>> {
     celery_beat::parse(spec, max_, min_).map_err(to_py_err)
 }
 
-/// Campi di un crontab già espansi, compatti per il percorso caldo.
+/// Compact expanded crontab fields.
 #[pyclass(module = "_celery_rs", name = "CronSpec")]
 pub struct PyCronSpec {
     inner: CronSpec,
@@ -97,7 +97,7 @@ impl PyCronSpec {
         Ok(ffwd_tuple(args))
     }
 
-    /// `crontab._delta_to_next(last_run_at, next_hour, next_minute)`.
+    /// Returns the next calendar delta using crontab._delta_to_next semantics.
     fn delta_to_next(
         &self,
         year: i32,

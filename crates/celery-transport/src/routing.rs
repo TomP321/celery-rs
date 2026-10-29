@@ -1,20 +1,14 @@
-//! Routing virtuale direct/topic/fanout, come
-//! `kombu/transport/virtual/exchange.py`.
-//!
-//! Le stringhe di pattern prodotte da [`key_to_pattern`] sono **byte-identiche**
-//! a quelle di kombu: finiscono nel set `_kombu.binding.<exchange>` di Redis e
-//! devono restare leggibili da kombu. Il matching usa la regex crate dopo aver
-//! tradotto gli escape in sintassi Rust.
+//! Virtual exchange routing with byte-identical kombu patterns stored in Redis binding sets.
+//! Matching converts Python regex escapes to Rust syntax.
 
 use compact_str::CompactString;
 use regex::Regex;
 
 use crate::transport::{Error, ExchangeType, Result};
 
-/// Caratteri che kombu lascia non escapati in `escape_regex`.
 const SAFE: &str = ".#*";
 
-/// Replica `kombu.utils.text.escape_regex`.
+/// Escapes regex characters using kombu's rules.
 pub fn escape_regex(input: &str, white: &str) -> String {
     let mut out = String::with_capacity(input.len() + 8);
     for ch in input.chars() {
@@ -30,7 +24,7 @@ pub fn escape_regex(input: &str, white: &str) -> String {
     out
 }
 
-/// Replica `TopicExchange.key_to_pattern`: `<routing_key>` -> regex Python.
+/// Converts a routing key to a Python regex using kombu's topic rules.
 pub fn key_to_pattern(routing_key: &str) -> String {
     let escaped = escape_regex(routing_key, SAFE);
     let mut pattern = String::with_capacity(escaped.len() + 8);
@@ -49,10 +43,8 @@ pub fn key_to_pattern(routing_key: &str) -> String {
     pattern
 }
 
-/// Converte un pattern in sintassi Python (`re`) in sintassi `regex` di Rust.
-///
-/// `escape_regex` produce `\X` anche per caratteri che in Rust non sono
-/// metacaratteri (`\/`, `\_`, `\€`): lì il backslash va tolto.
+// Converts Python regex escapes to Rust syntax, removing backslashes from
+// characters that Rust does not treat as metacharacters.
 fn translate_pattern(pattern: &str) -> String {
     let mut out = String::with_capacity(pattern.len());
     let chars: Vec<char> = pattern.chars().collect();
@@ -68,7 +60,7 @@ fn translate_pattern(pattern: &str) -> String {
             out.push('\\');
             break;
         };
-        // escape_regex usa \000 per il NUL.
+        // kombu's escape_regex represents NUL as \\000.
         if next == '0' && chars.get(index + 2) == Some(&'0') && chars.get(index + 3) == Some(&'0') {
             out.push_str("\\x00");
             index += 4;
@@ -90,7 +82,7 @@ fn is_regex_meta(ch: char) -> bool {
     )
 }
 
-/// Matcher topic: regex compilata una volta per binding.
+/// Topic matcher compiled once per binding.
 #[derive(Debug, Clone)]
 pub struct TopicMatcher {
     pattern: CompactString,
@@ -98,7 +90,7 @@ pub struct TopicMatcher {
 }
 
 impl TopicMatcher {
-    /// Compila un pattern nel formato prodotto da [`key_to_pattern`].
+    /// Compiles a pattern produced by [`key_to_pattern`].
     pub fn new(pattern: &str) -> Result<Self> {
         let translated = translate_pattern(pattern);
         let regex = Regex::new(&translated)
@@ -109,17 +101,17 @@ impl TopicMatcher {
         })
     }
 
-    /// Pattern originale (quello di kombu, per il broker).
+    /// Returns the original kombu pattern for storage on the broker.
     pub fn pattern(&self) -> &str {
         &self.pattern
     }
 
-    /// `re.match` di Python: match ancorato all'inizio (il pattern è `^...$`).
+    /// Matches from the start, using Python re.match semantics.
     pub fn is_match(&self, routing_key: &str) -> bool {
         if self.regex.is_match(routing_key) {
             return true;
         }
-        // In Python `$` combacia anche prima di un singolo newline finale.
+        // Python's `$` also matches before a single trailing newline.
         match routing_key.strip_suffix('\n') {
             Some(stripped) => self.regex.is_match(stripped),
             None => false,
@@ -127,7 +119,7 @@ impl TopicMatcher {
     }
 }
 
-/// Binding preparato: routing key, pattern (solo topic) e matcher compilato.
+/// Prepared routing key with an optional topic pattern and compiled matcher.
 #[derive(Debug, Clone)]
 pub struct PreparedBinding {
     pub queue: CompactString,
@@ -137,7 +129,7 @@ pub struct PreparedBinding {
 }
 
 impl PreparedBinding {
-    /// Prepara un binding per `exchange_type` (come `ExchangeType.prepare_bind`).
+    /// Prepares a binding using kombu's exchange rules.
     pub fn new(exchange_type: ExchangeType, queue: &str, routing_key: &str) -> Result<Self> {
         let (pattern, matcher) = match exchange_type {
             ExchangeType::Topic => {
@@ -155,7 +147,7 @@ impl PreparedBinding {
         })
     }
 
-    /// Vera se il binding intercetta `routing_key` per questo tipo di exchange.
+    /// Returns whether the binding matches a routing key for this exchange type.
     pub fn matches(&self, exchange_type: ExchangeType, routing_key: &str) -> bool {
         match exchange_type {
             ExchangeType::Direct => self.routing_key == routing_key,
@@ -164,7 +156,7 @@ impl PreparedBinding {
                 .as_ref()
                 .is_some_and(|matcher| matcher.is_match(routing_key)),
             ExchangeType::Fanout => true,
-            // I trasporti virtuali non hanno exchange headers: nessun match.
+            // Virtual transports do not support headers exchanges.
             ExchangeType::Headers => false,
         }
     }
@@ -174,8 +166,7 @@ impl PreparedBinding {
 mod tests {
     use super::*;
 
-    /// Tabella generata con `kombu.transport.virtual.exchange.TopicExchange.lookup`
-    /// (vedi `tests/fixtures/topic_routing.tsv`).
+    // Generated with kombu's TopicExchange.lookup; see tests/fixtures/topic_routing.tsv.
     const TOPIC_CASES: &str = include_str!("../tests/fixtures/topic_routing.tsv");
 
     #[test]
@@ -186,10 +177,10 @@ mod tests {
             let binding = fields.next().expect("binding key");
             let published = fields.next().expect("published key");
             let expected_pattern = fields.next().expect("pattern");
-            let expected_hit = fields.next().expect("esito") == "1";
+            let expected_hit = fields.next().expect("outcome") == "1";
             let pattern = key_to_pattern(binding);
-            assert_eq!(pattern, expected_pattern, "pattern per {binding:?}");
-            let matcher = TopicMatcher::new(&pattern).expect("pattern compilabile");
+            assert_eq!(pattern, expected_pattern, "pattern for {binding:?}");
+            let matcher = TopicMatcher::new(&pattern).expect("compilable pattern");
             assert_eq!(
                 matcher.is_match(published),
                 expected_hit,
@@ -197,7 +188,7 @@ mod tests {
             );
             checked += 1;
         }
-        assert!(checked >= 900, "casi verificati: {checked}");
+        assert!(checked >= 900, "cases checked: {checked}");
     }
 
     #[test]
@@ -224,7 +215,7 @@ mod tests {
         assert!(!star.is_match("foo.bar"));
         assert!(!star.is_match(""));
 
-        // `#` non copre lo zero-words in kombu: "foo.#" non matcha "foo".
+        // kombu's `foo.#` does not match `foo` because the dot is required.
         let suffix = TopicMatcher::new(&key_to_pattern("foo.#")).expect("pattern");
         assert!(suffix.is_match("foo."));
         assert!(suffix.is_match("foo.bar.baz"));
@@ -255,7 +246,7 @@ mod tests {
 
     #[test]
     fn invalid_pattern_is_reported() {
-        let err = TopicMatcher::new("[").expect_err("pattern non valido");
+        let err = TopicMatcher::new("[").expect_err("invalid pattern");
         assert!(matches!(err, Error::InvalidPattern(_)));
     }
 }

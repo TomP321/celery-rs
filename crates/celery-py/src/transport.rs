@@ -1,8 +1,5 @@
-//! Binding Python minimale dei trasporti: `_celery_rs.Connection(url, transport_options)`.
-//!
-//! Il GIL viene rilasciato durante tutto l'I/O: tutti i dati Python sono
-//! convertiti in tipi Rust prima di entrare nel runtime tokio, e i risultati
-//! sono riconvertiti solo alla fine.
+//! Python transport bindings releasing the GIL for I/O. Python data is converted
+//! before entering tokio and results are converted after it returns.
 
 use crate::fork::ForkSafe;
 use std::future::Future;
@@ -30,21 +27,18 @@ use celery_transport::{
     PublishRequest, QueueBinding, QueueDecl, ReplyRoute, Transport, TransportOptions, Url,
 };
 
-/// Runtime tokio condiviso, single-thread, più il pid che l'ha creato.
-///
-/// Dopo `fork()` il runtime del padre non è più utilizzabile: il pid nella
-/// entry dice se va ricreato (lazy, al primo uso nel nuovo processo).
+/// Tracks the shared runtime's owning PID so children recreate it lazily after fork.
 struct RuntimeEntry {
     pid: u32,
     _fds: Vec<celery_worker::fds::Registration>,
     runtime: tokio::runtime::Runtime,
 }
 
-/// Le entry non vengono mai liberate: dopo fork si azzera solo il puntatore.
+/// Entries are never freed; fork resets only the pointer.
 static RUNTIME: AtomicPtr<RuntimeEntry> = AtomicPtr::new(ptr::null_mut());
 
-// La sonda identifica il driver per appartenenza, anche se altri thread
-// aprono contemporaneamente epoll propri. Nessun fd Python viene marcato.
+// Identify the driver's epoll by membership, excluding unrelated epoll instances
+// opened concurrently by other threads. Never mark Python descriptors.
 #[cfg(target_os = "linux")]
 fn runtime_fds(runtime: &tokio::runtime::Runtime) -> Result<Vec<i32>, String> {
     use std::os::fd::AsRawFd;
@@ -54,10 +48,10 @@ fn runtime_fds(runtime: &tokio::runtime::Runtime) -> Result<Vec<i32>, String> {
         .set_nonblocking(true)
         .map_err(|error| error.to_string())?;
     let _entered = runtime.enter();
-    // SAFETY: AsyncFd possiede lo UnixStream; nessun altro può chiuderne
-    // il descrittore o cambiarlo fino alla distruzione della sonda.
-    let probe = unsafe { tokio::io::unix::AsyncFd::register(probe) }
-        .map_err(|error| error.to_string())?;
+    // SAFETY: AsyncFd owns the UnixStream; no other owner can close or replace its
+    // descriptor until the probe is destroyed.
+    let probe =
+        unsafe { tokio::io::unix::AsyncFd::register(probe) }.map_err(|error| error.to_string())?;
     let probe_fd = probe.as_raw_fd();
     let entries = std::fs::read_dir("/proc/self/fd").map_err(|error| error.to_string())?;
     let mut fds = Vec::new();
@@ -88,7 +82,7 @@ fn runtime_fds(runtime: &tokio::runtime::Runtime) -> Result<Vec<i32>, String> {
         }
     }
     if fds.is_empty() {
-        return Err("driver epoll tokio non trovato".into());
+        return Err("tokio epoll driver not found".into());
     }
     Ok(fds)
 }
@@ -104,9 +98,8 @@ pub fn _runtime_fds() -> std::collections::BTreeMap<i32, (u64, u64)> {
 }
 
 fn build_runtime() -> Result<tokio::runtime::Runtime, String> {
-    // Un worker thread (non il chiamante) guida driver I/O e timer anche
-    // quando il producer è a riposo: serve per gli heartbeat AMQP di lapin,
-    // che scadrebbero se il runtime fosse pollato solo durante `block_on`.
+    // A worker thread must drive I/O while producers are idle to keep lapin's AMQP
+    // heartbeats alive; polling only during block_on would let them expire.
     tokio::runtime::Builder::new_multi_thread()
         .worker_threads(1)
         .thread_name("celery-rs-io")
@@ -115,13 +108,13 @@ fn build_runtime() -> Result<tokio::runtime::Runtime, String> {
         .map_err(|error| error.to_string())
 }
 
-/// Runtime del processo corrente, creato al primo uso.
+/// Returns the current process's lazily created runtime.
 pub(crate) fn runtime() -> Result<&'static tokio::runtime::Runtime, String> {
     let pid = std::process::id();
     loop {
         let current = RUNTIME.load(Ordering::Acquire);
         if !current.is_null() {
-            // SAFETY: le entry non vengono liberate (vedi `after_fork`).
+            // SAFETY: entries are never freed, including after fork.
             let entry = unsafe { &*current };
             if entry.pid == pid {
                 return Ok(&entry.runtime);
@@ -139,25 +132,21 @@ pub(crate) fn runtime() -> Result<&'static tokio::runtime::Runtime, String> {
         }));
         match RUNTIME.compare_exchange(current, fresh, Ordering::AcqRel, Ordering::Acquire) {
             Ok(_) => {
-                // SAFETY: `fresh` è stato appena pubblicato e resta vivo.
+                // SAFETY: fresh was just published and remains alive.
                 let entry: &'static RuntimeEntry = unsafe { &*fresh };
                 return Ok(&entry.runtime);
             }
             Err(_) => {
-                // Un altro thread ha vinto la corsa: questo runtime non è mai
-                // stato usato, quindi si può distruggere.
-                // SAFETY: `fresh` è nostro e non è stato condiviso.
+                // Another thread installed its runtime first; this unused runtime can be destroyed.
+                // SAFETY: fresh is exclusively owned and was never shared.
                 drop(unsafe { Box::from_raw(fresh) });
             }
         }
     }
 }
 
-/// Scarta il runtime ereditato dal padre dopo `fork()`.
-///
-/// Va chiamata nel figlio (da `os.register_at_fork`): il prossimo uso crea un
-/// runtime nuovo. Il vecchio non viene distrutto — un runtime tokio forkato non
-/// si può chiudere in sicurezza — e resta confinato alla copia del padre.
+/// Abandons the inherited runtime in a fork child and creates a new one on next use.
+/// The old runtime cannot be safely shut down in the child and is intentionally leaked.
 #[pyfunction]
 pub fn after_fork() {
     let _ = RUNTIME.swap(ptr::null_mut(), Ordering::AcqRel);
@@ -171,7 +160,7 @@ pub(crate) fn block<T: Send>(
 }
 
 pub(crate) fn transport_error(error: TransportError) -> PyErr {
-    // Gli errori di connessione portano già il testo della libreria client.
+    // Connection failures already carry reference client error text.
     if let Some(message) = error.client_message() {
         return PyConnectionError::new_err(message);
     }
@@ -191,7 +180,7 @@ pub(crate) fn transport_error(error: TransportError) -> PyErr {
             method_name,
         } => amqp_precondition_failed(reply_code, reply_text, method_sig, method_name),
         TransportError::Connect { .. } => PyConnectionError::new_err(error.to_string()),
-        // Come il QoS di kombu, che solleva `KeyError(delivery_tag)`.
+        // Match kombu QoS's KeyError(delivery_tag).
         TransportError::UnknownDeliveryTag(tag) => PyKeyError::new_err(tag),
         TransportError::ConnectionLost(message) | TransportError::Connection(message) => {
             PyConnectionError::new_err(message)
@@ -200,11 +189,8 @@ pub(crate) fn transport_error(error: TransportError) -> PyErr {
     }
 }
 
-/// `amqp.exceptions.PreconditionFailed` con gli stessi attributi di py-amqp
-/// (`str()` identico: `Exchange.declare: (406) PRECONDITION_FAILED ...`).
-///
-/// `amqp` è importato solo qui: sul percorso di pubblicazione normale non
-/// serve e non va caricato.
+/// Builds py-amqp's PreconditionFailed with matching attributes and text. Import
+/// amqp only on this error path to avoid loading it during normal publication.
 fn amqp_precondition_failed(
     reply_code: u16,
     reply_text: String,
@@ -223,13 +209,13 @@ fn amqp_precondition_failed(
     })
 }
 
-/// `dict` Python -> [`Headers`] ordinati.
+/// Converts a Python dictionary to ordered headers.
 pub(crate) fn py_to_headers(dict: &Bound<'_, PyDict>) -> PyResult<Headers> {
     let mut headers = Headers::with_capacity(dict.len());
     for (key, value) in dict.iter() {
         let key = key
             .cast::<PyString>()
-            .map_err(|_| PyTypeError::new_err("le chiavi devono essere stringhe"))?
+            .map_err(|_| PyTypeError::new_err("keys must be strings"))?
             .to_str()?;
         headers.insert(key, py_to_value(&value)?);
     }
@@ -288,7 +274,7 @@ fn py_to_value(value: &Bound<'_, PyAny>) -> PyResult<HeaderValue> {
     if let Ok(text) = value.cast::<PyString>() {
         return Ok(HeaderValue::Str(CompactString::from(
             text.to_str().map_err(|_| {
-                PyValueError::new_err("stringa non rappresentabile in UTF-8 nei messaggi")
+                PyValueError::new_err("message string cannot be represented as UTF-8")
             })?,
         )));
     }
@@ -326,7 +312,7 @@ fn py_to_value(value: &Bound<'_, PyAny>) -> PyResult<HeaderValue> {
         return decimal_from_python(value);
     }
     Err(PyTypeError::new_err(format!(
-        "tipo non supportato nei messaggi: {}",
+        "unsupported message type: {}",
         value.get_type().name()?
     )))
 }
@@ -342,28 +328,26 @@ fn decimal_from_python(value: &Bound<'_, PyAny>) -> PyResult<HeaderValue> {
         mantissa = mantissa
             .checked_mul(10)
             .and_then(|current| current.checked_add(i128::from(digit)))
-            .ok_or_else(|| PyValueError::new_err("Decimal troppo grande per AMQP"))?;
+            .ok_or_else(|| PyValueError::new_err("decimal too large for AMQP"))?;
     }
     let mut scale: u64 = 0;
     if exponent < 0 {
-        // `unsigned_abs` gestisce anche i32::MIN senza overflow.
+        // unsigned_abs handles i32::MIN without overflow.
         scale = i64::from(exponent).unsigned_abs();
     } else if exponent > 0 {
-        // Esponente positivo (es. Decimal("1E+3")): scala 0 e fattore 10^exp.
         let factor = 10i128
             .checked_pow(exponent.unsigned_abs())
-            .ok_or_else(|| PyValueError::new_err("Decimal troppo grande per AMQP"))?;
+            .ok_or_else(|| PyValueError::new_err("decimal too large for AMQP"))?;
         mantissa = mantissa
             .checked_mul(factor)
-            .ok_or_else(|| PyValueError::new_err("Decimal troppo grande per AMQP"))?;
+            .ok_or_else(|| PyValueError::new_err("decimal too large for AMQP"))?;
     }
     if sign != 0 {
         mantissa = -mantissa;
     }
-    let value = i32::try_from(mantissa)
-        .map_err(|_| PyValueError::new_err("Decimal fuori intervallo per AMQP"))?;
-    let scale =
-        u8::try_from(scale).map_err(|_| PyValueError::new_err("scala del Decimal non valida"))?;
+    let value =
+        i32::try_from(mantissa).map_err(|_| PyValueError::new_err("decimal outside AMQP range"))?;
+    let scale = u8::try_from(scale).map_err(|_| PyValueError::new_err("invalid decimal scale"))?;
     Ok(HeaderValue::Decimal(celery_transport::Decimal {
         scale,
         value,
@@ -448,7 +432,7 @@ fn tag_to_py<'py>(py: Python<'py>, tag: &DeliveryTag) -> PyResult<Bound<'py, PyA
 pub(crate) fn tag_from_py(tag: &Bound<'_, PyAny>) -> PyResult<DeliveryTag> {
     if tag.cast::<PyBool>().is_ok() {
         return Err(PyTypeError::new_err(
-            "delivery_tag deve essere int o str, non bool",
+            "delivery_tag must be int or str, not bool",
         ));
     }
     if let Ok(number) = tag.cast::<PyInt>() {
@@ -457,7 +441,7 @@ pub(crate) fn tag_from_py(tag: &Bound<'_, PyAny>) -> PyResult<DeliveryTag> {
     if let Ok(text) = tag.cast::<PyString>() {
         return Ok(DeliveryTag::from(text.to_str()?));
     }
-    Err(PyTypeError::new_err("delivery_tag deve essere int o str"))
+    Err(PyTypeError::new_err("delivery_tag must be int or str"))
 }
 
 pub(crate) fn body_from_py(body: &Bound<'_, PyAny>) -> PyResult<Bytes> {
@@ -467,11 +451,10 @@ pub(crate) fn body_from_py(body: &Bound<'_, PyAny>) -> PyResult<Bytes> {
     if let Ok(bytes) = body.cast::<PyByteArray>() {
         return Ok(Bytes::from(bytes.to_vec()));
     }
-    Err(PyTypeError::new_err("body deve essere bytes o bytearray"))
+    Err(PyTypeError::new_err("body must be bytes or bytearray"))
 }
 
-/// `retry_policy` Python -> [`RetryPolicy`]; le chiavi sconosciute (es.
-/// `errback`) sono ignorate perché gestite nel guscio Python.
+/// Converts a Python retry policy, ignoring keys handled by the Python shell.
 pub(crate) fn retry_policy_from_py(
     dict: Option<&Bound<'_, PyDict>>,
 ) -> PyResult<celery_transport::RetryPolicy> {
@@ -482,7 +465,7 @@ pub(crate) fn retry_policy_from_py(
     for (key, value) in dict.iter() {
         let key = key
             .cast::<PyString>()
-            .map_err(|_| PyTypeError::new_err("retry_policy: le chiavi devono essere stringhe"))?
+            .map_err(|_| PyTypeError::new_err("retry_policy: keys must be strings"))?
             .to_str()?;
         match key {
             "enabled" => policy.enabled = value.is_truthy()?,
@@ -505,10 +488,10 @@ pub(crate) fn retry_policy_from_py(
 fn seconds(value: &Bound<'_, PyAny>, key: &str) -> PyResult<Duration> {
     let seconds: f64 = value
         .extract()
-        .map_err(|_| PyTypeError::new_err(format!("retry_policy[{key}]: atteso un numero")))?;
+        .map_err(|_| PyTypeError::new_err(format!("retry_policy[{key}]: expected a number")))?;
     if !seconds.is_finite() || seconds < 0.0 {
         return Err(PyValueError::new_err(format!(
-            "retry_policy[{key}]: atteso un numero non negativo"
+            "retry_policy[{key}]: expected a nonnegative number"
         )));
     }
     Ok(Duration::from_secs_f64(seconds))
@@ -521,15 +504,14 @@ struct StreamState {
     consumer: Consumer,
 }
 
-/// Limite di messaggi restituiti da una singola `drain`: evita di accumulare
-/// indefinitamente se un produttore pubblica senza sosta.
+/// Bounds one drain call so continuous publication cannot grow the result indefinitely.
 const DRAIN_BATCH_LIMIT: usize = 1000;
 
-/// Connessione a un broker: stessa API per tutti i trasporti di `connect`.
+/// Broker connection sharing one API across transports.
 #[pyclass(module = "_celery_rs")]
 pub struct Connection {
     transport: ForkSafe<Box<dyn Transport>>,
-    /// Trasporto virtuale: aggiunge `delivery_info`/`body_encoding`/`delivery_tag`.
+    /// Whether virtual delivery metadata must be added.
     virtual_transport: bool,
     body_encoding: CompactString,
     stream: ForkSafe<Mutex<Option<StreamState>>>,
@@ -539,16 +521,13 @@ pub struct Connection {
 impl Connection {
     fn ensure_open(&self) -> PyResult<()> {
         if self.closed.load(Ordering::Relaxed) {
-            return Err(PyConnectionError::new_err("connessione chiusa"));
+            return Err(PyConnectionError::new_err("connection closed"));
         }
         Ok(())
     }
 
-    /// Attende almeno un messaggio e raccoglie tutti quelli subito disponibili.
-    ///
-    /// Se il consumatore esiste già, prefetch e code vengono aggiornati a
-    /// runtime (`ConsumerControl`) senza ricrearlo, preservando i messaggi in
-    /// volo.
+    /// Waits for one message, then collects immediately available messages. Existing
+    /// consumers update prefetch and queues in place to preserve pending deliveries.
     fn collect(
         &self,
         queues: Vec<CompactString>,
@@ -564,8 +543,7 @@ impl Connection {
             .stream
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        // `no_ack` vale per l'intero consumatore: cambiarlo richiede di
-        // ricrearlo (le consegne in volo del vecchio restano al broker).
+        // Changing no_ack requires a new consumer; the broker retains old pending deliveries.
         if guard.as_ref().is_some_and(|state| state.no_ack != no_ack) {
             if let Some(state) = guard.as_ref() {
                 let control = Arc::clone(&state.consumer.control);
@@ -588,7 +566,7 @@ impl Connection {
         }
         let state = guard
             .as_mut()
-            .ok_or_else(|| PyRuntimeError::new_err("stream non inizializzato"))?;
+            .ok_or_else(|| PyRuntimeError::new_err("stream not initialized"))?;
 
         if state.prefetch != prefetch {
             block(state.consumer.control.set_prefetch(prefetch))?;
@@ -626,7 +604,7 @@ impl Connection {
                         Err(_) => return Ok(deliveries),
                     }
                 }
-                // timeout <= 0: un solo poll, senza attendere.
+
                 Some(_) => poll_now(stream),
             };
             match first {
@@ -647,8 +625,7 @@ impl Connection {
             Ok(deliveries)
         })?;
         if no_ack {
-            // I trasporti senza `no_ack` nativo delegano a `consume`: le
-            // consegne vanno confermate subito. Per AMQP `ack` è un no-op.
+            // Fallback no_ack implementations need immediate acknowledgment; AMQP's ack is a no-op.
             drop(guard);
             for delivery in &deliveries {
                 block(self.transport.ack(&delivery.delivery_tag))?;
@@ -662,7 +639,6 @@ async fn next(stream: &mut DeliveryStream) -> Option<Result<Delivery, TransportE
     std::future::poll_fn(|cx| stream.as_mut().poll_next(cx)).await
 }
 
-/// Un solo poll, senza attesa: usato per svuotare i messaggi già pronti.
 fn poll_now(stream: &mut DeliveryStream) -> Option<Result<Delivery, TransportError>> {
     let waker = std::task::Waker::noop();
     let mut context = Context::from_waker(waker);
@@ -682,13 +658,11 @@ pub(crate) fn delivery_to_py<'py>(
     let body = PyBytes::new(py, &delivery.message.body).into_any();
     let headers = headers_to_py(py, &delivery.message.headers)?.into_any();
     let mut properties = delivery.message.properties.clone().into_headers();
-    // delivery_info è sempre presente nel risultato; nei trasporti virtuali
-    // kombu lo tiene anche dentro properties.
+    // Virtual kombu transports also keep delivery_info inside properties.
     let delivery_info = PyDict::new(py);
     delivery_info.set_item("exchange", delivery.exchange.as_str())?;
     delivery_info.set_item("routing_key", delivery.routing_key.as_str())?;
-    // `redelivered` fa parte di delivery_info quando l'envelope lo riporta
-    // (ripristino dopo visibility timeout/requeue del trasporto Redis).
+    // Restore redelivered metadata from the Redis envelope after requeue or visibility timeout.
     if virtual_transport
         && let Some(HeaderValue::Map(info)) = properties.get("delivery_info")
         && let Some(redelivered) = info.get_bool("redelivered")
@@ -696,9 +670,8 @@ pub(crate) fn delivery_to_py<'py>(
         delivery_info.set_item("redelivered", redelivered)?;
     }
     if virtual_transport {
-        // Il worker li rimette in `properties` come
-        // `kombu.transport.virtual.base.Message`; `Connection.drain` mantiene
-        // il formato storico dei test differenziali (stessi campi di prima).
+        // Worker messages restore virtual properties as kombu does; Connection.drain
+        // preserves the format used by differential tests.
         if include_virtual_content_type {
             if let Some(content_type) = delivery.message.content_type.as_deref()
                 && !properties.contains_key("content_type")
@@ -728,17 +701,16 @@ pub(crate) fn delivery_to_py<'py>(
             HeaderValue::Str(CompactString::from(delivery.delivery_tag.to_string())),
         );
     } else {
-        // Come `amqp.Message.delivery_info` di kombu.
+        // Match kombu's amqp.Message.delivery_info.
         delivery_info.set_item("delivery_tag", tag_to_py(py, &delivery.delivery_tag)?)?;
         delivery_info.set_item("redelivered", delivery.redelivered)?;
     }
     let properties = headers_to_py(py, &properties)?;
     if virtual_transport {
-        // Stesso oggetto di `properties['delivery_info']`, come in kombu.
+        // Reuse the same delivery_info object as kombu does.
         properties.set_item("delivery_info", &delivery_info)?;
     } else {
-        // `kombu.transport.pyamqp.Message` espone content-type, encoding e
-        // header dentro `properties`, oltre che nei campi dedicati.
+        // kombu's pyamqp Message exposes content type, encoding and headers in properties too.
         if let Some(content_type) = delivery.message.content_type.as_deref() {
             properties.set_item("content_type", content_type)?;
         }
@@ -767,7 +739,7 @@ pub(crate) fn delivery_to_py<'py>(
 fn reply_route_from_py(dict: &Bound<'_, PyDict>) -> PyResult<ReplyRoute> {
     let text = |key: &str| -> PyResult<String> {
         dict.get_item(key)?
-            .ok_or_else(|| PyValueError::new_err(format!("reply[{key}]: mancante")))?
+            .ok_or_else(|| PyValueError::new_err(format!("reply[{key}]: missing")))?
             .extract::<String>()
     };
     let flag = |key: &str, default: bool| -> PyResult<bool> {
@@ -781,7 +753,7 @@ fn reply_route_from_py(dict: &Bound<'_, PyDict>) -> PyResult<ReplyRoute> {
         Some(value) if !value.is_none() => {
             let arguments = value
                 .cast::<PyDict>()
-                .map_err(|_| PyTypeError::new_err("reply['arguments'] deve essere un dict"))?;
+                .map_err(|_| PyTypeError::new_err("reply['arguments'] must be a dict"))?;
             py_to_headers(arguments)?
         }
         _ => Headers::new(),
@@ -978,7 +950,7 @@ impl Connection {
                 let mut properties = Headers::with_capacity(dict.len());
                 for (key, value) in dict.iter() {
                     let key = key.extract::<&str>()?;
-                    // py-amqp ignora le proprietà sconosciute senza convertirne i valori.
+                    // py-amqp ignores unknown properties without converting their values.
                     if matches!(
                         key,
                         "delivery_mode"
@@ -1002,9 +974,8 @@ impl Connection {
             Some(dict) => py_to_headers(dict)?.into(),
             None => Properties::new(),
         };
-        // Il Producer di kombu imposta sempre delivery_mode e priority; con
-        // `omit_priority` la proprietà non viene inviata (py-amqp la omette
-        // quando Celery passa `priority=None` per una coda esplicita).
+        // kombu sets delivery_mode and priority by default; py-amqp omits priority
+        // when Celery passes None for an explicit queue.
         match delivery_mode {
             Some(mode) => properties.set_delivery_mode(mode),
             None if properties.delivery_mode().is_none() => properties.set_delivery_mode(2),
@@ -1028,10 +999,7 @@ impl Connection {
         py.detach(|| block(self.transport.publish(request)))
     }
 
-    /// Comando remote-control: pubblica e raccoglie le risposte.
-    ///
-    /// Restituisce `(replies, unclaimed)`: liste di `(body, headers)` e, per
-    /// le risposte di altri ticket, `(ticket, body, headers)`.
+    /// Publishes a control command and returns replies plus unclaimed ticketed messages.
     #[allow(clippy::too_many_arguments)]
     #[pyo3(signature = (exchange, exchange_type, body, content_type=None, content_encoding=None, headers=None, reply=None, timeout=1.0, limit=None, ticket=None))]
     fn control_request<'py>(
@@ -1116,7 +1084,7 @@ impl Connection {
         Ok(out)
     }
 
-    /// `basic_get`: un messaggio dalla coda, senza passare dal consumatore.
+    /// Fetches one message independently of the consumer.
     #[pyo3(signature = (queue, no_ack=false))]
     fn get<'py>(
         &self,
@@ -1138,7 +1106,7 @@ impl Connection {
         }
     }
 
-    /// Cambia il prefetch del consumatore attivo (no-op se non esiste).
+    /// Changes the active consumer's prefetch, or does nothing if no consumer exists.
     fn set_prefetch(&self, py: Python<'_>, prefetch: u16) -> PyResult<()> {
         self.ensure_open()?;
         let mut guard = self
@@ -1223,8 +1191,7 @@ mod tests {
     #[test]
     fn runtime_is_rebuilt_after_fork_marker() {
         let before = runtime().expect("runtime");
-        // `after_fork` azzera il puntatore: il pid cambia solo nel figlio, ma
-        // qui verifichiamo che il runtime successivo venga ricreato.
+        // Verify after_fork recreates the runtime even without a PID change in this test.
         after_fork();
         let after = runtime().expect("runtime");
         assert!(!std::ptr::eq(before, after));
@@ -1233,8 +1200,7 @@ mod tests {
 
     #[test]
     fn runtime_zero_delay_is_sleep_free() {
-        // La politica di default non serve qui: verifichiamo solo che il
-        // runtime condiviso non richieda un secondo thread.
+        // Retry policy is irrelevant here; verify the runtime works with one worker thread.
         let runtime = runtime().expect("runtime");
         assert_eq!(runtime.block_on(async { 3 + 4 }), 7);
     }

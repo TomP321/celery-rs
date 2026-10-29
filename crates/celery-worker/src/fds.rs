@@ -1,4 +1,4 @@
-//! Registro dei soli descrittori Rust, consultato dal master prima del fork.
+//! Registry of Rust-owned descriptors inspected by the master before fork.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::os::fd::RawFd;
@@ -9,8 +9,8 @@ struct Registry {
     fds: Mutex<BTreeSet<RawFd>>,
 }
 
-// Un figlio crea un registro proprio senza toccare il mutex ereditato.
-// Le entry dei descrittori vivono solo quanto le risorse registrate.
+// Children create their own registry without touching an inherited mutex.
+// Entries live only as long as their registered resources.
 static FDS: std::sync::atomic::AtomicPtr<Registry> =
     std::sync::atomic::AtomicPtr::new(std::ptr::null_mut());
 
@@ -20,7 +20,7 @@ fn registry() -> &'static Registry {
     loop {
         let current = FDS.load(Ordering::Acquire);
         if !current.is_null() {
-            // SAFETY: i registri pubblicati non vengono mai liberati.
+            // SAFETY: published registries are never freed.
             let entry = unsafe { &*current };
             if entry.pid == pid {
                 return entry;
@@ -34,10 +34,10 @@ fn registry() -> &'static Registry {
             .compare_exchange(current, fresh, Ordering::AcqRel, Ordering::Acquire)
             .is_ok()
         {
-            // SAFETY: il registro appena pubblicato resta vivo nel processo.
+            // SAFETY: the newly published registry remains alive in this process.
             return unsafe { &*fresh };
         }
-        // SAFETY: questo registro non è mai stato pubblicato.
+        // SAFETY: this registry was never published.
         drop(unsafe { Box::from_raw(fresh) });
     }
 }
@@ -78,12 +78,12 @@ pub fn snapshot() -> BTreeMap<RawFd, (u64, u64)> {
     fds.iter()
         .filter_map(|&fd| {
             let mut stat = std::mem::MaybeUninit::<libc::stat>::uninit();
-            // SAFETY: il registro tiene viva la risorsa durante fstat; il buffer
-            // ha dimensione corretta e viene letto solo in caso di successo.
+            // SAFETY: registration keeps the resource alive during fstat; the correctly sized
+            // buffer is read only after success.
             if unsafe { libc::fstat(fd, stat.as_mut_ptr()) } != 0 {
                 return None;
             }
-            // SAFETY: fstat ha inizializzato tutti i campi della struttura.
+            // SAFETY: fstat initialized every field of the structure.
             let stat = unsafe { stat.assume_init() };
             Some((fd, (stat.st_dev, stat.st_ino)))
         })
@@ -92,7 +92,7 @@ pub fn snapshot() -> BTreeMap<RawFd, (u64, u64)> {
 
 #[derive(Debug)]
 pub struct Tracked<T> {
-    // L’ordine dei campi rimuove il numero dal registro prima della chiusura.
+    // Field order removes the descriptor from the registry before closing it.
     _registration: Registration,
     value: T,
 }

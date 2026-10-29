@@ -1,4 +1,4 @@
-//! Worker master: consumer, pool supervisor, control, eventi (vedi PLAN.md, fase 5).
+//! Worker master consumption, process supervision, control and events.
 
 pub mod consumer;
 pub mod fds;

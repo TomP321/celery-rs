@@ -1,36 +1,29 @@
-//! Framing binario master ⇄ figlio.
-//!
-//! Ogni frame è `[u32 lunghezza][u8 tipo][u64 job][payload]`, con la lunghezza
-//! che copre tipo, job e payload. Il payload è opaco per il supervisore (per
-//! i job è `pickle` di `(target, args, kwargs)` prodotto dal master Python;
-//! per i risultati è `pickle` del valore o dell'`ExceptionInfo`), così il
-//! master non decodifica mai il corpo dei task. Le due parti usano lo stesso
-//! formato: niente pickle per il trasporto, niente `serde_json::Value`.
+//! Binary master-child framing: length, type, job ID and opaque payload. The
+//! supervisor never decodes task bodies or pickled result values.
 
 use std::io::{self, Read};
 
 use bytes::{BufMut, Bytes, BytesMut};
 
-/// Lunghezza fissa di `[tipo][job]`.
+/// Fixed type and job ID length.
 pub const META_LEN: usize = 1 + 8;
 
-/// Lunghezza dell'header di lunghezza.
+/// Frame length prefix size.
 pub const LEN_LEN: usize = 4;
 
-/// Oltre questa dimensione il frame è considerato corrotto: evita di allocare
-/// memoria arbitraria leggendo un header sbagliato.
+/// Bounds allocation when a corrupt header claims an arbitrary frame size.
 pub const MAX_FRAME: usize = 256 * 1024 * 1024;
 
-/// Tipo di frame.
+/// Frame type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FrameKind {
-    /// Master → figlio: esegui il job.
+    /// Job from master to child.
     Task,
-    /// Figlio → master: job accettato (payload: `f64` monotonic del figlio).
+    /// Acceptance from child with its monotonic timestamp as f64.
     Ack,
-    /// Figlio → master: risultato (payload: `u8` successo + pickle).
+    /// Result from child with a success byte and pickled value.
     Ready,
-    /// Master → figlio: scarta i socket del backend sul broker riavviato.
+    /// Request to discard backend sockets after broker restart.
     ResetBackend,
 }
 
@@ -52,13 +45,13 @@ impl FrameKind {
             4 => Ok(Self::ResetBackend),
             other => Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                format!("tipo di frame sconosciuto: {other}"),
+                format!("unknown frame type: {other}"),
             )),
         }
     }
 }
 
-/// Un frame completo, con il payload ancora serializzato.
+/// Complete frame with its payload still serialized.
 #[derive(Debug, Clone)]
 pub struct Frame {
     pub kind: FrameKind,
@@ -71,7 +64,7 @@ impl Frame {
         Self { kind, job, payload }
     }
 
-    /// Header + eventuale payload, pronti per `write_vectored`.
+    /// Returns header and payload slices for vectored writes.
     pub fn header(&self) -> [u8; LEN_LEN + META_LEN] {
         let total = META_LEN + self.payload.len();
         let mut header = [0u8; LEN_LEN + META_LEN];
@@ -81,7 +74,7 @@ impl Frame {
         header
     }
 
-    /// Serializzazione completa (usata dai test e dal controllo zygote).
+    /// Serializes the frame for tests and zygote control.
     pub fn encode(&self) -> BytesMut {
         let header = self.header();
         let mut out = BytesMut::with_capacity(header.len() + self.payload.len());
@@ -91,7 +84,7 @@ impl Frame {
     }
 }
 
-/// Legge un frame da uno stream; `Ok(None)` su EOF pulito a inizio frame.
+/// Reads a frame, returning None for clean EOF at a frame boundary.
 pub fn read_frame(reader: &mut impl Read) -> io::Result<Option<Frame>> {
     let mut len = [0u8; LEN_LEN];
     let mut read = 0;
@@ -101,7 +94,7 @@ pub fn read_frame(reader: &mut impl Read) -> io::Result<Option<Frame>> {
             0 => {
                 return Err(io::Error::new(
                     io::ErrorKind::UnexpectedEof,
-                    "EOF a metà header",
+                    "eof in frame header",
                 ));
             }
             n => read += n,
@@ -111,13 +104,13 @@ pub fn read_frame(reader: &mut impl Read) -> io::Result<Option<Frame>> {
     if length < META_LEN {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
-            format!("frame troppo corto: {length}"),
+            format!("frame too short: {length}"),
         ));
     }
     if length > MAX_FRAME {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
-            format!("frame troppo grande: {length}"),
+            format!("frame too large: {length}"),
         ));
     }
     let mut body = vec![0u8; length];

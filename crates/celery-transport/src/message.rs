@@ -1,7 +1,4 @@
-//! Messaggi, header e proprietà condivisi da tutti i trasporti.
-//!
-//! Niente `serde_json::Value`: header e proprietà sono mappe ordinate (l'ordine di
-//! inserimento è quello del dizionario Python) di [`HeaderValue`] tipizzati.
+//! Shared messages with typed, insertion-ordered headers and properties matching Python dictionaries.
 
 use std::fmt;
 use std::ops::{Deref, DerefMut};
@@ -9,29 +6,26 @@ use std::ops::{Deref, DerefMut};
 use bytes::Bytes;
 use compact_str::CompactString;
 
-/// Valore di un header (o di una proprietà) di messaggio.
-///
-/// I tipi corrispondono a quelli che py-amqp/kombu sanno rappresentare in una
-/// tabella AMQP e a quelli che il JSON di kombu può veicolare.
+/// Message header or property value representable by py-amqp and kombu JSON.
 #[derive(Debug, Clone, PartialEq)]
 pub enum HeaderValue {
     Null,
     Bool(bool),
     Int(i64),
-    /// Intero che non entra in `i64`, in forma decimale.
+    /// Integer outside the i64 range, in decimal notation.
     BigInt(CompactString),
     Float(f64),
     Str(CompactString),
     Bytes(Bytes),
     List(Vec<HeaderValue>),
     Map(Headers),
-    /// Secondi dall'epoch Unix (tipo `T` di AMQP).
+    /// Unix epoch seconds (AMQP type `T`).
     Timestamp(i64),
-    /// Decimale AMQP (`D`): valore intero e numero di cifre decimali.
+    /// AMQP decimal (`D`) with an integer value and scale.
     Decimal(Decimal),
 }
 
-/// Decimale con segno come lo rappresenta AMQP.
+/// Signed AMQP decimal representation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Decimal {
     pub scale: u8,
@@ -156,18 +150,15 @@ impl From<Headers> for HeaderValue {
     }
 }
 
-/// Mappa ordinata `str -> HeaderValue` (ordine di inserimento, come `dict`).
-///
-/// Le mappe di header sono piccole (una decina di voci): una `Vec` ordina,
-/// resta compatta in cache e costa un solo `malloc`; la ricerca lineare è più
-/// veloce dell'hashing a queste dimensioni.
+/// Insertion-ordered header map. Small maps use one compact allocation; linear
+/// lookup avoids hashing overhead at typical header counts.
 #[derive(Debug, Clone, Default)]
 pub struct Headers {
     entries: Vec<(CompactString, HeaderValue)>,
 }
 
 impl PartialEq for Headers {
-    /// Uguaglianza da mappa (come `dict`): l'ordine di inserimento non conta.
+    // Compares maps regardless of insertion order, matching Python dictionaries.
     fn eq(&self, other: &Self) -> bool {
         self.entries.len() == other.entries.len()
             && self
@@ -188,8 +179,7 @@ impl Headers {
         }
     }
 
-    /// Inserisce o sostituisce un valore. Se la chiave esiste, la posizione
-    /// resta quella originale (come `dict[key] = value` in Python).
+    /// Inserts or replaces a value without moving an existing key.
     pub fn insert(
         &mut self,
         key: impl Into<CompactString>,
@@ -285,10 +275,7 @@ impl IntoIterator for Headers {
     }
 }
 
-/// Proprietà del messaggio (`properties` di kombu).
-///
-/// È la stessa mappa ordinata degli header; i metodi tipizzati coprono le
-/// proprietà AMQP che Celery usa davvero.
+/// Ordered kombu message properties with typed accessors for Celery's AMQP fields.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Properties(Headers);
 
@@ -399,7 +386,7 @@ impl From<Properties> for Headers {
     }
 }
 
-/// Tag di consegna: contatore per canale in AMQP, uuid4 nei trasporti virtuali.
+/// Delivery tag: per-channel counter in AMQP, UUID in virtual transports.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum DeliveryTag {
     Number(u64),
@@ -407,11 +394,11 @@ pub enum DeliveryTag {
 }
 
 impl DeliveryTag {
-    /// Nuovo tag per un trasporto virtuale (uuid4, come `kombu.utils.uuid`).
+    /// Creates a UUID tag for a virtual transport.
     pub fn uuid() -> Self {
         use std::fmt::Write as _;
         let mut buf = CompactString::new("");
-        // La scrittura su una stringa non può fallire.
+        // Writing to a String cannot fail.
         let _ = write!(buf, "{}", uuid::Uuid::new_v4());
         Self::Uuid(buf)
     }
@@ -458,7 +445,7 @@ impl From<CompactString> for DeliveryTag {
     }
 }
 
-/// Messaggio pubblicato o consegnato.
+/// Published or delivered message.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Message {
     pub body: Bytes,
@@ -497,12 +484,12 @@ impl Message {
     }
 }
 
-/// Messaggio consegnato da un consumatore.
+/// Message received by a consumer.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Delivery {
     pub message: Message,
     pub delivery_tag: DeliveryTag,
-    /// Exchange di pubblicazione (`""` per l'exchange anonimo).
+    /// Publication exchange, or an empty string for the default exchange.
     pub exchange: CompactString,
     pub routing_key: CompactString,
     pub redelivered: bool,

@@ -1,11 +1,11 @@
-//! Parsing degli URL dei broker (stessa sintassi di kombu) e `transport_options`.
+//! Broker URL parsing and transport options using kombu syntax.
 
 use compact_str::CompactString;
 
 use crate::message::{HeaderValue, Headers};
 use crate::transport::{Error, Result};
 
-/// Schema riconosciuto, nella forma in cui kombu lo espone in `Connection.info()`.
+/// Recognized transport scheme as exposed by kombu connection information.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TransportKind {
     Memory,
@@ -13,7 +13,7 @@ pub enum TransportKind {
     Rediss,
     Amqp,
     Amqps,
-    /// Alias storico di `amqp` (kombu lo risolve in `amqp`).
+    /// Historical AMQP alias resolved to amqp by kombu.
     PyAmqp,
 }
 
@@ -30,7 +30,7 @@ impl TransportKind {
         }
     }
 
-    /// Nome dello schema originale.
+    /// Returns the original scheme name.
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Memory => "memory",
@@ -42,7 +42,7 @@ impl TransportKind {
         }
     }
 
-    /// Nome risolto come `kombu.Connection.info()['transport']`.
+    /// Returns the transport name resolved as kombu does.
     pub fn resolved(self) -> &'static str {
         match self {
             Self::PyAmqp => "amqp",
@@ -50,7 +50,7 @@ impl TransportKind {
         }
     }
 
-    /// True per i trasporti virtuali (envelope con `body_encoding`/`delivery_tag`).
+    /// Returns whether the transport uses virtual message envelopes.
     pub fn is_virtual(self) -> bool {
         matches!(self, Self::Memory | Self::Redis | Self::Rediss)
     }
@@ -80,23 +80,23 @@ impl TransportKind {
     }
 }
 
-/// URL di connessione già scomposto.
+/// Parsed broker connection URL.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Url {
-    /// Schema originale, minuscolo (es. `pyamqp`).
+    /// Original lowercase scheme name.
     pub scheme: CompactString,
     pub kind: TransportKind,
     pub hostname: Option<CompactString>,
     pub port: Option<u16>,
     pub userid: Option<CompactString>,
     pub password: Option<CompactString>,
-    /// Path decodificato; `None` se assente.
+    /// Decoded path, or None when absent.
     pub virtual_host: Option<CompactString>,
-    /// Query string decodificata, nell'ordine dell'URL.
+    /// Decoded query parameters in URL order.
     pub query: Vec<(CompactString, CompactString)>,
 }
 
-/// Parametri effettivi, con i default del trasporto (come `Connection.info()`).
+/// Effective connection parameters including transport defaults.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UrlInfo {
     pub hostname: CompactString,
@@ -148,7 +148,7 @@ impl Url {
         let port = match port_raw {
             Some(text) if !text.is_empty() => Some(
                 text.parse::<u16>()
-                    .map_err(|_| Error::InvalidUrl(format!("porta non valida: {text}")))?,
+                    .map_err(|_| Error::InvalidUrl(format!("invalid port: {text}")))?,
             ),
             _ => None,
         };
@@ -169,17 +169,17 @@ impl Url {
         })
     }
 
-    /// Hostname effettivo (default `localhost`).
+    /// Returns the hostname, defaulting to localhost.
     pub fn hostname(&self) -> &str {
         self.hostname.as_deref().unwrap_or("localhost")
     }
 
-    /// Virtual host effettivo (default `/`).
+    /// Returns the virtual host, defaulting to `/`.
     pub fn virtual_host(&self) -> &str {
         self.virtual_host.as_deref().unwrap_or("/")
     }
 
-    /// Parametri effettivi, con i default del trasporto.
+    /// Returns effective parameters including transport defaults.
     pub fn info(&self) -> UrlInfo {
         let port = self
             .port
@@ -201,7 +201,7 @@ impl Url {
         }
     }
 
-    /// Valore di un parametro di query.
+    /// Returns a query parameter value.
     pub fn query_param(&self, name: &str) -> Option<&str> {
         self.query
             .iter()
@@ -209,17 +209,17 @@ impl Url {
     }
 }
 
-/// Divide `host:port`, con supporto IPv6 tra parentesi quadre.
+// Splits host and port, accepting bracketed IPv6 addresses.
 fn split_host_port(hostport: &str) -> Result<(&str, Option<&str>)> {
     if let Some(rest) = hostport.strip_prefix('[') {
         let Some((host, after)) = rest.split_once(']') else {
-            return Err(Error::InvalidUrl(format!("IPv6 non valido: {hostport}")));
+            return Err(Error::InvalidUrl(format!("invalid IPv6: {hostport}")));
         };
         return match after {
             "" => Ok((host, None)),
             _ => match after.strip_prefix(':') {
                 Some(port) => Ok((host, Some(port))),
-                None => Err(Error::InvalidUrl(format!("IPv6 non valido: {hostport}"))),
+                None => Err(Error::InvalidUrl(format!("invalid IPv6: {hostport}"))),
             },
         };
     }
@@ -229,7 +229,7 @@ fn split_host_port(hostport: &str) -> Result<(&str, Option<&str>)> {
     }
 }
 
-/// Percent-decoding come `urllib.parse.unquote` (niente `+` -> spazio).
+// Percent-decodes without converting plus signs to spaces, matching urllib unquote.
 fn decode_without_plus(input: &str) -> Option<String> {
     if input.is_empty() {
         return None;
@@ -262,18 +262,18 @@ fn hex_value(byte: u8) -> Option<u8> {
     }
 }
 
-/// Come `decode_without_plus`, ma `None` se il risultato è vuoto (kombu usa `or None`).
+// Decodes a nonempty value, matching kombu's `or None` fallback.
 fn decode(input: &str) -> Option<CompactString> {
     decode_without_plus(input).map(CompactString::from)
 }
 
-/// Percent-decoding con `+` -> spazio, come `parse_qsl`.
+// Percent-decodes with plus signs converted to spaces, matching parse_qsl.
 fn decode_plus(input: &str) -> String {
     let replaced = input.replace('+', " ");
     decode_without_plus(&replaced).unwrap_or_default()
 }
 
-/// Replica `urllib.parse.parse_qsl(query)` con `keep_blank_values=False`.
+// Parses query pairs, discarding blank values as urllib parse_qsl does by default.
 fn parse_query(query: &str) -> Vec<(CompactString, CompactString)> {
     let mut out = Vec::new();
     for pair in query.split('&') {
@@ -291,7 +291,7 @@ fn parse_query(query: &str) -> Vec<(CompactString, CompactString)> {
     out
 }
 
-/// Strategia di ordine delle code per il trasporto Redis.
+/// Redis queue ordering strategy.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum QueueOrderStrategy {
     #[default]
@@ -321,7 +321,7 @@ impl QueueOrderStrategy {
     }
 }
 
-/// `fanout_prefix` di kombu: booleano oppure prefisso esplicito.
+/// Kombu fanout prefix: a boolean or an explicit string.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FanoutPrefix {
     Enabled(bool),
@@ -335,7 +335,7 @@ impl Default for FanoutPrefix {
 }
 
 impl FanoutPrefix {
-    /// Prefisso custom, se configurato come stringa.
+    /// Explicit prefix configured as a string.
     pub fn custom_prefix(&self) -> Option<&str> {
         match self {
             Self::Enabled(_) => None,
@@ -351,11 +351,8 @@ impl FanoutPrefix {
     }
 }
 
-/// Opzioni aggiuntive del trasporto (`transport_options` di kombu).
-///
-/// I default sono quelli del trasporto Redis di kombu 5.7; memory li ignora
-/// (tranne `deadletter_queue`). Le chiavi non riconosciute finiscono in
-/// [`TransportOptions::extra`] per non perderle.
+/// Transport options with kombu 5.7 Redis defaults. Memory ignores all except
+/// deadletter_queue; unrecognized keys are preserved in [`TransportOptions::extra`].
 #[derive(Debug, Clone, PartialEq)]
 pub struct TransportOptions {
     pub visibility_timeout: f64,
@@ -372,7 +369,7 @@ pub struct TransportOptions {
     pub health_check_interval: u64,
     pub socket_timeout: Option<f64>,
     pub polling_interval: Option<f64>,
-    /// `body_encoding` del canale virtuale (`base64` di default).
+    /// Virtual channel body encoding, defaulting to base64.
     pub body_encoding: CompactString,
     pub deadletter_queue: Option<CompactString>,
     pub extra: Headers,
@@ -403,14 +400,14 @@ impl Default for TransportOptions {
 }
 
 impl TransportOptions {
-    /// Applica una mappa di opzioni (tipicamente da `transport_options` Python).
+    /// Builds options from an ordered map.
     pub fn from_headers(headers: &Headers) -> Result<Self> {
         let mut options = Self::default();
         options.apply(headers)?;
         Ok(options)
     }
 
-    /// Applica un'altra mappa sopra i valori correnti.
+    /// Applies options over the current values.
     pub fn apply(&mut self, headers: &Headers) -> Result<()> {
         for (key, value) in headers.iter() {
             self.apply_one(key, value)?;
@@ -425,33 +422,33 @@ impl TransportOptions {
             "priority_steps" => {
                 let list = value
                     .as_list()
-                    .ok_or_else(|| invalid(key, "lista di interi"))?;
+                    .ok_or_else(|| invalid(key, "list of integers"))?;
                 let mut steps = Vec::with_capacity(list.len());
                 for item in list {
                     let number = item
                         .as_i64()
-                        .ok_or_else(|| invalid(key, "lista di interi"))?;
+                        .ok_or_else(|| invalid(key, "list of integers"))?;
                     steps.push(
                         u8::try_from(number)
-                            .map_err(|_| invalid(key, "priorità fuori da 0..=255"))?,
+                            .map_err(|_| invalid(key, "priority outside 0..=255"))?,
                     );
                 }
                 self.priority_steps = steps;
             }
             "queue_order_strategy" => {
                 self.queue_order_strategy = QueueOrderStrategy::parse(
-                    value.as_str().ok_or_else(|| invalid(key, "stringa"))?,
+                    value.as_str().ok_or_else(|| invalid(key, "string"))?,
                 )?;
             }
             "fanout_prefix" => {
                 self.fanout_prefix = match value {
                     HeaderValue::Bool(enabled) => FanoutPrefix::Enabled(*enabled),
                     HeaderValue::Str(prefix) => FanoutPrefix::Custom(prefix.clone()),
-                    _ => return Err(invalid(key, "booleano o stringa")),
+                    _ => return Err(invalid(key, "boolean or string")),
                 };
             }
             "fanout_patterns" => {
-                self.fanout_patterns = value.as_bool().ok_or_else(|| invalid(key, "booleano"))?
+                self.fanout_patterns = value.as_bool().ok_or_else(|| invalid(key, "boolean"))?
             }
             "global_keyprefix" => self.global_keyprefix = string(key, value)?,
             "unacked_key" => self.unacked_key = string(key, value)?,
@@ -470,7 +467,7 @@ impl TransportOptions {
                 self.deadletter_queue = match value {
                     HeaderValue::Null => None,
                     HeaderValue::Str(queue) => Some(queue.clone()),
-                    _ => return Err(invalid(key, "stringa o None")),
+                    _ => return Err(invalid(key, "string or None")),
                 };
             }
             _ => {
@@ -482,18 +479,18 @@ impl TransportOptions {
 }
 
 fn invalid(key: &str, expected: &str) -> Error {
-    Error::InvalidTransportOption(format!("{key}: atteso {expected}"))
+    Error::InvalidTransportOption(format!("{key}: expected {expected}"))
 }
 
 fn string(key: &str, value: &HeaderValue) -> Result<CompactString> {
     value
         .as_str()
         .map(CompactString::from)
-        .ok_or_else(|| invalid(key, "stringa"))
+        .ok_or_else(|| invalid(key, "string"))
 }
 
 fn number(key: &str, value: &HeaderValue) -> Result<f64> {
-    value.as_f64().ok_or_else(|| invalid(key, "numero"))
+    value.as_f64().ok_or_else(|| invalid(key, "number"))
 }
 
 fn optional_number(key: &str, value: &HeaderValue) -> Result<Option<f64>> {
@@ -504,15 +501,15 @@ fn optional_number(key: &str, value: &HeaderValue) -> Result<Option<f64>> {
 }
 
 fn integer(key: &str, value: &HeaderValue) -> Result<u64> {
-    let number = value.as_i64().ok_or_else(|| invalid(key, "intero"))?;
-    u64::try_from(number).map_err(|_| invalid(key, "intero non negativo"))
+    let number = value.as_i64().ok_or_else(|| invalid(key, "integer"))?;
+    u64::try_from(number).map_err(|_| invalid(key, "nonnegative integer"))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// Tabella generata con `kombu.Connection(url).info()` (kombu 5.7.0rc1).
+    // Generated with kombu 5.7.0rc1 Connection.info().
     type UrlCase = (
         &'static str,
         &'static str,
@@ -882,12 +879,12 @@ mod tests {
         for (url, hostname, port, userid, password, vhost, transport) in URL_CASES {
             let parsed = Url::parse(url).unwrap_or_else(|err| panic!("{url}: {err}"));
             let info = parsed.info();
-            assert_eq!(info.hostname, *hostname, "hostname di {url}");
-            assert_eq!(info.port, *port, "porta di {url}");
-            assert_eq!(info.userid.as_deref(), *userid, "userid di {url}");
-            assert_eq!(info.password.as_deref(), *password, "password di {url}");
-            assert_eq!(info.virtual_host, *vhost, "virtual_host di {url}");
-            assert_eq!(info.transport, *transport, "transport di {url}");
+            assert_eq!(info.hostname, *hostname, "hostname for {url}");
+            assert_eq!(info.port, *port, "port for {url}");
+            assert_eq!(info.userid.as_deref(), *userid, "userid for {url}");
+            assert_eq!(info.password.as_deref(), *password, "password for {url}");
+            assert_eq!(info.virtual_host, *vhost, "virtual_host for {url}");
+            assert_eq!(info.transport, *transport, "transport for {url}");
         }
     }
 
@@ -920,8 +917,7 @@ mod tests {
 
     #[test]
     fn percent_decoding_never_panics_on_invalid_sequences() {
-        // "%aé": "%a" non è un escape esadecimale; i byte non UTF-8 sono
-        // sostituiti come fa `urllib.parse.unquote`.
+        // Invalid escapes and non-UTF-8 bytes are replaced as urllib unquote does.
         let url = Url::parse("redis://h/%aé").expect("url");
         assert_eq!(url.virtual_host(), "%aé");
         let url = Url::parse("redis://h/%ZZ").expect("url");

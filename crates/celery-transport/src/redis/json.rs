@@ -1,18 +1,5 @@
-//! Codec dell'envelope JSON del trasporto Redis di kombu.
-//!
-//! `kombu/transport/redis.py` serializza il messaggio con
-//! `kombu.utils.json.dumps`, cioè `json.dumps` con i separatori di default
-//! (`", "` e `": "`) e `ensure_ascii=True`. L'ordine delle chiavi è quello del
-//! `dict` Python:
-//!
-//! ```text
-//! {"body": "<base64>", "content-encoding": ..., "content-type": ...,
-//!  "headers": {...}, "properties": {...}}
-//! ```
-//!
-//! Le proprietà aggiunte dal canale virtuale (`delivery_info`, `priority`,
-//! `body_encoding`, `delivery_tag`) compaiono nell'ordine di
-//! `virtual.Channel.prepare_message` + `_inplace_augment_message`.
+//! Kombu Redis JSON envelopes with Python dictionary ordering, default separators
+//! and ASCII escaping; virtual properties follow kombu's augmentation order.
 
 use bytes::Bytes;
 use celery_proto::json::write::{write_float, write_int, write_str};
@@ -22,15 +9,15 @@ use compact_str::CompactString;
 use crate::message::{Decimal, HeaderValue, Headers, Message, Properties};
 use crate::transport::{Error, Result};
 
-/// Envelope decodificato.
+/// Decoded envelope.
 #[derive(Debug, Clone)]
 pub struct Envelope {
-    /// Body già decodificato (`base64` -> byte originali).
+    /// Decoded body bytes.
     pub body: Bytes,
     pub content_type: Option<CompactString>,
     pub content_encoding: Option<CompactString>,
     pub headers: Headers,
-    /// Proprietà del messaggio, comprese `delivery_info`/`delivery_tag`.
+    /// Message properties including delivery information and tag.
     pub properties: Properties,
     pub exchange: CompactString,
     pub routing_key: CompactString,
@@ -38,10 +25,7 @@ pub struct Envelope {
     pub redelivered: bool,
 }
 
-/// Serializza il messaggio come envelope di kombu.
-///
-/// `delivery_tag` è il tag già generato dal chiamante (uuid4): tutte le code a
-/// cui il messaggio viene consegnato condividono lo stesso tag, come in kombu.
+/// Encodes a kombu envelope; all destination queues share the caller's delivery tag.
 pub fn encode(
     message: &Message,
     exchange: &str,
@@ -56,8 +40,7 @@ pub fn encode(
         let encoded = base64_encode(&message.body);
         write_str(&mut out, &encoded);
     } else {
-        // `encode_body` con un'encoding diverso da base64 lascia i byte:
-        // `json.dumps` li scrive con il marcatore `__type__`.
+        // Without base64 encoding, kombu JSON writes bytes with a type marker.
         write_value(&mut out, &HeaderValue::Bytes(message.body.clone()));
     }
 
@@ -69,8 +52,7 @@ pub fn encode(
     write_map(&mut out, &message.headers);
     out.extend_from_slice(b", \"properties\": {");
 
-    // Ordine di kombu: proprietà del Producer, poi delivery_info, priority,
-    // body_encoding e delivery_tag (aggiunte da prepare_message/augment).
+    // Preserve kombu's order: producer properties followed by virtual transport fields.
     let mut first = true;
     for (key, value) in message.properties.as_headers().iter() {
         if matches!(
@@ -108,19 +90,18 @@ pub fn encode(
     out
 }
 
-/// Aggiunge `redelivered: true` a header e `delivery_info`, come
-/// `Redis._do_restore_message`, preservando ordine e formattazione.
+/// Marks headers and delivery information as redelivered, preserving order and formatting.
 pub fn mark_redelivered(raw: &[u8]) -> Result<Vec<u8>> {
     if raw.len() > 64 * 1024 * 1024 {
         return Err(invalid("envelope exceeds 64 MiB"));
     }
     let mut reader = Reader::with_max_depth(raw, 64);
     let Some(event) = next(&mut reader)? else {
-        return Err(invalid("envelope vuoto"));
+        return Err(invalid("empty envelope"));
     };
     let mut envelope = match parse_value(&mut reader, event)? {
         HeaderValue::Map(map) => map,
-        _ => return Err(invalid("envelope non è un oggetto")),
+        _ => return Err(invalid("envelope is not an object")),
     };
 
     next(&mut reader)?;
@@ -138,18 +119,18 @@ pub fn mark_redelivered(raw: &[u8]) -> Result<Vec<u8>> {
     Ok(out)
 }
 
-/// Decodifica un envelope di kombu.
+/// Decodes a kombu envelope.
 pub fn decode(raw: &[u8]) -> Result<Envelope> {
     if raw.len() > 64 * 1024 * 1024 {
         return Err(invalid("envelope exceeds 64 MiB"));
     }
     let mut reader = Reader::with_max_depth(raw, 64);
     let Some(event) = next(&mut reader)? else {
-        return Err(invalid("envelope vuoto"));
+        return Err(invalid("empty envelope"));
     };
     let envelope = match parse_value(&mut reader, event)? {
         HeaderValue::Map(map) => map,
-        _ => return Err(invalid("envelope non è un oggetto")),
+        _ => return Err(invalid("envelope is not an object")),
     };
 
     next(&mut reader)?;
@@ -160,11 +141,11 @@ pub fn decode(raw: &[u8]) -> Result<Envelope> {
     let headers = match envelope.get("headers") {
         Some(HeaderValue::Map(map)) => map.clone(),
         Some(HeaderValue::Null) | None => Headers::new(),
-        Some(_) => return Err(invalid("headers non è un oggetto")),
+        Some(_) => return Err(invalid("headers is not an object")),
     };
     let properties = match envelope.get("properties") {
         Some(HeaderValue::Map(map)) => Properties::from(map.clone()),
-        _ => return Err(invalid("properties non è un oggetto")),
+        _ => return Err(invalid("properties is not an object")),
     };
 
     let body_encoding = properties
@@ -175,8 +156,7 @@ pub fn decode(raw: &[u8]) -> Result<Envelope> {
         Some(HeaderValue::Str(text)) => {
             if body_encoding.eq_ignore_ascii_case("base64") {
                 Bytes::from(
-                    base64_decode(text.as_bytes())
-                        .ok_or_else(|| invalid("body base64 non valido"))?,
+                    base64_decode(text.as_bytes()).ok_or_else(|| invalid("invalid base64 body"))?,
                 )
             } else {
                 Bytes::copy_from_slice(text.as_bytes())
@@ -184,12 +164,12 @@ pub fn decode(raw: &[u8]) -> Result<Envelope> {
         }
         Some(HeaderValue::Bytes(bytes)) => bytes.clone(),
         Some(HeaderValue::Null) | None => Bytes::new(),
-        Some(_) => return Err(invalid("body non è una stringa")),
+        Some(_) => return Err(invalid("body is not a string")),
     };
 
     let delivery_tag = properties
         .get_str("delivery_tag")
-        .ok_or_else(|| invalid("delivery_tag mancante"))?
+        .ok_or_else(|| invalid("missing delivery_tag"))?
         .to_string();
     let delivery_info = properties
         .get("delivery_info")
@@ -220,37 +200,37 @@ pub fn decode(raw: &[u8]) -> Result<Envelope> {
     })
 }
 
-/// Estrae `[payload, exchange, routing_key]` dal valore dell'hash `unacked`.
+/// Extracts payload, exchange and routing key from an unacked hash entry.
 pub fn split_unacked(raw: &[u8]) -> Result<(Vec<u8>, CompactString, CompactString)> {
     if raw.len() > 64 * 1024 * 1024 {
         return Err(invalid("envelope exceeds 64 MiB"));
     }
     let mut reader = Reader::with_max_depth(raw, 64);
     let Some(event) = next(&mut reader)? else {
-        return Err(invalid("unacked vuoto"));
+        return Err(invalid("empty unacked entry"));
     };
     let value = parse_value(&mut reader, event)?;
     next(&mut reader)?;
     let HeaderValue::List(items) = value else {
-        return Err(invalid("unacked non è una lista"));
+        return Err(invalid("unacked entry is not a list"));
     };
     if items.len() != 3 {
-        return Err(invalid("unacked non ha tre elementi"));
+        return Err(invalid("unacked entry does not have three elements"));
     }
     let mut payload = Vec::new();
     write_value(&mut payload, &items[0]);
     let exchange = match &items[1] {
         HeaderValue::Str(text) => text.clone(),
-        _ => return Err(invalid("exchange non valido in unacked")),
+        _ => return Err(invalid("invalid exchange in unacked entry")),
     };
     let routing_key = match &items[2] {
         HeaderValue::Str(text) => text.clone(),
-        _ => return Err(invalid("routing_key non valida in unacked")),
+        _ => return Err(invalid("invalid routing_key in unacked entry")),
     };
     Ok((payload, exchange, routing_key))
 }
 
-/// Serializza `[payload, exchange, routing_key]` per l'hash `unacked`.
+/// Encodes payload, exchange and routing key for the unacked hash.
 pub fn join_unacked(payload: &[u8], exchange: &str, routing_key: &str) -> Vec<u8> {
     let mut out = Vec::with_capacity(payload.len() + exchange.len() + routing_key.len() + 8);
     out.push(b'[');
@@ -264,7 +244,7 @@ pub fn join_unacked(payload: &[u8], exchange: &str, routing_key: &str) -> Vec<u8
 }
 
 fn invalid(message: &str) -> Error {
-    Error::Channel(format!("envelope Redis non valido: {message}"))
+    Error::Channel(format!("invalid Redis envelope: {message}"))
 }
 
 fn write_separator(out: &mut Vec<u8>, first: &mut bool) {
@@ -375,7 +355,7 @@ fn parse_value<'a>(reader: &mut Reader<'a>, event: Event<'a>) -> Result<HeaderVa
             let mut items = Vec::new();
             loop {
                 let Some(event) = next(reader)? else {
-                    return Err(invalid("array non terminato"));
+                    return Err(invalid("unterminated array"));
                 };
                 if matches!(event, Event::EndArray) {
                     break;
@@ -388,29 +368,29 @@ fn parse_value<'a>(reader: &mut Reader<'a>, event: Event<'a>) -> Result<HeaderVa
             let mut map = Headers::new();
             loop {
                 let Some(event) = next(reader)? else {
-                    return Err(invalid("oggetto non terminato"));
+                    return Err(invalid("unterminated object"));
                 };
                 match event {
                     Event::EndObject => break,
                     Event::Key(key) => {
                         let Some(value) = next(reader)? else {
-                            return Err(invalid("valore mancante"));
+                            return Err(invalid("missing value"));
                         };
                         let value = parse_value(reader, value)?;
                         map.insert(key_text(key), value);
                     }
-                    _ => return Err(invalid("chiave attesa")),
+                    _ => return Err(invalid("expected key")),
                 }
             }
             decode_tagged(map)
         }
         Event::Key(_) | Event::EndArray | Event::EndObject => {
-            return Err(invalid("evento inatteso"));
+            return Err(invalid("unexpected event"));
         }
     })
 }
 
-/// Decodifica i marcatori `{"__type__": ..., "__value__": ...}` di kombu.
+// Decodes kombu's typed JSON markers.
 fn decode_tagged(map: Headers) -> HeaderValue {
     if map.len() != 2 || !map.contains_key("__type__") || !map.contains_key("__value__") {
         return HeaderValue::Map(map);
@@ -483,7 +463,7 @@ fn decimal_string(decimal: Decimal) -> String {
     out
 }
 
-/// Interpreta `str(Decimal)` come `Decimal((sign, digits, -scale))`.
+// Interprets a decimal string as sign, digits and scale.
 fn parse_decimal(text: &str) -> Option<Decimal> {
     let text = text.trim();
     let (negative, rest) = match text.strip_prefix('-') {
@@ -521,7 +501,7 @@ fn parse_decimal(text: &str) -> Option<Decimal> {
     })
 }
 
-/// Giorni dall'epoch per una data del calendario prolettico gregoriano.
+// Returns days since the epoch in the proleptic Gregorian calendar.
 fn days_from_civil(year: i64, month: u32, day: u32) -> i64 {
     let year = if month <= 2 { year - 1 } else { year };
     let era = if year >= 0 { year } else { year - 399 } / 400;
@@ -547,7 +527,7 @@ fn civil_from_days(days: i64) -> (i64, u32, u32) {
     (year + i64::from(month <= 2), month as u32, day as u32)
 }
 
-/// `datetime.isoformat()` di un datetime naive in UTC.
+// Formats a naive UTC datetime as Python's `datetime.isoformat()` does.
 fn iso8601(seconds: i64) -> String {
     let days = seconds.div_euclid(86_400);
     let rest = seconds.rem_euclid(86_400);
@@ -560,7 +540,7 @@ fn iso8601(seconds: i64) -> String {
     )
 }
 
-/// Secondi dall'epoch di una stringa ISO 8601 naive (interpretata in UTC).
+// Parses a naive ISO 8601 datetime as UTC epoch seconds.
 fn parse_iso8601(text: &str) -> Option<i64> {
     let bytes = text.as_bytes();
     if bytes.len() < 19 || bytes[4] != b'-' || bytes[7] != b'-' {
@@ -578,7 +558,7 @@ fn parse_iso8601(text: &str) -> Option<i64> {
 const BASE64_ALPHABET: &[u8; 64] =
     b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
-/// `base64.b64encode` standard (alfabeto `+/`, padding `=`).
+/// Encodes standard base64 with padding.
 pub fn base64_encode(input: &[u8]) -> String {
     let mut out = String::with_capacity(input.len().div_ceil(3) * 4);
     for chunk in input.chunks(3) {
@@ -602,7 +582,7 @@ pub fn base64_encode(input: &[u8]) -> String {
     out
 }
 
-/// `base64.b64decode` permissivo: ignora i caratteri fuori alfabeto.
+/// Decodes base64, ignoring characters outside its alphabet as Python does.
 pub fn base64_decode(input: &[u8]) -> Option<Vec<u8>> {
     let mut out = Vec::with_capacity(input.len() / 4 * 3);
     let mut buffer: u32 = 0;
@@ -669,8 +649,7 @@ mod tests {
             "base64",
             "9526f225-855a-4ba1-85f2-6848c3a04aef",
         );
-        // Byte-identico a un messaggio pubblicato da kombu 5.7 con gli stessi
-        // parametri (vedi test_transport_redis.py::test_publish_matches_kombu).
+        // Matches kombu 5.7 byte for byte; see test_publish_matches_kombu.
         assert_eq!(
             String::from_utf8(encoded).expect("utf8"),
             concat!(
@@ -707,8 +686,7 @@ mod tests {
 
     #[test]
     fn non_base64_body_stays_bytes() {
-        // `encode_body` con encoding diverso da base64 non trasforma il body:
-        // json.dumps lo scrive con il marcatore `bytes`.
+        // Non-base64 bodies retain kombu's bytes marker.
         let encoded = encode(&message(), "", "q", "utf-8", "tag");
         let text = String::from_utf8(encoded.clone()).expect("utf8");
         assert!(text.contains(r#""body": {"__type__": "bytes", "__value__": "{\"a\": 1}"}"#));

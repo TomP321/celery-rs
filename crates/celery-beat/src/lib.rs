@@ -1,8 +1,4 @@
-//! Scheduler periodico (vedi PLAN.md, fase 6).
-//!
-//! Il core Rust copre il parser dei campi crontab e il calcolo del prossimo
-//! istante della parte di calendario; fusi orari, DST e `remaining()` restano
-//! nel guscio Python (`celery/schedules.py`).
+//! Crontab field parsing and calendar scheduling. Python retains time zones, DST and remaining().
 
 pub mod calendar;
 pub mod error;
@@ -12,15 +8,15 @@ pub use calendar::{CronSpec, FfwdArgs, LastRun};
 pub use error::Error;
 pub use parser::{CrontabParser, parse};
 
-/// Classe dell'eccezione Python corrispondente a [`Error`].
+/// Python exception class corresponding to [`Error`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorKind {
-    /// `celery.schedules.ParseException`
+    /// Celery schedule parse exception.
     Parse,
-    /// `ValueError`
+    /// Python value error.
     Value,
-    /// `RuntimeError`
+    /// Python runtime error.
     Runtime,
-    /// `IndexError`
+    /// Python index error.
     Index,
 }

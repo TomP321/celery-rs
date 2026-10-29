@@ -1,4 +1,4 @@
-//! JSON compatibile con CPython/kombu: scrittura byte-identica e parser a eventi.
+//! CPython-compatible JSON encoding and event parsing.
 
 pub mod read;
 pub mod write;

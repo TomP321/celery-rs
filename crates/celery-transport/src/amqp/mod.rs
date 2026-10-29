@@ -1,20 +1,5 @@
-//! Trasporto AMQP 0.9.1 su `lapin`.
-//!
-//! Mappa il contratto di [`crate::transport`] sulle primitive AMQP:
-//! un canale dedicato per ogni consumatore (prefetch e delivery tag sono per
-//! canale), un canale per le dichiarazioni e le risposte temporanee pidbox,
-//! uno per le pubblicazioni e uno per `basic_get`. Il tag esposto è `(channel_id << 40) | delivery_tag`: il worker
-//! vede un `u64` stabile e `ack`/`reject` sanno su quale canale operare.
-//!
-//! I messaggi usano le proprietà native (`content_type`, `headers`,
-//! `delivery_mode`, …) e le tabelle di header sono convertite negli stessi tipi
-//! che py-amqp restituisce a kombu.
-//!
-//! Opzioni (`transport_options`): `confirm_publish` (publisher confirms),
-//! `qos_global` (flag `global` di `basic.qos`; default `false`, il valore che
-//! kombu usa su RabbitMQ >= 4.0, sovrascrivibile perché lapin non espone le
-//! `server_properties`) e `connection_name` (nome mostrato dall'API di
-//! management).
+//! AMQP 0.9.1 transport over lapin. Each consumer has a dedicated channel; exposed tags
+//! encode `(channel_id << 40) | delivery_tag` so acknowledgments reach that channel.
 
 mod convert;
 
@@ -52,13 +37,10 @@ use crate::url::{TransportKind, TransportOptions, Url};
 
 use convert::{message_from_amqp, message_to_properties, short_string, to_field_table};
 
-/// Bit riservati all'id del canale nel [`DeliveryTag`] esposto.
 const TAG_SHIFT: u32 = 40;
 const TAG_MASK: u64 = (1_u64 << TAG_SHIFT) - 1;
 
-/// Frame massimo negoziato quando l'URL non lo specifica: lapin alloca
-/// `2 * 32 * frame_max` byte di buffer per connessione, quindi restare a 32 KB
-/// evita ~6 MB di RSS rispetto al default di 128 KB.
+// A 32 KB frame limit saves about 6 MB per connection: lapin reserves 64 frames.
 const FRAME_MAX: u32 = 32 * 1024;
 
 fn encode_tag(channel_id: u16, delivery_tag: u64) -> DeliveryTag {
@@ -73,7 +55,7 @@ fn decode_tag(tag: &DeliveryTag) -> Option<(u16, u64)> {
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
-    // Un panic in un task non deve rendere il trasporto inutilizzabile.
+    // A task panic must not disable the transport.
     mutex
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
@@ -101,8 +83,7 @@ fn map_lapin(error: lapin::Error) -> Error {
     Error::Channel(error.to_string())
 }
 
-/// 406 PRECONDITION_FAILED con i dati che servono a ricostruire l'eccezione
-/// `amqp.exceptions.PreconditionFailed` di py-amqp (stesso `str()`).
+// Extracts 406 PRECONDITION_FAILED details for the py-amqp exception text.
 fn precondition_failed(
     error: &lapin::Error,
     method_name: &'static str,
@@ -139,9 +120,7 @@ fn map_bind_error(error: lapin::Error, exchange: &str) -> Error {
     map_lapin(error)
 }
 
-/// Canale con l'insieme dei tag in volo: ack/reject non devono chiudere il
-/// canale quando il tag è sconosciuto (il broker risponderebbe con un errore
-/// di protocollo).
+// Tracks pending tags to avoid protocol errors when acknowledging unknown tags.
 struct ChannelState {
     id: u16,
     channel: Channel,
@@ -158,24 +137,17 @@ impl ChannelState {
     }
 }
 
-/// Stato condiviso da trasporto, consumatori e controllo.
 struct Shared {
     connection: Connection,
     confirm_publish: bool,
-    /// `basic.qos(global)` per i cambi di prefetch. lapin 4.12 non espone le
-    /// `server_properties`, quindi il default non può essere calcolato come
-    /// `qos_semantics_matches_spec` di kombu: è `false`, il valore che kombu
-    /// usa su RabbitMQ >= 4.0 (su RabbitMQ 3.3–3.x va impostato `true`). Si
-    /// sovrascrive con `transport_options["qos_global"]` o `?qos_global=true`.
-    /// Con code quorum il QoS globale non è supportato: il limite resta
-    /// per-consumer e si applica dal consumer successivo.
+    // Defaults to RabbitMQ >= 4.0 semantics because lapin does not expose server properties.
+    // Override with `qos_global` for older brokers; quorum queues require per-consumer QoS.
     qos_global: bool,
     closed: AtomicBool,
     control_channel: Mutex<Option<Channel>>,
     publish_channel: Mutex<Option<Channel>>,
     get_channel: Mutex<Option<Arc<ChannelState>>>,
-    /// Canali che possono avere consegne in volo (weak: alla chiusura del
-    /// consumatore il canale si chiude e il broker rimette in coda).
+    // Weak references let consumer shutdown close channels and requeue deliveries.
     channels: Mutex<HashMap<u16, Weak<ChannelState>>>,
     streams: Mutex<HashMap<u64, Arc<StreamState>>>,
     next_stream: AtomicU64,
@@ -191,7 +163,7 @@ impl Shared {
 
     fn register(&self, state: &Arc<ChannelState>) {
         let mut channels = lock(&self.channels);
-        // I canali chiusi non vanno accumulati nel registro.
+        // Do not retain closed channels.
         channels.retain(|_, weak| weak.strong_count() > 0);
         channels.insert(state.id, Arc::downgrade(state));
     }
@@ -264,15 +236,13 @@ impl Shared {
     }
 }
 
-/// Trasporto AMQP 0.9.1.
+/// AMQP 0.9.1 transport.
 pub struct AmqpTransport {
     shared: Arc<Shared>,
 }
 
 impl AmqpTransport {
-    /// Connette al broker. `retry` è la politica di Celery per il tentativo
-    /// iniziale (le riconnessioni successive sono del worker, che crea un
-    /// nuovo trasporto).
+    /// Connects with Celery's initial retry policy; the worker handles later reconnections.
     pub async fn connect(
         url: &Url,
         options: TransportOptions,
@@ -286,18 +256,14 @@ impl AmqpTransport {
             query.heartbeat = heartbeat.parse::<u16>().ok();
         }
         if let Some(timeout) = url.query_param("connection_timeout") {
-            // Secondi, come `broker_connection_timeout` di Celery: lapin non
-            // applica il timeout da sé, quindi lo imponiamo al connect.
+            // lapin does not enforce Celery's connection timeout itself.
             connect_timeout = timeout
                 .parse::<u64>()
                 .ok()
                 .filter(|seconds| *seconds > 0)
                 .map(Duration::from_secs);
         }
-        // lapin prealloca 2×32 frame per connessione (8 MB con il frame_max
-        // tipico di 128 KB). 32 KB bastano per i task Celery e riducono la
-        // RSS del client: i body più grandi vengono divisi in più frame, senza
-        // cambiare i messaggi.
+
         query.frame_max = Some(
             url.query_param("frame_max")
                 .and_then(|value| value.parse::<u32>().ok())
@@ -429,7 +395,6 @@ impl AmqpTransport {
         Ok(())
     }
 
-    /// Consumatore su più code; `no_ack` disattiva le conferme sul canale.
     async fn consume_inner(
         &self,
         queues: &[CompactString],
@@ -440,11 +405,10 @@ impl AmqpTransport {
         self.shared.ensure_open()?;
         if queues.is_empty() {
             return Err(Error::InvalidArgument(
-                "consume richiede almeno una coda".to_string(),
+                "consume requires at least one queue".to_string(),
             ));
         }
-        // Senza ack né QoS il consumer non richiede uno stato di canale isolato.
-        // Riutilizzare quello delle dichiarazioni evita open/close a ogni ping.
+        // Sharing the declaration channel avoids opening a channel for each ping.
         let channel = if control_reply {
             self.shared.control_channel().await?
         } else {
@@ -534,7 +498,7 @@ impl Transport for AmqpTransport {
         Box::pin(async move {
             self.shared.ensure_open()?;
             if declaration.name.is_empty() {
-                // L'exchange anonimo esiste sempre e non si dichiara.
+                // The default exchange always exists and must not be declared.
                 return Ok(());
             }
             let channel = self.shared.control_channel().await?;
@@ -608,7 +572,7 @@ impl Transport for AmqpTransport {
                 .await
             {
                 Ok(()) => {}
-                // Queue/exchange assenti: come `queue_unbind` di kombu è no-op.
+                // kombu treats missing queues or exchanges as a no-op for unbind.
                 Err(error) if is_protocol_id(&error, 404) => {}
                 Err(error) => return Err(map_lapin(error)),
             }
@@ -619,8 +583,7 @@ impl Transport for AmqpTransport {
     fn delete_exchange<'a>(&'a self, exchange: &'a str) -> BoxFuture<'a, Result<()>> {
         Box::pin(async move {
             self.shared.ensure_open()?;
-            // AMQP puro: `exchange.delete(if_unused=false)` elimina l'exchange
-            // e i binding; le code restano (a differenza dei trasporti virtual).
+            // AMQP deletes the exchange and bindings but preserves queues.
             let channel = self.shared.control_channel().await?;
             channel
                 .exchange_delete(short_string(exchange)?, ExchangeDeleteOptions::default())
@@ -651,7 +614,7 @@ impl Transport for AmqpTransport {
                     Confirmation::Ack(_) | Confirmation::NotRequested => {}
                     Confirmation::Nack(message) => {
                         return Err(Error::Channel(format!(
-                            "publish non confermato dal broker: {message:?}"
+                            "publication not confirmed by broker: {message:?}"
                         )));
                     }
                 }
@@ -707,7 +670,7 @@ impl Transport for AmqpTransport {
             let message = state.channel.basic_get(short_string(queue)?, options).await;
             let message = match message {
                 Ok(message) => message,
-                // Coda inesistente: come il trasporto memory non c'è nulla.
+
                 Err(error) if is_protocol_id(&error, 404) => return Ok(None),
                 Err(error) => return Err(map_lapin(error)),
             };
@@ -797,7 +760,7 @@ impl Transport for AmqpTransport {
                 .await
             {
                 Ok(purged) => Ok(u64::from(purged)),
-                // Coda inesistente: come il trasporto memory non c'è nulla da svuotare.
+
                 Err(error) if is_protocol_id(&error, 404) => Ok(0),
                 Err(error) => Err(map_lapin(error)),
             }
@@ -837,7 +800,7 @@ impl Transport for AmqpTransport {
             *lock(&self.shared.get_channel) = None;
             *lock(&self.shared.control_channel) = None;
             *lock(&self.shared.publish_channel) = None;
-            // Se la connessione è già caduta non c'è nulla da chiudere.
+
             let _ = self
                 .shared
                 .connection
@@ -881,13 +844,12 @@ struct ConsumerEntry {
 struct ConsumerSet {
     entries: Vec<ConsumerEntry>,
     queues: Vec<CompactString>,
-    /// `basic.consume(no_ack=true)`: le consegne non vanno confermate.
+    // Returns whether deliveries require no acknowledgment.
     no_ack: bool,
     closed: bool,
 }
 
-/// Svuota i messaggi già nel buffer locale di un consumatore senza attenderne
-/// di nuovi. Le consegne restituite sono già state inviate dal broker.
+// Drains buffered deliveries without waiting for new messages.
 fn drain_buffered(consumer: &mut Pin<Box<LapinConsumer>>, out: &mut Vec<LapinDelivery>) {
     let waker = Waker::noop();
     let mut context = Context::from_waker(waker);
@@ -900,7 +862,7 @@ fn drain_buffered(consumer: &mut Pin<Box<LapinConsumer>>, out: &mut Vec<LapinDel
     }
 }
 
-/// Controllo di un consumatore AMQP: agisce sul canale dedicato.
+// Controls an AMQP consumer through its dedicated channel.
 struct AmqpConsumerControl {
     state: Arc<StreamState>,
     channel: Arc<ChannelState>,
@@ -926,12 +888,8 @@ impl ConsumerControl for AmqpConsumerControl {
             if self.is_closed() {
                 return Err(Error::Closed);
             }
-            // Stessa chiamata di Celery (`task_consumer.qos(apply_global=...)`):
-            // nessuna ricreazione dei consumatori. Con RabbitMQ < 3.3 o 4.x le
-            // nuove impostazioni si applicano ai consumatori creati dopo, come
-            // documentato dal broker; con code quorum il global QoS non è
-            // supportato e il limite resta per-consumer (default `qos_global`
-            // false, vedi `qos_global` nelle opzioni del trasporto).
+            // RabbitMQ applies QoS changes according to its version; quorum queues require
+            // per-consumer limits. Match Celery's call without recreating consumers.
             self.channel
                 .channel
                 .basic_qos(
@@ -979,7 +937,7 @@ impl ConsumerControl for AmqpConsumerControl {
             let tag = consumer.tag();
             let mut set = lock(&self.set);
             if set.closed {
-                // Il consumatore appena creato viene cancellato dal Drop.
+                // Drop cancels the newly created consumer.
                 return Err(Error::Closed);
             }
             set.entries.push(ConsumerEntry {
@@ -1012,8 +970,7 @@ impl ConsumerControl for AmqpConsumerControl {
                 .basic_cancel(entry.tag.clone(), BasicCancelOptions::default())
                 .await
                 .map_err(map_lapin)?;
-            // Le consegne mai restituite all'applicazione tornano in coda;
-            // con `no_ack` il broker le ha già considerate consegnate.
+            // Requeue deliveries the application has not seen; no_ack deliveries are already settled.
             let no_ack = lock(&self.set).no_ack;
             let mut buffered = Vec::new();
             drain_buffered(&mut entry.deliveries, &mut buffered);
@@ -1046,9 +1003,8 @@ impl ConsumerControl for AmqpConsumerControl {
             };
             self.state.cancelled.store(true, Ordering::Release);
             self.wake();
-            // Come `basic_cancel`: i messaggi già consegnati restano
-            // confermabili sul canale, che resta aperto. Quelli rimasti nel
-            // buffer locale non sono mai stati visti dall'app: tornano in coda.
+            // Like basic_cancel, keep the channel open for pending acknowledgments.
+            // Requeue buffered deliveries the application has not seen.
             let no_ack = lock(&self.set).no_ack;
             for mut entry in entries {
                 let _ = self
@@ -1076,12 +1032,10 @@ impl ConsumerControl for AmqpConsumerControl {
     }
 }
 
-/// Periodo del controllo di salute del canale quando lo stream è in attesa:
-/// lapin non risveglia i consumatori quando la connessione cade sotto di loro.
+// lapin does not wake consumers when their connection closes.
 const HEALTH_CHECK: Duration = Duration::from_millis(250);
 
-/// Stream di consegne AMQP. Termina con `None` dopo `cancel` o dopo una
-/// `ConnectionLost` (emessa una sola volta).
+// AMQP delivery stream that terminates after cancellation or one connection error.
 struct AmqpDeliveryStream {
     shared: Arc<Shared>,
     stream_id: u64,
@@ -1116,10 +1070,9 @@ impl Stream for AmqpDeliveryStream {
             return Poll::Ready(None);
         }
         if this.shared.closed.load(Ordering::Acquire) {
-            return Poll::Ready(this.finished_with_lost("trasporto AMQP chiuso"));
+            return Poll::Ready(this.finished_with_lost("amqp transport closed"));
         }
-        // lapin non propaga ai consumatori la chiusura della connessione
-        // decisa dal broker: il timer ci sveglia e controlliamo lo stato.
+        // The timer detects broker-initiated disconnects that lapin does not propagate.
         if this.health.as_mut().poll(cx).is_ready() {
             this.health
                 .as_mut()
@@ -1127,7 +1080,7 @@ impl Stream for AmqpDeliveryStream {
             if !this.shared.connection.status().connected()
                 || !this.channel.channel.status().connected()
             {
-                return Poll::Ready(this.finished_with_lost("connessione AMQP al broker caduta"));
+                return Poll::Ready(this.finished_with_lost("amqp broker connection lost"));
             }
         }
 
@@ -1143,8 +1096,7 @@ impl Stream for AmqpDeliveryStream {
                 Poll::Ready(Some(Ok(delivery))) => {
                     this.cursor = (index + 1) % total;
                     let raw_tag = delivery.delivery_tag;
-                    // Con `no_ack` il broker ha già confermato: il tag non
-                    // entra in volo e `ack` resta un no-op.
+                    // The broker has already settled no_ack deliveries.
                     if !set.no_ack {
                         lock(&this.channel.in_flight).insert(raw_tag);
                     }
@@ -1160,7 +1112,7 @@ impl Stream for AmqpDeliveryStream {
                         this.finished = true;
                         return Poll::Ready(None);
                     }
-                    return Poll::Ready(this.finished_with_lost("consumatore AMQP terminato"));
+                    return Poll::Ready(this.finished_with_lost("amqp consumer ended"));
                 }
             }
         }
@@ -1189,7 +1141,7 @@ mod tests {
     #[test]
     fn encoded_tag_stays_in_i64_range_for_max_channel() {
         let tag = encode_tag(u16::MAX, u64::MAX);
-        let value = tag.as_u64().expect("numero");
+        let value = tag.as_u64().expect("number");
         assert!(i64::try_from(value).is_ok());
         assert_eq!(decode_tag(&tag), Some((u16::MAX, TAG_MASK)));
     }

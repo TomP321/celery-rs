@@ -1,10 +1,4 @@
-"""Differenziale del core beat: parser e calendario contro Celery di riferimento.
-
-Gira con ``.venv-ref`` (che ha ``_celery_rs`` installato accanto al Celery di
-riferimento). Il guscio ``python/celery/schedules.py`` viene caricato come
-sottomodulo del pacchetto di riferimento: le import relative risolvono sui
-moduli del riferimento, quindi il confronto avviene nello stesso processo.
-"""
+"""Compare beat parsing and calendar calculations with reference Celery in .venv-ref."""
 
 from __future__ import annotations
 
@@ -26,7 +20,7 @@ from celery.utils.time import ffwd as RefFfwd
 SEED = 20261025
 ROOT = Path(__file__).resolve().parents[3]
 
-#: Casi totali richiesti dalla spec (parser + calendario).
+
 TOTAL_CASES = 240_000
 
 ZONES = (
@@ -37,7 +31,7 @@ ZONES = (
     'Asia/Kolkata',
 )
 
-#: Cambi DST 2026 (Lord Howe ha mezz'ora di scarto).
+# Lord Howe's 2026 DST transitions shift by half an hour.
 DST_MOMENTS = {
     'Europe/Rome': [datetime(2026, 3, 29, 1, 59), datetime(2026, 3, 29, 3, 0),
                     datetime(2026, 10, 25, 2, 59), datetime(2026, 10, 25, 3, 0)],
@@ -57,7 +51,7 @@ WEIRD = ('', 'foo', '-20', '-', '5-', '1-2-3', '1.5', '+5', ' 5', '5 ',
 
 
 def _load_rs_schedules():
-    """Carica il nostro guscio come `celery.<nome>` senza toccare il riferimento."""
+    """Load the shell under celery without replacing reference modules."""
     name = 'celery._rs_schedules_test'
     path = ROOT / 'python' / 'celery' / 'schedules.py'
     spec = importlib.util.spec_from_file_location(name, path)
@@ -72,7 +66,7 @@ RSCrontab = RS.crontab
 
 
 class Now:
-    """`nowfun` mutabile, condiviso dalle due schedule."""
+    """Share a mutable clock between schedules."""
 
     __slots__ = ('value',)
 
@@ -91,7 +85,7 @@ class Now:
 def _outcome(fn, *args):
     try:
         return ('ok', fn(*args))
-    except Exception as exc:  # noqa: BLE001 - confrontiamo anche gli errori
+    except Exception as exc:  # noqa: BLE001 - compare exception types too
         return ('exc', type(exc).__name__, str(exc))
 
 
@@ -166,7 +160,7 @@ def _random_crontabs(rng, count=120):
         fields = [_random_field(rng, max_, min_) for max_, min_ in FIELD_LIMITS]
         try:
             ref = RefCrontab(*fields)
-        except Exception:  # noqa: BLE001 - i campi casuali possono essere invalidi
+        except Exception:  # noqa: BLE001 - random fields may be invalid
             continue
         crontabs.append(fields)
     return crontabs
@@ -175,7 +169,7 @@ def _random_crontabs(rng, count=120):
 def _random_last_run(rng, zone):
     choice = rng.random()
     if choice < 0.2:
-        # Naive: il riferimento lo tratta come UTC.
+        # The reference treats naive datetimes as UTC.
         return datetime(2020, 1, 1) + timedelta(
             seconds=rng.randrange(0, 11 * 366 * 86400))
     if choice < 0.35 and zone in DST_MOMENTS:
@@ -189,13 +183,13 @@ def _random_last_run(rng, zone):
         seconds=rng.randrange(0, 11 * 366 * 86400),
         microseconds=rng.randrange(1_000_000),
     )
-    # Un `last_run_at` aware anche in un fuso diverso dalla schedule.
+
     other = rng.choice(ZONES + ('Pacific/Auckland',))
     return base.astimezone(ZoneInfo(other))
 
 
 def test_parser_matches_reference():
-    """Parser: 120.000 stringhe casuali, stessi risultati ed errori."""
+    """Compare results and errors for 120,000 random parser inputs."""
     rng = random.Random(SEED)
     limit_pairs = ((60, 0), (24, 0), (7, 0), (31, 1), (12, 1), (24, 1),
                    (1, 0), (5, 3), (0, 0))
@@ -207,7 +201,7 @@ def test_parser_matches_reference():
         actual = _outcome(RS.crontab_parser(max_, min_).parse, spec)
         assert actual == expected, (spec, max_, min_, expected, actual)
         cases += 1
-    # Campioni mirati, compresi i casi limite di `int()` di Python.
+
     for spec in WEIRD + ('1-3x', '1-2/3x', '1-2/0', '55-5/3', '*/1_0',
                          ' 5', '+5', ' -5', 'mon-fri', 'SUN', 'jan-dec/2',
                          '1,2,3', '*/1000'):
@@ -220,7 +214,7 @@ def test_parser_matches_reference():
 
 
 def test_calendar_matches_reference():
-    """`remaining_delta`/`remaining_estimate`/`is_due`: 120.000 casi."""
+    """Compare remaining_delta, remaining_estimate and is_due over 120,000 cases."""
     rng = random.Random(SEED + 1)
     specs = _random_crontabs(rng)
     apps = {}
@@ -261,24 +255,24 @@ def test_calendar_matches_reference():
             key, ref, last_run_at)
         cases += 1
     assert cases >= 120_000
-    # Il totale dei casi casuali (parser + calendario) supera i 240.000.
+
     assert cases + 120_000 >= TOTAL_CASES
 
 
 def test_cron_parse_functions_are_the_native_ones():
-    """La shell deve passare dal binding Rust, non dal parser Python."""
+    """Verify the shell delegates to the Rust binding."""
     parser = RS.crontab_parser(60)
     assert parser.parse('*/15') == {0, 15, 30, 45}
     assert rs.cron_parse('*/15', 60, 0) == [0, 15, 30, 45]
     spec = rs.CronSpec([0], [0], [0, 1, 2, 3, 4, 5, 6], [1], [1], False)
-    # Ultima esecuzione a mezzanotte del 1 gennaio: si passa all'anno dopo.
+
     args = spec.next_ffwd(2026, 1, 1, 0, 0)
     assert args == (2027, 1, 0, None, 1, 0, 0)
 
 
 def test_runtime_error_on_invalid_month_set():
-    """Mesi senza giorni validi: stesso `RuntimeError` del riferimento."""
-    # "30 febbraio" non è costruibile; forziamo i set dopo la validazione.
+    """Match the reference RuntimeError for months with no valid days."""
+    # February 30 is invalid at construction; mutate the validated sets.
     broken = RSCrontab(day_of_month='30', month_of_year='2,3', nowfun=Now())
     broken.day_of_month = {30}
     broken.month_of_year = {2}

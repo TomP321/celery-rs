@@ -1,37 +1,5 @@
-//! Trasporto Redis: replica il modello dati di `kombu/transport/redis.py`.
-//!
-//! # Modello dati
-//!
-//! - coda = lista Redis; il nome dipende dalla priorità: `coda` per la
-//!   priorità 0, `coda<sep><step>` per le altre (`sep` = `\x06\x16`,
-//!   `priority_steps` = `[0, 3, 6, 9]`). Si pubblica con `LPUSH` e si consuma
-//!   con `RPOP`/`BRPOP`, quindi il messaggio più vecchio è il primo.
-//! - exchange = insieme `_kombu.binding.<exchange>` con membri
-//!   `routing_key<sep>pattern<sep>queue` (più `_kombu.binding_permanent.*`);
-//!   il routing direct/topic è risolto dal client leggendo quell'insieme.
-//! - fanout = `PUBLISH` sui topic `/{db}.<exchange>[/<routing_key>]`, consumo
-//!   con `PSUBSCRIBE`.
-//! - messaggi non confermati = hash `unacked` (valore `[payload, exchange,
-//!   routing_key]`) + zset `unacked_index` (score = epoch) + mutex
-//!   `unacked_mutex`; ripristino dopo `visibility_timeout` e alla chiusura.
-//! - envelope JSON con le stesse chiavi/ordine di kombu (vedi [`json`]).
-//!
-//! # Differenze volute
-//!
-//! - `unbind` aggiorna solo lo stato locale: come in kombu 5.7
-//!   `virtual.Channel.queue_unbind` non tocca l'insieme dei binding su Redis.
-//! - Il prefetch è applicato dal consumatore (kombu: `QoS.can_consume`), non
-//!   dal broker.
-//! - Il timeout di `BRPOP` è più corto di quello di kombu (250 ms): il cambio
-//!   di code/prefetch si applica al ciclo successivo e non interrompe un
-//!   `BRPOP` in volo, che perderebbe il messaggio già estratto.
-//! - Le opzioni `health_check_interval`, `socket_connect_timeout` e
-//!   `polling_interval` sono accettate per compatibilità con la configurazione
-//!   di Celery ma non usate: Redis-rs gestisce da sé socket e riconnessione
-//!   delle connessioni multiplexate.
-//! - Sentinel/Cluster e credenziali dinamiche non sono supportati: il punto di
-//!   estensione è [`RedisTransport::build_client`] (si può sostituire il client
-//!   con uno gestito da Sentinel senza toccare il resto).
+//! Redis transport using kombu's priority lists, binding sets, fanout topics and
+//! unacked indices. Pending BRPOP calls are never cancelled, which would lose deliveries.
 
 pub mod json;
 
@@ -59,31 +27,29 @@ use crate::transport::{
 };
 use crate::url::{FanoutPrefix, QueueOrderStrategy, TransportOptions, Url};
 
-/// Timeout di `BRPOP` (secondi). Kombu usa 1s; qui è più corto perché il
-/// cambio di code/prefetch viene applicato al ciclo successivo senza
-/// interrompere un BRPOP in volo (interromperlo perderebbe il messaggio).
+// Short BRPOP timeouts apply queue and prefetch changes without cancelling a pending pop.
 const BRPOP_TIMEOUT: f64 = 0.25;
 
-/// Intervallo del tick usato in attesa di messaggi non prioritari.
 const TICK: Duration = Duration::from_millis(500);
 
-/// Intervallo minimo tra due `restore_visible` per consumatore.
 const RESTORE_INTERVAL: Duration = Duration::from_secs(1);
 
-/// Chiavi di binding, come `Channel.keyprefix_*`.
 const KEY_BINDING: &str = "_kombu.binding.";
 const KEY_BINDING_PERMANENT: &str = "_kombu.binding_permanent.";
 const KEY_BINDING_DEADLINES: &str = "_kombu.binding_deadlines";
 
-/// TTL minimo di una tabella di binding con `x-expires` (ms), come kombu.
+// Matches kombu's minimum binding TTL in milliseconds.
 const MIN_BINDING_TTL: u64 = 60 * 60 * 1000;
 const BINDING_EXPIRES_FACTOR: u64 = 2;
 
-/// Tuning delle binding: i test accelerano TTL e refresh come fanno con
-/// `kombu.transport.redis` (stesse variabili d'ambiente di `worker_consumer_app`).
+// Tests accelerate binding expiry with the reference worker's environment variables.
 fn binding_tuning() -> (f64, u64) {
-    let accelerate = std::env::var("CELERY_RS_TEST_BINDING_SWEEP")
-        .is_ok_and(|value| !matches!(value.trim().to_ascii_lowercase().as_str(), "0" | "false" | "no" | "off"));
+    let accelerate = std::env::var("CELERY_RS_TEST_BINDING_SWEEP").is_ok_and(|value| {
+        !matches!(
+            value.trim().to_ascii_lowercase().as_str(),
+            "0" | "false" | "no" | "off"
+        )
+    });
     if !accelerate {
         return (BINDING_EXPIRES_FACTOR as f64, MIN_BINDING_TTL);
     }
@@ -99,7 +65,6 @@ fn binding_tuning() -> (f64, u64) {
 }
 const BINDING_SWEEP_INTERVAL: Duration = Duration::from_secs(60);
 
-/// Script di `Channel.REFRESH_BINDING`.
 const REFRESH_BINDING: &str = r"
 redis.call('SADD', KEYS[1], ARGV[1])
 local now = redis.call('TIME')
@@ -107,7 +72,6 @@ local ms = tonumber(now[1]) * 1000 + math.floor(tonumber(now[2]) / 1000)
 redis.call('ZADD', KEYS[2], 'GT', ms + tonumber(ARGV[3]), ARGV[2])
 ";
 
-/// Script di `Channel.SWEEP_BINDINGS`.
 const SWEEP_BINDINGS: &str = r"
 local now = redis.call('TIME')
 local ms = tonumber(now[1]) * 1000 + math.floor(tonumber(now[2]) / 1000)
@@ -122,8 +86,7 @@ end
 return #overdue
 ";
 
-/// Rilascio del mutex: script identico a `redis.lock.Lock.LUA_RELEASE_SCRIPT`
-/// (stesso SHA1, quindi stesso `EVALSHA` di redis-py in `MONITOR`).
+// Identical to redis-py's release script, preserving its SHA1 and EVALSHA wire command.
 const RELEASE_LOCK: &str = r"
         local token = redis.call('get', KEYS[1])
         if not token or token ~= ARGV[1] then
@@ -153,14 +116,13 @@ fn now_seconds() -> f64 {
         .map_or(0.0, |elapsed| elapsed.as_secs_f64())
 }
 
-/// Formattazione di un float come `repr()` Python (usata per gli score).
+// Formats scores using Python float representation.
 fn float_string(value: f64) -> String {
     let mut out = Vec::with_capacity(24);
     celery_proto::json::write_float(&mut out, value);
     String::from_utf8(out).unwrap_or_default()
 }
 
-/// Configurazione immutabile del trasporto.
 struct Config {
     client: ::redis::Client,
     options: TransportOptions,
@@ -177,9 +139,7 @@ struct Config {
     visibility_timeout: f64,
     body_encoding: CompactString,
     queue_order_strategy: QueueOrderStrategy,
-    /// Fattore e TTL minimo delle binding con `x-expires`. Sono i valori di
-    /// `BINDING_EXPIRES_FACTOR`/`MIN_BINDING_TTL`; i test possono accelerarli
-    /// con `CELERY_RS_TEST_BINDING_SWEEP` (stesse variabili del riferimento).
+    // Tests can accelerate binding expiry with CELERY_RS_TEST_BINDING_SWEEP.
     binding_expires_factor: f64,
     min_binding_ttl_ms: u64,
 }
@@ -204,7 +164,6 @@ impl Config {
         self.key(KEY_BINDING_DEADLINES)
     }
 
-    /// TTL della tabella di binding per una coda con `x-expires`.
     fn binding_ttl(&self, expire_ms: u64) -> u64 {
         ((expire_ms as f64 * self.binding_expires_factor) as u64).max(self.min_binding_ttl_ms)
     }
@@ -221,7 +180,7 @@ impl Config {
         self.key(&self.unacked_mutex_key)
     }
 
-    /// Nome della lista per `queue` alla priorità `pri`, come `_q_for_pri`.
+    // Returns the queue's priority list name, matching `_q_for_pri`.
     fn queue_key(&self, queue: &str, pri: u8) -> String {
         let step = self.priority_step(pri);
         let mut out = String::with_capacity(self.keyprefix.len() + queue.len() + 4);
@@ -234,7 +193,7 @@ impl Config {
         out
     }
 
-    /// `Channel.priority`: il più grande step <= `pri`.
+    // Selects the greatest priority step at or below `pri`.
     fn priority_step(&self, pri: u8) -> u8 {
         let index = self.priority_steps.partition_point(|step| *step <= pri);
         if index == 0 {
@@ -244,7 +203,6 @@ impl Config {
         }
     }
 
-    /// Topic di `PUBLISH` per un exchange fanout.
     fn publish_topic(&self, exchange: &str, routing_key: &str) -> String {
         let mut out = String::with_capacity(
             self.keyprefix.len()
@@ -264,7 +222,6 @@ impl Config {
     }
 }
 
-/// Exchange dichiarato su questa connessione (stato locale, come kombu).
 #[derive(Debug, Clone)]
 struct ExchangeInfo {
     kind: ExchangeType,
@@ -286,7 +243,6 @@ struct FanoutBinding {
     pattern: CompactString,
 }
 
-/// Un messaggio consegnato e non ancora confermato da questo trasporto.
 #[derive(Debug, Clone)]
 struct InFlight {
     consumer: Option<u64>,
@@ -294,20 +250,17 @@ struct InFlight {
 
 #[derive(Debug)]
 struct ConsumerState {
-    /// Tutte le code attive (regolari e fanout), nell'ordine di sottoscrizione.
     queues: Vec<CompactString>,
-    /// Ordine di consumo delle code regolari (`queue_order_strategy`).
+
     order: Vec<CompactString>,
     prefetch: usize,
     in_flight: usize,
-    /// `no_ack`: le consegne non entrano in `unacked` e non bloccano il
-    /// prefetch (kombu registra `_noack_consumers` e salta `qos.append`).
+    // no_ack skips unacked tracking and prefetch limits, matching kombu's qos.append bypass.
     no_ack: bool,
     cancelled: bool,
     notify: Arc<Notify>,
 }
 
-/// Riga di binding: `(exchange, routing_key, pattern)`.
 type BindingRow = (CompactString, CompactString, Option<CompactString>);
 
 #[derive(Debug, Default)]
@@ -316,34 +269,30 @@ struct State {
     bindings: HashSet<BindingKey>,
     fanout_queues: HashMap<CompactString, FanoutBinding>,
     queue_expires: HashMap<CompactString, u64>,
-    /// Code dichiarate con `auto_delete`: chiuse le fanout, kombu le elimina.
+    // kombu deletes auto-delete queues after closing fanout consumers.
     auto_delete_queues: HashSet<CompactString>,
     consumers: HashMap<u64, ConsumerState>,
     in_flight: HashMap<CompactString, Vec<InFlight>>,
     next_consumer: u64,
 }
 
-/// Stato condiviso tra il trasporto, i consumatori e i controlli.
 struct Shared {
     config: Config,
-    /// Connessione multiplexata per comandi e publish.
+
     command: MultiplexedConnection,
-    /// Connessione dedicata alle transazioni `WATCH`/`MULTI`/`EXEC`.
+    // WATCH transactions need a dedicated connection.
     transactions: tokio::sync::Mutex<MultiplexedConnection>,
     state: Mutex<State>,
-    /// Timestamp dell'ultimo refresh/sweep dei binding con `x-expires`
-    /// (`Channel._binding_expiry_refreshed_at`/`_bindings_swept_at`).
+    // Matches kombu's per-channel binding refresh and sweep timestamps.
     binding_maintenance: Mutex<BindingMaintenance>,
     closed: AtomicBool,
 }
 
-/// Stato dei timer di manutenzione dei binding.
 #[derive(Default)]
 struct BindingMaintenance {
     refreshed_at: Option<Instant>,
     swept_at: Option<Instant>,
 }
-
 
 impl Shared {
     fn ensure_open(&self) -> Result<()> {
@@ -368,7 +317,6 @@ impl Shared {
         Error::NotFound(format!("no {kind} '{name}'"))
     }
 
-    /// Righe della tabella di binding, come `Channel.get_table`.
     async fn get_table(
         &self,
         exchange: &str,
@@ -399,7 +347,6 @@ impl Shared {
         Ok(rows)
     }
 
-    /// `Channel._lookup`: code a cui consegnare `routing_key` sull'exchange.
     async fn lookup(&self, exchange: &str, routing_key: &str) -> Result<Vec<CompactString>> {
         if exchange.is_empty() {
             let queue = if routing_key.is_empty() {
@@ -433,8 +380,7 @@ impl Shared {
                 queues.push(queue);
             }
         }
-        // Come `TopicExchange.deliver`: la deadletter non riceve i messaggi
-        // instradati (solo quelli senza route).
+        // TopicExchange.deliver sends only unroutable messages to the deadletter queue.
         if kind == ExchangeType::Topic
             && let Some(deadletter) = &self.config.options.deadletter_queue
         {
@@ -449,7 +395,6 @@ impl Shared {
         Ok(queues)
     }
 
-    /// `Channel._new_queue`: bookkeeping di scadenza e `auto_delete`.
     fn new_queue(&self, queue: &str, arguments: &Headers, auto_delete: bool) {
         let mut state = lock(&self.state);
         if auto_delete {
@@ -473,7 +418,6 @@ impl Shared {
         lock(&self.state).queue_expires.get(queue).copied()
     }
 
-    /// `_size`: somma delle `LLEN` di tutte le liste di priorità.
     async fn size(&self, queue: &str) -> Result<u64> {
         let mut conn = self.command_conn();
         let mut pipe = ::redis::pipe();
@@ -489,7 +433,6 @@ impl Shared {
             .sum())
     }
 
-    /// `_has_queue`: esiste almeno una lista di priorità.
     async fn has_queue(&self, queue: &str) -> Result<bool> {
         let mut conn = self.command_conn();
         let mut pipe = ::redis::pipe();
@@ -501,7 +444,6 @@ impl Shared {
         Ok(exists.into_iter().any(|value| value > 0))
     }
 
-    /// `_purge`: `LLEN`+`DEL` per ogni priorità, somma delle dimensioni.
     async fn purge(&self, queue: &str) -> Result<u64> {
         let mut conn = self.command_conn();
         let mut pipe = ::redis::pipe();
@@ -519,7 +461,6 @@ impl Shared {
             .sum())
     }
 
-    /// `_delete`: rimuove binding e liste di una coda.
     async fn delete_queue_keys(
         &self,
         queue: &str,
@@ -554,7 +495,6 @@ impl Shared {
         Ok(())
     }
 
-    /// `_maybe_update_queues_expire`: rinnova il TTL delle liste della coda.
     async fn maybe_update_queue_expire(&self, queue: &str) {
         let Some(expire) = self.queue_expire(queue) else {
             return;
@@ -571,7 +511,6 @@ impl Shared {
         let _ = pipe.query_async::<()>(&mut conn).await;
     }
 
-    /// Aggiunge il messaggio all'hash `unacked` e allo zset `unacked_index`.
     async fn append_unacked(&self, env: &json::Envelope, raw: &[u8]) -> Result<()> {
         let payload = json::join_unacked(raw, &env.exchange, &env.routing_key);
         let score = float_string(now_seconds());
@@ -593,7 +532,6 @@ impl Shared {
             .map_err(transport_error)
     }
 
-    /// `QoS.ack`/`reject(requeue=False)`: rimuove il tag dagli indici.
     async fn remove_unacked(&self, tag: &str) -> Result<()> {
         let mut conn = self.command_conn();
         let mut pipe = ::redis::pipe();
@@ -643,7 +581,6 @@ impl Shared {
         }
     }
 
-    /// `true` se il consumatore è `no_ack` (nessuna contabilità `unacked`).
     fn consumer_no_ack(&self, id: u64) -> bool {
         lock(&self.state)
             .consumers
@@ -651,7 +588,6 @@ impl Shared {
             .is_some_and(|consumer| consumer.no_ack)
     }
 
-    /// `_restore`/`restore_by_tag`: rimette in coda il messaggio del tag.
     async fn restore_by_tag(&self, tag: &str, leftmost: bool) -> Result<()> {
         let mut conn = self.transactions.lock().await;
         let unacked = self.config.unacked_key();
@@ -703,11 +639,10 @@ impl Shared {
             }
         }
         Err(Error::Channel(format!(
-            "restore del tag {tag} annullato troppe volte"
+            "restore of tag {tag} cancelled too many times"
         )))
     }
 
-    /// `QoS.restore_visible`: ripristina i messaggi scaduti.
     async fn restore_visible(&self) -> Result<()> {
         let ceil = now_seconds() - self.config.visibility_timeout;
         let mut conn = self.command_conn();
@@ -736,7 +671,6 @@ impl Shared {
             .await
             .map_err(transport_error)?;
         if acquired.is_none() {
-            // Un altro processo sta ripristinando i messaggi.
             return Ok(());
         }
 
@@ -755,7 +689,6 @@ impl Shared {
         result
     }
 
-    /// `queue_bind` (solo la parte Redis, già dentro il lock dello stato).
     async fn queue_bind(
         &self,
         exchange: &str,
@@ -795,7 +728,6 @@ impl Shared {
         Ok(())
     }
 
-    /// `sweep_bindings`: elimina le tabelle di binding scadute.
     async fn sweep_bindings(&self, limit: u64) -> Result<u64> {
         let mut conn = self.command_conn();
         let prefix_binding = self.config.key(KEY_BINDING);
@@ -811,7 +743,6 @@ impl Shared {
         Ok(removed as u64)
     }
 
-    /// Binding con `x-expires` delle *queues*, con il TTL effettivo.
     fn binding_rows(&self, queues: &[CompactString]) -> Vec<BindingRefreshRow> {
         let state = lock(&self.state);
         let mut rows = Vec::new();
@@ -843,11 +774,8 @@ impl Shared {
         rows
     }
 
-    /// `MultiChannelPoller.get` all'inizio di `drain_events`:
-    /// `maybe_refresh_binding_expiry()` con il suo throttle.
-    ///
-    /// `_refresh_bindings` invoca lo script dentro un `pipeline`, quindi
-    /// redis-py manda prima `SCRIPT EXISTS` e poi `MULTI`/`EVALSHA`/`EXEC`.
+    // Matches kombu's throttled binding refresh at the start of drain_events.
+    // redis-py checks SCRIPT EXISTS before MULTI/EVALSHA/EXEC.
     async fn refresh_binding_expiry_control(&self, queues: &[CompactString]) -> Result<()> {
         let rows = self.binding_rows(queues);
         if rows.is_empty() {
@@ -867,8 +795,7 @@ impl Shared {
         let mut conn = self.command_conn();
         if refresh {
             lock(&self.binding_maintenance).refreshed_at = Some(Instant::now());
-            // redis-py registra lo script nel pipeline e ne verifica l'esistenza
-            // prima del MULTI.
+            // redis-py checks script existence before MULTI.
             let _: Vec<i64> = ::redis::cmd("SCRIPT")
                 .arg("EXISTS")
                 .arg(script.get_hash())
@@ -905,12 +832,8 @@ impl Shared {
         Ok(())
     }
 
-    /// Refresh/sweep delle binding per il loop del consumatore.
-    ///
-    /// Ogni canale di kombu ha il proprio throttle
-    /// (`_binding_expiry_refreshed_at`/`_bindings_swept_at`): qui lo stato è
-    /// nel [`Conn`] del consumatore, così pidbox e gossip sullo stesso
-    /// trasporto rinnovano ciascuno la propria tabella.
+    // Each consumer has its own refresh throttle, matching kombu's per-channel timers
+    // so pidbox and gossip renew their own binding tables.
     async fn refresh_binding_expiry_loop(
         &self,
         queues: &[CompactString],
@@ -964,11 +887,8 @@ impl Shared {
         Ok(())
     }
 
-    /// `QoS.restore_visible` come la chiama `maybe_restore_messages`:
-    /// mutex, `ZRANGE ... BYSCORE REV WITHSCORES`, ripristino e rilascio.
-    ///
-    /// Ordine e comandi differiscono da [`Shared::restore_visible`] (usata dal
-    /// consumatore) perché qui devono coincidere con kombu.
+    // Matches kombu's mutex, reverse score scan, restore and release command sequence.
+    // This differs from the consumer's restore_visible path to preserve wire compatibility.
     async fn restore_visible_kombu(&self) -> Result<()> {
         let ceil = now_seconds() - self.config.visibility_timeout;
         let mut token = CompactString::new("");
@@ -1007,7 +927,6 @@ impl Shared {
         result
     }
 
-    /// `client.zrange(unacked_index, ceil, 0, desc, byscore, withscores)`.
     async fn visible_unacked(&self, ceil: f64) -> Result<Vec<String>> {
         let mut conn = self.command_conn();
         let rows: Vec<(String, f64)> = ::redis::cmd("ZRANGE")
@@ -1024,13 +943,11 @@ impl Shared {
     }
 }
 
-/// Riga di binding da rinfrescare (`_refresh_bindings`).
 struct BindingRefreshRow {
     exchange: String,
     member: String,
     ttl: u64,
 }
-
 
 fn binding_member(sep: &str, routing_key: &str, pattern: Option<&str>, queue: &str) -> String {
     let mut member =
@@ -1052,12 +969,11 @@ fn queue_expire(arguments: &Headers) -> Option<u64> {
     }
 }
 
-/// `_get_message_priority(message, reverse=False)`: priorità limitata a 0..=9.
 fn message_priority(properties: &crate::message::Properties) -> u8 {
     properties.priority().unwrap_or(0).min(9)
 }
 
-/// Trasporto Redis.
+/// Redis broker transport.
 pub struct RedisTransport {
     shared: Arc<Shared>,
 }
@@ -1071,12 +987,12 @@ impl std::fmt::Debug for RedisTransport {
 }
 
 impl RedisTransport {
-    /// Opzioni di trasporto effettive.
+    /// Returns the effective transport options.
     pub fn options(&self) -> &TransportOptions {
         &self.shared.config.options
     }
 
-    /// Crea il client: punto di estensione per Sentinel/Cluster.
+    // Creates the Redis client, allowing Sentinel or Cluster overrides.
     fn build_client(url: &Url) -> Result<(::redis::Client, i64, AsyncConnectionConfig)> {
         let info = url.info();
         let db = parse_db(url.virtual_host())?;
@@ -1100,7 +1016,7 @@ impl RedisTransport {
         }
         let connection_info = addr
             .into_connection_info()
-            .map_err(|error| Error::Connection(format!("indirizzo Redis non valido: {error}")))?
+            .map_err(|error| Error::Connection(format!("invalid Redis address: {error}")))?
             .set_redis_settings(redis_info);
         let client = ::redis::Client::open(connection_info)
             .map_err(|error| Error::InvalidUrl(error.to_string()))?;
@@ -1108,7 +1024,7 @@ impl RedisTransport {
     }
 }
 
-/// Installa il provider rustls per `rediss://` (una sola volta per processo).
+// Installs the rustls provider once per process for rediss URLs.
 fn install_crypto_provider() {
     static ONCE: std::sync::Once = std::sync::Once::new();
     ONCE.call_once(|| {
@@ -1116,10 +1032,7 @@ fn install_crypto_provider() {
     });
 }
 
-/// `Channel._prepare_virtual_host`: il path dell'URL è il numero di database.
-///
-/// Come kombu si toglie **un solo** slash iniziale: `//` non è un database
-/// valido (`int('/')` fallisce).
+/// Parses the database number after removing exactly one slash, matching kombu.
 pub(crate) fn parse_db(virtual_host: &str) -> Result<i64> {
     if virtual_host.is_empty() || virtual_host == "/" {
         return Ok(0);
@@ -1127,16 +1040,15 @@ pub(crate) fn parse_db(virtual_host: &str) -> Result<i64> {
     let text = virtual_host.strip_prefix('/').unwrap_or(virtual_host);
     text.parse::<i64>().map_err(|_| {
         Error::InvalidUrl(format!(
-            "database Redis non valido: {virtual_host:?} (atteso un intero)"
+            "invalid Redis database: {virtual_host:?} (expected an integer)"
         ))
     })
 }
 
-/// Crea un trasporto Redis da un URL già scomposto.
 pub(crate) async fn connect(url: &Url, config: &ConnectConfig) -> Result<RedisTransport> {
     let (client, db, mut conn_config) = RedisTransport::build_client(url)?;
-    // Il default di redis-rs (500 ms) è più basso del timeout di BRPOP: senza
-    // `socket_timeout` si attende quanto serve, come redis-py.
+    // redis-rs defaults to a timeout shorter than BRPOP; without socket_timeout,
+    // wait indefinitely as redis-py does.
     conn_config = conn_config.set_response_timeout(
         config
             .transport_options
@@ -1216,7 +1128,6 @@ pub(crate) async fn connect(url: &Url, config: &ConnectConfig) -> Result<RedisTr
     Ok(RedisTransport { shared })
 }
 
-/// Messaggio pronto per la pubblicazione.
 struct Prepared {
     envelope: Vec<u8>,
     priority: u8,
@@ -1243,25 +1154,23 @@ fn prepare_message(
     }
 }
 
-/// Effetto di una pubblicazione su Redis.
 enum PublishAction {
-    /// `LPUSH` sulla lista della coda (con `PEXPIRE` se ha `x-expires`).
     Lpush {
         key: String,
         payload: Vec<u8>,
         queue: CompactString,
         expire: Option<u64>,
     },
-    /// `PUBLISH` sul topic di un exchange fanout.
-    Publish { topic: String, payload: Vec<u8> },
+
+    Publish {
+        topic: String,
+        payload: Vec<u8>,
+    },
 }
 
 impl RedisTransport {
-    /// `Mailbox._collect` sul trasporto Redis: `drain_events` di kombu.
-    ///
-    /// Il `BRPOP` viene inviato con il timeout del canale (`brpop_timeout`,
-    /// 1s di default) e resta in volo; il timeout Python è quello del
-    /// `poll`, al cui scadere kombu esegue `maybe_restore_messages`.
+    // Matches Mailbox._collect: BRPOP stays pending with the channel timeout, while
+    // the Python poll timeout triggers maybe_restore_messages.
     async fn control_collect(
         &self,
         reply: &ReplyRoute,
@@ -1270,11 +1179,9 @@ impl RedisTransport {
         limit: Option<usize>,
     ) -> Result<ControlOutcome> {
         let config = &self.shared.config;
-        // `MultiChannelPoller.get`: refresh dei binding prima del BRPOP.
+        // Match MultiChannelPoller.get: refresh bindings before BRPOP.
         let queues = [reply.name.clone()];
-        self.shared
-            .refresh_binding_expiry_control(&queues)
-            .await?;
+        self.shared.refresh_binding_expiry_control(&queues).await?;
 
         let mut keys = Vec::with_capacity(config.priority_steps.len());
         for step in &config.priority_steps {
@@ -1285,7 +1192,7 @@ impl RedisTransport {
             .client
             .get_multiplexed_async_connection_with_config(&config.conn_config)
             .await
-            .map_err(|error| Error::Connection(format!("connessione Redis: {error}")))?;
+            .map_err(|error| Error::Connection(format!("redis connection: {error}")))?;
 
         let wait = if timeout.is_finite() && timeout > 0.0 {
             Duration::from_secs_f64(timeout)
@@ -1301,24 +1208,19 @@ impl RedisTransport {
             }
             let mut cmd = ::redis::cmd("BRPOP");
             cmd.arg(&keys);
-            // kombu passa `brpop_timeout` così com'è: il default è l'intero 1,
-            // `polling_interval` un float (stessa resa di redis-py).
+            // Preserve kombu's integer default or float polling_interval representation.
             if brpop_timeout.fract() == 0.0 {
                 cmd.arg(brpop_timeout as i64);
             } else {
                 cmd.arg(brpop_timeout);
             }
-            let mut brpop = Box::pin(
-                cmd.query_async::<Option<(String, Vec<u8>)>>(&mut conn),
-            );
+            let mut brpop = Box::pin(cmd.query_async::<Option<(String, Vec<u8>)>>(&mut conn));
             let item = if wait.is_zero() {
-                // `poller.poll(0)`: un solo poll senza attesa.
                 poll_future_once(&mut brpop)
             } else {
                 tokio::time::timeout_at(deadline.into(), brpop).await.ok()
             };
             let Some(item) = item else {
-                // Nessun evento: `maybe_restore_messages` e `Empty`.
                 let _ = self.shared.restore_visible_kombu().await;
                 break;
             };
@@ -1329,7 +1231,7 @@ impl RedisTransport {
                     outcome.push(delivery_from(envelope), ticket, now_seconds());
                     deadline = Instant::now() + wait;
                 }
-                // BRPOP scaduto sul server: nessun evento, come sopra.
+
                 Ok(None) => {
                     let _ = self.shared.restore_visible_kombu().await;
                     break;
@@ -1340,8 +1242,7 @@ impl RedisTransport {
         Ok(outcome)
     }
 
-    /// Crea un consumatore Redis; `no_ack` salta la contabilità `unacked` e
-    /// lascia sempre `can_consume` vero, come kombu per `_noack_consumers`.
+    // Creates a consumer; no_ack skips unacked tracking and prefetch limits as kombu does.
     async fn consume_inner(
         &self,
         queues: &[CompactString],
@@ -1351,7 +1252,7 @@ impl RedisTransport {
         self.shared.ensure_open()?;
         if queues.is_empty() {
             return Err(Error::InvalidArgument(
-                "consume richiede almeno una coda".to_string(),
+                "consume requires at least one queue".to_string(),
             ));
         }
         let mut unique: Vec<CompactString> = Vec::with_capacity(queues.len());
@@ -1403,7 +1304,6 @@ impl RedisTransport {
     }
 }
 
-/// Un solo poll di una future, senza attesa (per `timeout=0`).
 fn poll_future_once<F: Future>(future: &mut Pin<Box<F>>) -> Option<F::Output> {
     let waker = std::task::Waker::noop();
     let mut context = Context::from_waker(waker);
@@ -1498,7 +1398,7 @@ impl RedisTransport {
                     queue,
                     expire,
                 } => match expire {
-                    // Come `_put` con `x-expires`: pipeline con `PEXPIRE`.
+                    // Match kombu's _put pipeline with PEXPIRE for expiring queues.
                     Some(expire) => {
                         let mut pipe = ::redis::pipe();
                         pipe.atomic().cmd("LPUSH").arg(key).arg(payload).ignore();
@@ -1669,8 +1569,7 @@ impl Transport for RedisTransport {
     fn unbind<'a>(&'a self, binding: &'a QueueBinding) -> BoxFuture<'a, Result<()>> {
         Box::pin(async move {
             self.shared.ensure_open()?;
-            // Come `virtual.Channel.queue_unbind` sul trasporto Redis: solo
-            // stato locale, l'insieme dei binding sul broker resta invariato.
+            // kombu's virtual queue_unbind changes local state only, leaving Redis bindings intact.
             let mut state = lock(&self.shared.state);
             state.bindings.remove(&BindingKey {
                 queue: binding.queue.clone(),
@@ -1690,7 +1589,7 @@ impl Transport for RedisTransport {
                     return Err(self.shared.not_found("exchange", exchange));
                 }
             }
-            // `virtual.Channel.exchange_delete`: elimina le code vuote legate.
+            // Match virtual.Channel.exchange_delete by removing bound empty queues.
             for (routing_key, pattern, queue) in self.shared.get_table(exchange).await? {
                 if self.shared.size(&queue).await? != 0 {
                     continue;
@@ -1736,7 +1635,7 @@ impl Transport for RedisTransport {
             let Some(reply) = request.reply.clone() else {
                 return Ok(ControlOutcome::default());
             };
-            // `Consumer.declare()`: coda e binding vengono ridichiarati.
+            // Consumer.declare redeclares the queue and binding.
             self.declare_queue(&request.reply_queue_declaration(&reply))
                 .await?;
             self.bind(&request.reply_binding(&reply)).await?;
@@ -1745,7 +1644,7 @@ impl Transport for RedisTransport {
             let outcome = self
                 .control_collect(&reply, &ticket, request.timeout, request.limit)
                 .await?;
-            // `chan.after_reply_message_received(queue.name)` nel `finally`.
+            // Match kombu's after_reply_message_received cleanup.
             self.delete_queue(&reply.name).await?;
             Ok(outcome)
         })
@@ -1775,8 +1674,7 @@ impl Transport for RedisTransport {
         Box::pin(async move {
             self.shared.ensure_open()?;
             let tag = delivery_tag.to_string();
-            // `QoS.ack` agisce solo sui tag consegnati: con `no_ack` (pidbox,
-            // gossip) il tag non è locale e non deve produrre HDEL/ZREM.
+            // QoS.ack ignores nonlocal tags; no_ack deliveries must not issue HDEL/ZREM.
             if self.shared.remove_local(&tag) {
                 self.shared.remove_unacked(&tag).await
             } else {
@@ -1868,8 +1766,7 @@ impl Transport for RedisTransport {
             if self.shared.closed.swap(true, Ordering::Relaxed) {
                 return Ok(());
             }
-            // `redis.Channel.close`: le code fanout `auto_delete` del canale
-            // vengono eliminate insieme ai loro binding.
+            // Match redis.Channel.close by deleting auto-delete fanout queues and their bindings.
             let queues: Vec<(CompactString, Vec<BindingRow>)> = {
                 let state = lock(&self.shared.state);
                 state
@@ -1886,11 +1783,18 @@ impl Transport for RedisTransport {
                                     .exchanges
                                     .get(&binding.exchange)
                                     .map_or(ExchangeType::Direct, |info| info.kind);
-                                let pattern =
-                                    PreparedBinding::new(kind, &binding.queue, &binding.routing_key)
-                                        .ok()
-                                        .and_then(|prepared| prepared.pattern);
-                                (binding.exchange.clone(), binding.routing_key.clone(), pattern)
+                                let pattern = PreparedBinding::new(
+                                    kind,
+                                    &binding.queue,
+                                    &binding.routing_key,
+                                )
+                                .ok()
+                                .and_then(|prepared| prepared.pattern);
+                                (
+                                    binding.exchange.clone(),
+                                    binding.routing_key.clone(),
+                                    pattern,
+                                )
                             })
                             .collect();
                         (queue.clone(), rows)
@@ -1921,10 +1825,9 @@ impl Transport for RedisTransport {
                 state.in_flight.clear();
                 tags
             };
-            // `QoS.restore_unacked_once`: i non confermati tornano in coda.
+            // Match QoS.restore_unacked_once by requeuing pending deliveries.
             for tag in tags {
-                // Best-effort come `QoS.restore_unacked_once`: un errore non
-                // deve impedire la chiusura.
+                // Restoration errors must not prevent closure, matching kombu's best-effort cleanup.
                 let _ = self.shared.restore_by_tag(&tag, false).await;
             }
             Ok(())
@@ -1951,7 +1854,7 @@ impl RedisTransport {
             .client
             .get_multiplexed_async_connection_with_config(&self.shared.config.conn_config)
             .await
-            .map_err(|error| Error::Connection(format!("connessione Redis: {error}")))?;
+            .map_err(|error| Error::Connection(format!("redis connection: {error}")))?;
         Ok(Conn {
             brpop,
             pubsub: None,
@@ -1964,18 +1867,16 @@ impl RedisTransport {
     }
 }
 
-/// Connessioni possedute da un consumatore.
 struct Conn {
     brpop: MultiplexedConnection,
     pubsub: Option<PubSub>,
     topics: Vec<String>,
     last_restore: Instant,
-    /// Throttle del refresh/sweep di questo canale (come kombu).
+    // Per-channel refresh throttle, matching kombu.
     maintenance: BindingMaintenance,
 }
 
 impl Conn {
-    /// Allinea le sottoscrizioni pub/sub ai topic richiesti.
     async fn sync_topics(&mut self, config: &Config, topics: &[String]) -> Result<()> {
         if topics == self.topics.as_slice() {
             return Ok(());
@@ -1997,7 +1898,7 @@ impl Conn {
         let pubsub = self
             .pubsub
             .as_mut()
-            .ok_or_else(|| Error::Connection("pub/sub Redis non disponibile".to_string()))?;
+            .ok_or_else(|| Error::Connection("redis pub/sub unavailable".to_string()))?;
         for topic in &self.topics {
             if !topics.contains(topic) {
                 pubsub
@@ -2019,7 +1920,6 @@ impl Conn {
     }
 }
 
-/// Snapshot dello stato di un consumatore per il prossimo poll.
 struct Snapshot {
     queues: Vec<CompactString>,
     topics: Vec<String>,
@@ -2033,7 +1933,6 @@ enum Outcome {
     Lost(String),
 }
 
-/// Motivo per cui non c'è una consegna da tentare.
 enum SnapshotError {
     Cancelled,
     Lost(String),
@@ -2042,7 +1941,7 @@ enum SnapshotError {
 impl Snapshot {
     fn take(shared: &Shared, id: u64) -> std::result::Result<Self, SnapshotError> {
         if shared.closed.load(Ordering::Relaxed) {
-            return Err(SnapshotError::Lost("trasporto chiuso".to_string()));
+            return Err(SnapshotError::Lost("transport closed".to_string()));
         }
         let state = lock(&shared.state);
         let Some(consumer) = state.consumers.get(&id) else {
@@ -2051,9 +1950,8 @@ impl Snapshot {
         if consumer.cancelled {
             return Err(SnapshotError::Cancelled);
         }
-        let can_consume = consumer.no_ack
-            || consumer.prefetch == 0
-            || consumer.in_flight < consumer.prefetch;
+        let can_consume =
+            consumer.no_ack || consumer.prefetch == 0 || consumer.in_flight < consumer.prefetch;
         let mut queues: Vec<CompactString> = consumer
             .order
             .iter()
@@ -2084,11 +1982,10 @@ impl Snapshot {
     }
 }
 
-/// Sottoscrizioni fanout del consumatore, per associare un topic a una coda.
 fn fanout_queue_for(shared: &Shared, id: u64, channel: &str) -> Option<CompactString> {
     let state = lock(&shared.state);
     let consumer = state.consumers.get(&id)?;
-    // kombu mappa exchange -> ultima coda registrata (`_fanout_to_queue`).
+    // kombu maps each exchange to its last registered queue.
     let mut found = None;
     for queue in consumer.queues.iter().rev() {
         let Some(binding) = state.fanout_queues.get(queue) else {
@@ -2106,7 +2003,6 @@ fn fanout_queue_for(shared: &Shared, id: u64, channel: &str) -> Option<CompactSt
     found
 }
 
-/// Nome dell'exchange contenuto in un topic fanout (`/{db}.<exchange>[/<rk>]`).
 fn topic_exchange<'a>(shared: &Shared, topic: &'a str) -> &'a str {
     let rest = topic
         .strip_prefix(shared.config.keyprefix.as_str())
@@ -2115,10 +2011,9 @@ fn topic_exchange<'a>(shared: &Shared, topic: &'a str) -> &'a str {
     rest.split('/').next().unwrap_or(rest)
 }
 
-/// Future che attende una consegna (o un evento) senza cancellare BRPOP.
+// Keeps BRPOP pending while awaiting a delivery or event.
 type WaitFuture = Pin<Box<dyn Future<Output = (Conn, Outcome)> + Send>>;
 
-/// Stream di consegne di un consumatore Redis.
 struct RedisStream {
     shared: Arc<Shared>,
     id: u64,
@@ -2173,8 +2068,7 @@ impl Stream for RedisStream {
 impl Drop for RedisStream {
     fn drop(&mut self) {
         let mut state = lock(&self.shared.state);
-        // I messaggi in volo restano tracciati: sono ripristinati alla
-        // chiusura o dopo `visibility_timeout` (kombu `do_restore = True`).
+        // Keep pending deliveries tracked for restoration on close or visibility timeout.
         state.consumers.remove(&self.id);
     }
 }
@@ -2188,9 +2082,7 @@ async fn wait_once(mut conn: Conn, shared: Arc<Shared>, id: u64) -> (Conn, Outco
     if let Err(error) = conn.sync_topics(&shared.config, &snapshot.topics).await {
         return (conn, Outcome::Lost(error.to_string()));
     }
-    // `MultiChannelPoller.get`: il refresh/sweep dei binding avviene a ogni
-    // giro, prima di BRPOP/SUBSCRIBE (il primo giro rinfresca subito, come
-    // `_binding_expiry_refreshed_at = -inf` del canale kombu).
+    // Match MultiChannelPoller.get: refresh before BRPOP/SUBSCRIBE, including the first poll.
     maybe_maintain_bindings(&shared, &mut conn, id).await;
 
     if snapshot.can_consume && !snapshot.queues.is_empty() {
@@ -2219,7 +2111,7 @@ async fn wait_once(mut conn: Conn, shared: Arc<Shared>, id: u64) -> (Conn, Outco
                     }
                     _ => CompactString::from(key.as_str()),
                 };
-                // Round robin: la coda appena usata va in fondo (`rotate`).
+
                 if config.queue_order_strategy == QueueOrderStrategy::RoundRobin {
                     let mut state = lock(&shared.state);
                     if let Some(consumer) = state.consumers.get_mut(&id)
@@ -2258,10 +2150,7 @@ async fn wait_once(mut conn: Conn, shared: Arc<Shared>, id: u64) -> (Conn, Outco
         };
         let outcome = {
             let Some(pubsub) = conn.pubsub.as_mut() else {
-                return (
-                    conn,
-                    Outcome::Lost("pub/sub Redis non disponibile".to_string()),
-                );
+                return (conn, Outcome::Lost("redis pub/sub unavailable".to_string()));
             };
             let mut messages = pubsub.on_message();
             let mut pending = None;
@@ -2271,13 +2160,12 @@ async fn wait_once(mut conn: Conn, shared: Arc<Shared>, id: u64) -> (Conn, Outco
                 _ = tokio::time::sleep(TICK) => Outcome::Retry,
                 message = std::future::poll_fn(|cx| Pin::new(&mut messages).poll_next(cx)) => {
                     match message {
-                        // Il messaggio va registrato fuori dal select: qui
-                        // teniamo solo il payload.
+                        // Register the delivery outside select; retain only the payload here.
                         Some(message) => {
                             pending = Some(message);
                             Outcome::Retry
                         }
-                        None => Outcome::Lost("connessione pub/sub chiusa".to_string()),
+                        None => Outcome::Lost("pub/sub connection closed".to_string()),
                     }
                 }
             };
@@ -2313,11 +2201,8 @@ async fn wait_once(mut conn: Conn, shared: Arc<Shared>, id: u64) -> (Conn, Outco
     }
 }
 
-/// Refresh/sweep periodico delle tabelle di binding con `x-expires`.
-///
-/// Stessa sequenza di `Channel.maybe_refresh_binding_expiry`, che kombu invoca
-/// a ogni `drain_events`: il primo giro rinfresca (throttle sull'ultimo
-/// refresh) e il sweep ha il suo intervallo.
+// Matches kombu's binding maintenance order: refresh on the first drain and throttle
+// subsequent refreshes and sweeps independently.
 async fn maybe_maintain_bindings(shared: &Shared, conn: &mut Conn, id: u64) {
     let queues: Vec<CompactString> = {
         let state = lock(&shared.state);
@@ -2335,8 +2220,7 @@ async fn maybe_maintain_bindings(shared: &Shared, conn: &mut Conn, id: u64) {
 }
 
 async fn maybe_restore(shared: &Shared, conn: &mut Conn, id: u64) {
-    // Kombu: `maybe_restore_messages` considera solo i canali con code
-    // regolari (`active_queues`); pidbox/gossip sono solo fanout.
+    // kombu restores only channels with regular queues; pidbox and gossip are fanout-only.
     let has_regular = {
         let state = lock(&shared.state);
         state.consumers.get(&id).is_some_and(|consumer| {
@@ -2353,7 +2237,7 @@ async fn maybe_restore(shared: &Shared, conn: &mut Conn, id: u64) {
         return;
     }
     conn.last_restore = Instant::now();
-    // Best-effort come `MultiChannelPoller.maybe_restore_messages`.
+    // Match MultiChannelPoller.maybe_restore_messages best-effort behavior.
     let _ = shared.restore_visible().await;
 }
 
@@ -2371,12 +2255,10 @@ async fn handle_pubsub(
         shared.append_unacked(&envelope, raw).await?;
         shared.register_local(&envelope.delivery_tag, Some(id));
     }
-    // Come `_put_fanout` di kombu: nessuna lista e nessun `PEXPIRE` per i
-    // messaggi fanout.
+    // kombu's _put_fanout creates no lists or message expiry commands.
     Ok(Some(delivery_from(envelope)))
 }
 
-/// Controllo di un consumatore Redis.
 struct RedisConsumerControl {
     shared: Arc<Shared>,
     id: u64,
@@ -2438,7 +2320,6 @@ impl ConsumerControl for RedisConsumerControl {
     }
 }
 
-/// URL del broker usato dai test (nessun mock).
 #[cfg(test)]
 fn test_url() -> String {
     std::env::var("CELERY_RS_REDIS_URL")

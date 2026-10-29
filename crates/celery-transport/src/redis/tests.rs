@@ -1,8 +1,5 @@
-//! Test del trasporto Redis contro un server reale.
-//!
-//! Il broker si configura con `CELERY_RS_TEST_REDIS` (default
-//! `redis://127.0.0.1:6390`). I test usano nomi univoci e serializzano
-//! l'accesso perché condividono le chiavi globali `unacked`/`unacked_index`.
+//! Redis transport tests against a real server. Tests serialize access because
+//! unacked keys are shared; CELERY_RS_TEST_REDIS selects the broker.
 
 use std::sync::{LazyLock, Mutex};
 use std::time::Duration;
@@ -19,7 +16,7 @@ const WAIT: Duration = Duration::from_secs(5);
 
 static SERIAL: LazyLock<tokio::sync::Mutex<()>> = LazyLock::new(|| tokio::sync::Mutex::new(()));
 
-/// Serializza i test: lo stato `unacked` di Redis è condiviso.
+// Serializes tests because Redis unacked state is shared.
 async fn serial() -> tokio::sync::MutexGuard<'static, ()> {
     SERIAL.lock().await
 }
@@ -31,10 +28,9 @@ fn unique(prefix: &str) -> String {
 async fn connect(url: &str) -> Box<dyn Transport> {
     crate::connect(url)
         .await
-        .unwrap_or_else(|error| panic!("Redis non disponibile su {url}: {error}"))
+        .unwrap_or_else(|error| panic!("redis unavailable at {url}: {error}"))
 }
 
-/// Connessione con opzioni di trasporto aggiuntive.
 async fn connect_with(url: &str, extra: &[(&str, HeaderValue)]) -> Box<dyn Transport> {
     let mut headers = Headers::new();
     for (key, value) in extra {
@@ -43,7 +39,7 @@ async fn connect_with(url: &str, extra: &[(&str, HeaderValue)]) -> Box<dyn Trans
     let options = TransportOptions::from_headers(&headers).expect("opzioni");
     crate::connect_with(url, options)
         .await
-        .unwrap_or_else(|error| panic!("Redis non disponibile su {url}: {error}"))
+        .unwrap_or_else(|error| panic!("redis unavailable at {url}: {error}"))
 }
 
 async fn flush() {
@@ -51,7 +47,7 @@ async fn flush() {
     let mut conn = client
         .get_multiplexed_async_connection()
         .await
-        .expect("connessione");
+        .expect("connection");
     ::redis::cmd("FLUSHDB")
         .exec_async(&mut conn)
         .await
@@ -69,19 +65,19 @@ async fn next(stream: &mut DeliveryStream) -> Option<Result<Delivery>> {
 async fn recv(stream: &mut DeliveryStream) -> Delivery {
     tokio::time::timeout(WAIT, next(stream))
         .await
-        .expect("timeout in attesa di un messaggio")
-        .expect("stream terminato")
-        .expect("errore di consegna")
+        .expect("timed out waiting for a message")
+        .expect("stream ended")
+        .expect("delivery error")
 }
 
 async fn expect_empty(stream: &mut DeliveryStream, within: Duration) {
     match tokio::time::timeout(within, next(stream)).await {
         Err(_) => {}
         Ok(Some(Ok(delivery))) => {
-            panic!("consegna inattesa: {:?}", delivery.message.body)
+            panic!("unexpected delivery: {:?}", delivery.message.body)
         }
-        Ok(Some(Err(error))) => panic!("errore inatteso: {error}"),
-        Ok(None) => panic!("lo stream è terminato"),
+        Ok(Some(Err(error))) => panic!("unexpected error: {error}"),
+        Ok(None) => panic!("stream ended"),
     }
 }
 
@@ -105,7 +101,7 @@ async fn setup(
     transport
         .declare_queue(&QueueDecl::new(queue))
         .await
-        .expect("coda");
+        .expect("queue");
     transport
         .bind(&QueueBinding::new(queue, exchange, routing_key))
         .await
@@ -117,7 +113,7 @@ async fn keys(pattern: &str) -> Vec<String> {
     let mut conn = client
         .get_multiplexed_async_connection()
         .await
-        .expect("connessione");
+        .expect("connection");
     let values: Vec<String> = ::redis::cmd("KEYS")
         .arg(pattern)
         .query_async(&mut conn)
@@ -169,7 +165,6 @@ async fn publish_consume_ack() {
     assert!(!delivery.redelivered);
     assert!(delivery.delivery_tag.as_str().is_some());
 
-    // Non confermato: presente nell'hash `unacked`.
     let client = ::redis::Client::open(url()).expect("client");
     let mut conn = client
         .get_multiplexed_async_connection()
@@ -286,8 +281,7 @@ async fn reject_with_requeue_goes_to_the_back_like_a_new_publish() {
         .await
         .expect("requeue");
 
-    // `_restore_at_beginning` usa LPUSH, come un nuovo publish: il messaggio
-    // reinserito è l'ultimo a essere consumato.
+    // _restore_at_beginning uses LPUSH, so restored messages are consumed last.
     let second = recv(&mut stream).await;
     assert_eq!(second.message.body, Bytes::from_static(b"two"));
     let third = recv(&mut stream).await;
@@ -296,7 +290,7 @@ async fn reject_with_requeue_goes_to_the_back_like_a_new_publish() {
     transport.ack(&second.delivery_tag).await.expect("ack");
     transport.ack(&third.delivery_tag).await.expect("ack");
 
-    // Requeue di un tag sconosciuto: errore (kombu: KeyError).
+    // kombu raises KeyError when requeuing an unknown tag.
     assert!(matches!(
         transport.reject(&DeliveryTag::from("missing"), true).await,
         Err(Error::UnknownDeliveryTag(_))
@@ -355,14 +349,14 @@ async fn fanout_delivers_to_every_bound_queue() {
         transport
             .declare_queue(&QueueDecl::new(&queue))
             .await
-            .expect("coda");
+            .expect("queue");
         transport
             .bind(&QueueBinding::new(&queue, &exchange, ""))
             .await
             .expect("binding");
         queues.push(queue);
     }
-    // I consumer devono sottoscrivere prima del publish.
+    // Subscribe before publishing to avoid losing fanout messages.
     let mut first = transport
         .consume(&[CompactString::from(&queues[0])], 0)
         .await
@@ -389,7 +383,6 @@ async fn fanout_delivers_to_every_bound_queue() {
     transport.ack(&delivery.delivery_tag).await.expect("ack");
     transport.ack(&other.delivery_tag).await.expect("ack");
 
-    // Nessuna lista creata per il fanout.
     assert!(keys(&format!("*{}*", queues[0])).await.is_empty());
 }
 
@@ -407,7 +400,7 @@ async fn fanout_patterns_use_the_routing_key() {
     transport
         .declare_queue(&QueueDecl::new(&queue))
         .await
-        .expect("coda");
+        .expect("queue");
     transport
         .bind(&QueueBinding::new(&queue, &exchange, "task.#"))
         .await
@@ -454,7 +447,7 @@ async fn topic_routing_matches_kombu_patterns() {
         transport
             .declare_queue(&QueueDecl::new(&queue))
             .await
-            .expect("coda");
+            .expect("queue");
         transport
             .bind(&QueueBinding::new(&queue, &exchange, routing_key))
             .await
@@ -486,7 +479,7 @@ async fn topic_routing_matches_kombu_patterns() {
         );
     }
 
-    // "account.#" non copre "account".
+    // kombu requires the dot: `account.#` does not match `account`.
     transport
         .publish(PublishRequest::new(
             Some(&exchange),
@@ -519,7 +512,7 @@ fn queue_of(suffix: &str) -> String {
     lock(&QUEUES)
         .get(suffix)
         .cloned()
-        .unwrap_or_else(|| panic!("coda {suffix} mancante"))
+        .unwrap_or_else(|| panic!("missing queue {suffix}"))
 }
 
 #[tokio::test]
@@ -593,8 +586,7 @@ async fn priority_selects_the_same_lists_as_kombu() {
             .await
             .expect("publish");
     }
-    // Come kombu: liste per step in ordine crescente (0, 3, 6, 9), quindi la
-    // priorità 0 viene consumata per prima.
+    // kombu consumes priority steps in ascending order, starting at zero.
     assert_eq!(keys(&format!("{}*", queue)).await.len(), 3);
     let mut stream = transport
         .consume(&[CompactString::from(&queue)], 0)
@@ -635,7 +627,7 @@ async fn purge_size_and_delete() {
     transport.delete_queue(&queue).await.expect("delete");
     assert_eq!(transport.queue_size(&queue).await.expect("size"), 0);
     assert!(keys(&format!("{}*", queue)).await.is_empty());
-    // Il binding è stato rimosso: il messaggio non viene più accodato.
+
     transport
         .publish(PublishRequest::new(Some(&exchange), "rk", message("lost")))
         .await
@@ -681,7 +673,7 @@ async fn duplicate_bindings_deliver_once() {
     transport
         .bind(&QueueBinding::new(&queue, &exchange, "a.#"))
         .await
-        .expect("secondo binding");
+        .expect("second binding");
     transport
         .publish(PublishRequest::new(Some(&exchange), "a.b", message("once")))
         .await
@@ -698,7 +690,7 @@ async fn exchange_declarations_must_be_equivalent() {
     transport
         .declare_exchange(&ExchangeDecl::new(&exchange, ExchangeType::Direct))
         .await
-        .expect("prima dichiarazione");
+        .expect("first declaration");
     assert!(matches!(
         transport
             .declare_exchange(&ExchangeDecl::new(&exchange, ExchangeType::Topic))
@@ -736,7 +728,7 @@ async fn get_pops_one_message_and_honours_no_ack() {
         .get(&queue, true)
         .await
         .expect("get")
-        .expect("messaggio");
+        .expect("message");
     assert_eq!(first.message.body, Bytes::from_static(b"a"));
     assert_eq!(first.exchange, exchange);
     assert_eq!(first.routing_key, "rk");
@@ -747,7 +739,7 @@ async fn get_pops_one_message_and_honours_no_ack() {
         .get(&queue, false)
         .await
         .expect("get")
-        .expect("messaggio");
+        .expect("message");
     assert_eq!(second.message.body, Bytes::from_static(b"b"));
     assert_eq!(transport.queue_size(&queue).await.expect("size"), 0);
     transport
@@ -760,7 +752,7 @@ async fn get_pops_one_message_and_honours_no_ack() {
         .get(&queue, false)
         .await
         .expect("get")
-        .expect("messaggio");
+        .expect("message");
     assert_eq!(third.message.body, Bytes::from_static(b"b"));
     assert!(third.redelivered);
     transport.ack(&third.delivery_tag).await.expect("ack");
@@ -837,7 +829,7 @@ async fn consumer_control_changes_prefetch_and_queues() {
     assert_eq!(fifth.routing_key, second);
 
     control.set_prefetch(2).await.expect("set_prefetch");
-    // 3 in volo (third, fourth, fifth) con soglia 2: niente altre consegne.
+
     expect_empty(&mut stream, Duration::from_millis(300)).await;
     transport.ack(&third.delivery_tag).await.expect("ack");
     expect_empty(&mut stream, Duration::from_millis(300)).await;
@@ -852,7 +844,7 @@ async fn consumer_control_changes_prefetch_and_queues() {
     assert!(
         tokio::time::timeout(WAIT, next(&mut stream))
             .await
-            .expect("nessun timeout")
+            .expect("no timeout")
             .is_none()
     );
     assert!(matches!(control.set_prefetch(1).await, Err(Error::Closed)));
@@ -887,14 +879,14 @@ async fn cancel_keeps_in_flight_ackable() {
     assert!(
         tokio::time::timeout(WAIT, next(&mut stream))
             .await
-            .expect("nessun timeout")
+            .expect("no timeout")
             .is_none()
     );
     assert_eq!(transport.queue_size(&queue).await.expect("size"), 0);
     transport
         .ack(&delivery.delivery_tag)
         .await
-        .expect("ack dopo cancel");
+        .expect("ack after cancel");
 }
 
 #[tokio::test]
@@ -916,7 +908,7 @@ async fn unbind_matches_kombu_and_keeps_broker_bindings() {
     transport
         .declare_queue(&QueueDecl::new(&second))
         .await
-        .expect("coda");
+        .expect("queue");
     transport
         .bind(&QueueBinding::new(&second, &exchange, "task.#"))
         .await
@@ -934,8 +926,7 @@ async fn unbind_matches_kombu_and_keeps_broker_bindings() {
         ))
         .await
         .expect("publish");
-    // Sul trasporto Redis `queue_unbind` non tocca il broker: entrambe le
-    // code ricevono il messaggio (verificato contro kombu 5.7).
+    // Redis queue_unbind leaves broker bindings intact, verified against kombu 5.7.
     assert_eq!(transport.queue_size(&first).await.expect("size"), 1);
     assert_eq!(transport.queue_size(&second).await.expect("size"), 1);
 }
@@ -956,7 +947,7 @@ async fn delete_exchange_removes_empty_queues_and_bindings() {
         transport
             .declare_queue(&QueueDecl::new(queue))
             .await
-            .expect("coda");
+            .expect("queue");
         transport
             .bind(&QueueBinding::new(queue, &exchange, queue.as_str()))
             .await
@@ -985,8 +976,7 @@ async fn delete_exchange_removes_empty_queues_and_bindings() {
             .await,
         Err(Error::NotFound(_))
     ));
-    // La coda vuota è stata eliminata; quella piena resta e conserva il
-    // binding (kombu usa `queue_delete(if_empty=True)`).
+    // kombu uses queue_delete(if_empty=True), preserving nonempty queues and bindings.
     assert!(matches!(
         transport
             .declare_queue(&QueueDecl {
@@ -1002,7 +992,7 @@ async fn delete_exchange_removes_empty_queues_and_bindings() {
             ..QueueDecl::new(&full)
         })
         .await
-        .expect("coda piena");
+        .expect("nonempty queue");
     assert_eq!(info.message_count, 1);
     transport
         .publish(PublishRequest::new(
@@ -1048,7 +1038,7 @@ async fn passive_declarations_match_kombu() {
     transport
         .declare_queue(&QueueDecl::new(&queue))
         .await
-        .expect("coda");
+        .expect("queue");
     transport
         .publish(PublishRequest::new(None::<&str>, &queue, message("x")))
         .await
@@ -1060,14 +1050,14 @@ async fn passive_declarations_match_kombu() {
             ..ExchangeDecl::new(&exchange, ExchangeType::Direct)
         })
         .await
-        .expect("exchange passivo");
+        .expect("passive exchange");
     let info = transport
         .declare_queue(&QueueDecl {
             passive: true,
             ..QueueDecl::new(&queue)
         })
         .await
-        .expect("coda passiva");
+        .expect("passive queue");
     assert_eq!(info.message_count, 1);
 }
 
@@ -1092,17 +1082,17 @@ async fn closing_transport_emits_connection_lost() {
     transport.close().await.expect("close");
     match tokio::time::timeout(WAIT, next(&mut stream))
         .await
-        .expect("nessun timeout")
+        .expect("no timeout")
     {
         Some(Err(Error::ConnectionLost(_))) => {}
-        Some(Err(other)) => panic!("atteso ConnectionLost, ottenuto {other}"),
-        Some(Ok(delivery)) => panic!("consegna inattesa: {delivery:?}"),
-        None => panic!("lo stream è terminato senza ConnectionLost"),
+        Some(Err(other)) => panic!("expected ConnectionLost, got {other}"),
+        Some(Ok(delivery)) => panic!("unexpected delivery: {delivery:?}"),
+        None => panic!("stream ended without ConnectionLost"),
     }
     assert!(
         tokio::time::timeout(WAIT, next(&mut stream))
             .await
-            .expect("nessun timeout")
+            .expect("no timeout")
             .is_none()
     );
     assert!(matches!(
@@ -1129,7 +1119,7 @@ async fn closing_a_transport_keeps_other_consumers_alive() {
     other
         .publish(PublishRequest::new(Some(&exchange), "rk", message("still")))
         .await
-        .expect_err("il trasporto chiuso rifiuta i publish");
+        .expect_err("closed transport rejects publications");
     transport
         .publish(PublishRequest::new(Some(&exchange), "rk", message("alive")))
         .await
@@ -1161,7 +1151,7 @@ async fn close_restores_unacked_messages() {
         .into_stream();
     let delivery = recv(&mut stream).await;
     assert_eq!(delivery.message.body, Bytes::from_static(b"pending"));
-    // Chiusura: `QoS.restore_unacked_once` rimette in coda.
+    // QoS.restore_unacked_once requeues on close.
     transport.close().await.expect("close");
     assert_eq!(other.queue_size(&queue).await.expect("size"), 1);
     let mut stream = other
@@ -1194,7 +1184,7 @@ async fn visibility_timeout_restores_unacked_messages() {
         .into_stream();
     let delivery = recv(&mut stream).await;
     assert_eq!(delivery.message.body, Bytes::from_static(b"slow"));
-    // Nessun ack: dopo il visibility_timeout un altro consumatore lo vede.
+
     let mut other = second
         .consume(&[CompactString::from(&queue)], 0)
         .await
@@ -1209,7 +1199,7 @@ async fn visibility_timeout_restores_unacked_messages() {
         }
     })
     .await
-    .expect("messaggio non ripristinato");
+    .expect("message not restored");
     assert_eq!(restored.message.body, Bytes::from_static(b"slow"));
     second.ack(&restored.delivery_tag).await.expect("ack");
 }
@@ -1314,7 +1304,7 @@ async fn queue_expires_sets_ttl_on_lists() {
             ..QueueDecl::new(&queue)
         })
         .await
-        .expect("coda");
+        .expect("queue");
     transport
         .bind(&QueueBinding::new(&queue, &exchange, "rk"))
         .await
@@ -1334,7 +1324,7 @@ async fn queue_expires_sets_ttl_on_lists() {
         .await
         .expect("PTTL");
     assert!(ttl > 0 && ttl <= 120_000, "ttl {ttl}");
-    // La tabella di binding ha una scadenza nello zset dedicato.
+
     let deadline: i64 = ::redis::cmd("ZCARD")
         .arg("_kombu.binding_deadlines")
         .query_async(&mut conn)
@@ -1373,17 +1363,17 @@ async fn queue_order_strategy_selects_the_queue_order() {
     let url = url();
     let first = unique("order-a");
     let second = unique("order-b");
-    // round_robin: ordine di sottoscrizione, ruotando dopo ogni consegna.
+
     assert_eq!(
         scenario(&url, HeaderValue::from("round_robin"), &first, &second).await,
         vec![second.clone(), first.clone()]
     );
-    // priority: ordine di sottoscrizione senza rotazione.
+
     assert_eq!(
         scenario(&url, HeaderValue::from("priority"), &first, &second).await,
         vec![second.clone(), first.clone()]
     );
-    // sorted: ordine alfabetico.
+
     let mut sorted = vec![first.clone(), second.clone()];
     sorted.sort();
     assert_eq!(
@@ -1392,8 +1382,7 @@ async fn queue_order_strategy_selects_the_queue_order() {
     );
 }
 
-/// Consumer `no_ack` (pidbox/gossip): nessuna contabilità `unacked`, binding
-/// fanout con TTL e coda `auto_delete` eliminata alla chiusura.
+// Checks no_ack fanout binding TTL, unacked tracking bypass and auto-delete cleanup.
 #[tokio::test]
 async fn no_ack_fanout_skips_unacked_and_deletes_auto_delete_queue() {
     let _serial = serial().await;
@@ -1419,9 +1408,13 @@ async fn no_ack_fanout_skips_unacked_and_deletes_auto_delete_queue() {
             ..QueueDecl::default()
         })
         .await
-        .expect("coda");
+        .expect("queue");
     transport
-        .bind(&QueueBinding::new(queue.as_str(), exchange.as_str(), "worker.#"))
+        .bind(&QueueBinding::new(
+            queue.as_str(),
+            exchange.as_str(),
+            "worker.#",
+        ))
         .await
         .expect("binding");
 
@@ -1431,7 +1424,7 @@ async fn no_ack_fanout_skips_unacked_and_deletes_auto_delete_queue() {
         .await
         .expect("consume no_ack");
     let mut stream = consumer.deliveries;
-    // Il primo poll sottoscrive i topic fanout.
+
     let _ = tokio::time::timeout(Duration::from_millis(200), next(&mut stream)).await;
     transport
         .publish(PublishRequest::new(
@@ -1443,13 +1436,12 @@ async fn no_ack_fanout_skips_unacked_and_deletes_auto_delete_queue() {
         .expect("publish");
     let delivery = recv(&mut stream).await;
     assert_eq!(delivery.routing_key.as_str(), "worker.online");
-    // `consume_no_ack`: il messaggio non è in `unacked`, nemmeno prima
-    // dell'ack che il consumer Rust fa comunque (best effort).
+    // no_ack skips unacked tracking even before the consumer's best-effort acknowledgment.
     let client = ::redis::Client::open(url.clone()).expect("client");
     let mut conn = client
         .get_multiplexed_async_connection()
         .await
-        .expect("connessione");
+        .expect("connection");
     let unacked: i64 = ::redis::cmd("HLEN")
         .arg("unacked")
         .query_async(&mut conn)
@@ -1465,6 +1457,6 @@ async fn no_ack_fanout_skips_unacked_and_deletes_auto_delete_queue() {
         .expect("SMEMBERS");
     assert!(
         !members.iter().any(|member| member.ends_with(&queue)),
-        "binding rimasto: {members:?}"
+        "binding remains: {members:?}"
     );
 }

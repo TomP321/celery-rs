@@ -1,8 +1,4 @@
-//! Test di integrazione del trasporto AMQP su RabbitMQ.
-//!
-//! Broker: `CELERY_RS_TEST_AMQP` (default `amqp://guest:guest@127.0.0.1:5673//`).
-//! Ogni test usa nomi unici: più test possono girare in parallelo sullo stesso
-//! vhost senza interferire.
+//! RabbitMQ integration tests with unique entity names. CELERY_RS_TEST_AMQP selects the broker.
 
 use std::time::Duration;
 
@@ -40,7 +36,7 @@ async fn transport_with(options: TransportOptions) -> Box<dyn Transport> {
         },
     )
     .await
-    .unwrap_or_else(|error| panic!("connessione AMQP a {}: {error}", broker_url()))
+    .unwrap_or_else(|error| panic!("amqp connection to {}: {error}", broker_url()))
 }
 
 async fn transport() -> Box<dyn Transport> {
@@ -63,7 +59,7 @@ async fn setup(
     transport
         .declare_queue(&QueueDecl::new(queue.as_str()))
         .await
-        .expect("coda");
+        .expect("queue");
     transport
         .bind(&QueueBinding::new(
             queue.as_str(),
@@ -82,9 +78,9 @@ async fn next(stream: &mut DeliveryStream) -> Option<Result<Delivery, Error>> {
 async fn recv(stream: &mut DeliveryStream) -> Delivery {
     tokio::time::timeout(WAIT, next(stream))
         .await
-        .expect("timeout in attesa di un messaggio")
-        .expect("stream terminato")
-        .expect("errore di consegna")
+        .expect("timed out waiting for a message")
+        .expect("stream ended")
+        .expect("delivery error")
 }
 
 async fn wait_size(transport: &dyn Transport, queue: &str, expected: u64) {
@@ -95,7 +91,7 @@ async fn wait_size(transport: &dyn Transport, queue: &str, expected: u64) {
             return;
         }
         if tokio::time::Instant::now() >= deadline {
-            panic!("coda {queue}: attesi {expected} messaggi, trovati {size}");
+            panic!("queue {queue}: expected {expected} messages, got {size}");
         }
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
@@ -173,7 +169,7 @@ async fn publish_consume_ack_with_headers_and_properties() {
     assert_eq!(delivery.message.content_type, msg.content_type);
     assert_eq!(delivery.message.content_encoding, msg.content_encoding);
     assert_eq!(delivery.message.headers, headers);
-    // Le proprietà native non duplicano content-type né gli header.
+
     for (key, value) in properties.iter() {
         assert_eq!(delivery.message.properties.get(key), Some(value), "{key}");
     }
@@ -186,15 +182,15 @@ async fn publish_consume_ack_with_headers_and_properties() {
 
     transport.ack(&delivery.delivery_tag).await.expect("ack");
     wait_size(transport.as_ref(), &queue, 0).await;
-    // Ack di un tag già confermato: no-op, non chiude il canale.
+    // Duplicate acknowledgments must not close the channel.
     transport
         .ack(&delivery.delivery_tag)
         .await
-        .expect("ack doppio");
+        .expect("duplicate ack");
     transport
         .declare_queue(&QueueDecl::new(queue.as_str()))
         .await
-        .expect("canale ancora vivo");
+        .expect("channel still alive");
 }
 
 #[tokio::test]
@@ -251,18 +247,18 @@ async fn reject_with_requeue_marks_redelivered() {
     transport.ack(&second.delivery_tag).await.expect("ack");
     wait_size(transport.as_ref(), &queue, 0).await;
 
-    // Un tag sconosciuto con requeue è un errore (come il QoS di kombu).
+    // kombu rejects requeue requests for unknown tags.
     assert!(matches!(
         transport
             .reject(&DeliveryTag::Number(999_999_999), true)
             .await,
         Err(Error::UnknownDeliveryTag(_))
     ));
-    // Senza requeue è un no-op.
+
     transport
         .reject(&DeliveryTag::Number(999_999_999), false)
         .await
-        .expect("reject sconosciuto");
+        .expect("reject unknown tag");
 }
 
 #[tokio::test]
@@ -291,7 +287,7 @@ async fn prefetch_can_be_changed_with_active_consumer() {
             .is_err()
     );
 
-    // Cambio a caldo: stessa basic.qos di Celery, senza ricreare il consumer.
+    // Match Celery's basic.qos call without recreating consumers.
     control.set_prefetch(4).await.expect("set_prefetch");
     transport.ack(&first.delivery_tag).await.expect("ack");
     let third = recv(&mut stream).await;
@@ -309,8 +305,7 @@ async fn prefetch_can_be_changed_with_active_consumer() {
     transport.ack(&fifth.delivery_tag).await.expect("ack");
     wait_size(transport.as_ref(), &queue, 0).await;
 
-    // Le code quorum non supportano il QoS globale: il limite resta
-    // per-consumer e i cambi non devono fallire.
+    // Quorum queues require per-consumer QoS.
     let id = suffix();
     let quorum = format!("rs.quorum.prefetch.{id}");
     let mut arguments = Headers::new();
@@ -337,8 +332,8 @@ async fn prefetch_can_be_changed_with_active_consumer() {
     wait_size(transport.as_ref(), &quorum, 3).await;
     let (mut stream, control) = declare_consumer(transport.as_ref(), &quorum, 1).await;
     let first = recv(&mut stream).await;
-    control.set_prefetch(3).await.expect("qos su quorum");
-    control.set_prefetch(1).await.expect("qos su quorum");
+    control.set_prefetch(3).await.expect("qos on quorum");
+    control.set_prefetch(1).await.expect("qos on quorum");
     transport.ack(&first.delivery_tag).await.expect("ack");
     transport
         .delete_queue(&quorum)
@@ -361,7 +356,7 @@ async fn fanout_delivers_to_every_bound_queue() {
         transport
             .declare_queue(&QueueDecl::new(queue.as_str()))
             .await
-            .expect("coda");
+            .expect("queue");
         transport
             .bind(&QueueBinding::new(queue.as_str(), exchange.as_str(), ""))
             .await
@@ -399,7 +394,7 @@ async fn headers_exchange_routes_by_arguments() {
     transport
         .declare_queue(&QueueDecl::new(queue.as_str()))
         .await
-        .expect("coda");
+        .expect("queue");
     let mut arguments = Headers::new();
     arguments.insert("x-match", HeaderValue::from("all"));
     arguments.insert("format", HeaderValue::from("pdf"));
@@ -462,7 +457,7 @@ async fn topic_routing_is_done_by_the_broker() {
         transport
             .declare_queue(&QueueDecl::new(queue.as_str()))
             .await
-            .expect("coda");
+            .expect("queue");
         transport
             .bind(&QueueBinding::new(
                 queue.as_str(),
@@ -492,11 +487,11 @@ async fn topic_routing_is_done_by_the_broker() {
     for (name, queue) in &queues {
         let expected = match *name {
             "all" => 4,
-            // `*.created` copre "account.created" e "x.created".
+
             "created" => 2,
             "account" => 3,
             "exact" => 1,
-            other => panic!("coda inattesa {other}"),
+            other => panic!("unexpected queue {other}"),
         };
         wait_size(transport.as_ref(), queue, expected).await;
     }
@@ -509,7 +504,7 @@ async fn anonymous_exchange_routes_to_queue_name() {
     transport
         .declare_queue(&QueueDecl::new(queue.as_str()))
         .await
-        .expect("coda");
+        .expect("queue");
     transport
         .publish(PublishRequest::new(
             None::<&str>,
@@ -535,7 +530,7 @@ async fn multiple_queues_are_all_consumed() {
         transport
             .declare_queue(&QueueDecl::new(queue.as_str()))
             .await
-            .expect("coda");
+            .expect("queue");
         for index in 0..2 {
             transport
                 .publish(PublishRequest::new(
@@ -588,7 +583,7 @@ async fn priority_queue_reorders_messages() {
             passive: false,
         })
         .await
-        .expect("coda con priorità");
+        .expect("priority queue");
     transport
         .bind(&QueueBinding::new(queue.as_str(), exchange.as_str(), "rk"))
         .await
@@ -630,7 +625,6 @@ async fn queue_arguments_expiry_ttl_and_quorum() {
     let transport = transport().await;
     let id = suffix();
 
-    // x-message-ttl: il messaggio sparisce dopo il TTL senza consumer.
     let ttl_queue = format!("rs.ttl.q.{id}");
     let mut arguments = Headers::new();
     arguments.insert("x-message-ttl", HeaderValue::Int(1500));
@@ -641,7 +635,7 @@ async fn queue_arguments_expiry_ttl_and_quorum() {
             ..QueueDecl::default()
         })
         .await
-        .expect("coda ttl");
+        .expect("ttl queue");
     transport
         .publish(PublishRequest::new(
             None::<&str>,
@@ -653,7 +647,6 @@ async fn queue_arguments_expiry_ttl_and_quorum() {
     wait_size(transport.as_ref(), &ttl_queue, 1).await;
     wait_size(transport.as_ref(), &ttl_queue, 0).await;
 
-    // x-expires: la coda inattiva viene eliminata dal broker.
     let expiry_queue = format!("rs.expires.q.{id}");
     let mut arguments = Headers::new();
     arguments.insert("x-expires", HeaderValue::Int(300));
@@ -664,7 +657,7 @@ async fn queue_arguments_expiry_ttl_and_quorum() {
             ..QueueDecl::default()
         })
         .await
-        .expect("coda expires");
+        .expect("expiring queue");
     let passive = QueueDecl {
         name: Some(CompactString::from(expiry_queue.as_str())),
         passive: true,
@@ -673,16 +666,15 @@ async fn queue_arguments_expiry_ttl_and_quorum() {
     transport
         .declare_queue(&passive)
         .await
-        .expect("coda ancora presente");
-    // Ogni `declare` conta come uso della coda: si attende senza interrogarla
-    // e si fa un solo controllo.
+        .expect("queue still present");
+    // Declarations reset idle expiry; wait without querying and check once.
     tokio::time::sleep(Duration::from_millis(1_200)).await;
     assert!(matches!(
         transport.declare_queue(&passive).await,
         Err(Error::NotFound(_))
     ));
 
-    // x-queue-type: quorum (durable obbligatorio).
+    // Quorum queues require durability.
     let quorum_queue = format!("rs.quorum.q.{id}");
     let mut arguments = Headers::new();
     arguments.insert("x-queue-type", HeaderValue::from("quorum"));
@@ -694,7 +686,7 @@ async fn queue_arguments_expiry_ttl_and_quorum() {
             ..QueueDecl::default()
         })
         .await
-        .expect("coda quorum");
+        .expect("quorum queue");
     assert_eq!(info.name, quorum_queue);
     transport
         .publish(PublishRequest::new(
@@ -731,7 +723,7 @@ async fn purge_size_and_delete() {
     wait_size(transport.as_ref(), &queue, 3).await;
     assert_eq!(transport.purge(&queue).await.expect("purge"), 3);
     assert_eq!(transport.queue_size(&queue).await.expect("size"), 0);
-    assert_eq!(transport.purge(&queue).await.expect("purge vuota"), 0);
+    assert_eq!(transport.purge(&queue).await.expect("purge empty queue"), 0);
 
     transport
         .publish(PublishRequest::new(
@@ -744,7 +736,7 @@ async fn purge_size_and_delete() {
     wait_size(transport.as_ref(), &queue, 1).await;
     transport.delete_queue(&queue).await.expect("delete");
     assert_eq!(transport.queue_size(&queue).await.expect("size"), 0);
-    // Il binding è sparito: il publish non viene più accodato.
+
     transport
         .publish(PublishRequest::new(
             Some(exchange.as_str()),
@@ -755,7 +747,7 @@ async fn purge_size_and_delete() {
         .expect("publish");
     assert_eq!(transport.queue_size(&queue).await.expect("size"), 0);
     assert_eq!(
-        transport.purge(&queue).await.expect("purge coda assente"),
+        transport.purge(&queue).await.expect("purge missing queue"),
         0
     );
 }
@@ -788,7 +780,7 @@ async fn duplicate_bindings_deliver_once() {
     transport
         .bind(&QueueBinding::new(queue.as_str(), exchange.as_str(), "a.#"))
         .await
-        .expect("secondo binding");
+        .expect("second binding");
     transport
         .publish(PublishRequest::new(
             Some(exchange.as_str()),
@@ -836,7 +828,7 @@ async fn declarations_and_passive_checks() {
     transport
         .declare_queue(&QueueDecl::new(queue.as_str()))
         .await
-        .expect("coda");
+        .expect("queue");
     transport
         .declare_exchange(&ExchangeDecl {
             name: CompactString::from(exchange.as_str()),
@@ -845,8 +837,8 @@ async fn declarations_and_passive_checks() {
             ..ExchangeDecl::default()
         })
         .await
-        .expect("exchange passivo");
-    // Una dichiarazione passiva non verifica il tipo (come AMQP/kombu).
+        .expect("passive exchange");
+    // Passive declarations do not validate exchange type, matching AMQP and kombu.
     transport
         .declare_exchange(&ExchangeDecl {
             name: CompactString::from(exchange.as_str()),
@@ -855,7 +847,7 @@ async fn declarations_and_passive_checks() {
             ..ExchangeDecl::default()
         })
         .await
-        .expect("tipo ignorato in passivo");
+        .expect("type ignored in passive declaration");
     let info = transport
         .declare_queue(&QueueDecl {
             name: Some(CompactString::from(queue.as_str())),
@@ -863,10 +855,9 @@ async fn declarations_and_passive_checks() {
             ..QueueDecl::default()
         })
         .await
-        .expect("coda passiva");
+        .expect("passive queue");
     assert_eq!(info.message_count, 0);
 
-    // Tipo diverso: il broker risponde PRECONDITION_FAILED.
     match transport
         .declare_exchange(&ExchangeDecl::new(exchange.as_str(), ExchangeType::Topic))
         .await
@@ -882,16 +873,16 @@ async fn declarations_and_passive_checks() {
             assert_eq!(method_name, "Exchange.declare");
             assert!(reply_text.contains("PRECONDITION_FAILED"), "{reply_text}");
         }
-        other => panic!("atteso PreconditionFailed, trovato {other:?}"),
+        other => panic!("expected PreconditionFailed, got {other:?}"),
     }
-    // Bind su exchange inesistente.
+
     assert!(matches!(
         transport
             .bind(&QueueBinding::new(queue.as_str(), "missing.exchange", "rk"))
             .await,
         Err(Error::UnknownExchange(_))
     ));
-    // Unbind inesistente: no-op.
+
     transport
         .unbind(&QueueBinding::new(
             queue.as_str(),
@@ -904,7 +895,7 @@ async fn declarations_and_passive_checks() {
         .consume(&[], 0)
         .await
         .err()
-        .expect("consume vuoto");
+        .expect("empty consume");
 }
 
 #[tokio::test]
@@ -922,7 +913,7 @@ async fn delete_exchange_keeps_queues() {
         transport
             .declare_queue(&QueueDecl::new(queue.as_str()))
             .await
-            .expect("coda");
+            .expect("queue");
         transport
             .bind(&QueueBinding::new(
                 queue.as_str(),
@@ -957,7 +948,7 @@ async fn delete_exchange_keeps_queues() {
             .await,
         Err(Error::NotFound(_))
     ));
-    // AMQP puro: le code restano, vuota compresa; cadono solo i binding.
+    // AMQP preserves queues, including empty ones, when deleting exchanges.
     let info = transport
         .declare_queue(&QueueDecl {
             name: Some(CompactString::from(empty.as_str())),
@@ -965,7 +956,7 @@ async fn delete_exchange_keeps_queues() {
             ..QueueDecl::default()
         })
         .await
-        .expect("la coda vuota resta");
+        .expect("empty queue remains");
     assert_eq!(info.message_count, 0);
     let info = transport
         .declare_queue(&QueueDecl {
@@ -974,7 +965,7 @@ async fn delete_exchange_keeps_queues() {
             ..QueueDecl::default()
         })
         .await
-        .expect("la coda piena resta");
+        .expect("nonempty queue remains");
     assert_eq!(info.message_count, 1);
     transport
         .publish(PublishRequest::new(
@@ -983,13 +974,13 @@ async fn delete_exchange_keeps_queues() {
             message("lost"),
         ))
         .await
-        .expect("publish su exchange eliminato");
+        .expect("publish to deleted exchange");
     assert_eq!(transport.queue_size(&full).await.expect("size"), 1);
-    // `exchange.delete` è idempotente lato broker: nessun NotFound.
+    // Broker exchange deletion is idempotent.
     transport
         .delete_exchange("missing.exchange.for.test")
         .await
-        .expect("delete exchange assente è no-op");
+        .expect("deleting a missing exchange is a no-op");
 }
 
 #[tokio::test]
@@ -1019,7 +1010,7 @@ async fn prefetch_global_changes_take_effect() {
             .is_err()
     );
 
-    // Con global QoS il broker applica subito il nuovo limite al canale.
+    // Global QoS applies immediately to the channel.
     control.set_prefetch(4).await.expect("set_prefetch");
     let third = recv(&mut stream).await;
     let fourth = recv(&mut stream).await;
@@ -1070,7 +1061,7 @@ async fn get_honours_no_ack_and_requeue() {
         .get(&queue, true)
         .await
         .expect("get")
-        .expect("messaggio");
+        .expect("message");
     assert_eq!(first.message.body, Bytes::from_static(b"a"));
     assert_eq!(first.exchange, exchange);
     assert_eq!(first.routing_key, "rk");
@@ -1080,7 +1071,7 @@ async fn get_honours_no_ack_and_requeue() {
         .get(&queue, false)
         .await
         .expect("get")
-        .expect("messaggio");
+        .expect("message");
     assert_eq!(second.message.body, Bytes::from_static(b"b"));
     transport
         .reject(&second.delivery_tag, true)
@@ -1090,14 +1081,14 @@ async fn get_honours_no_ack_and_requeue() {
         .get(&queue, false)
         .await
         .expect("get")
-        .expect("messaggio");
+        .expect("message");
     assert_eq!(third.message.body, Bytes::from_static(b"b"));
     assert!(third.redelivered);
     transport.ack(&third.delivery_tag).await.expect("ack");
     assert!(transport.get(&queue, true).await.expect("get").is_none());
     assert!(
         transport
-            .get("coda.inesistente", true)
+            .get("missing.queue", true)
             .await
             .expect("get")
             .is_none()
@@ -1114,7 +1105,7 @@ async fn consumer_control_add_cancel_queue_and_cancel() {
         transport
             .declare_queue(&QueueDecl::new(queue.as_str()))
             .await
-            .expect("coda");
+            .expect("queue");
     }
     for index in 0..2 {
         transport
@@ -1169,7 +1160,7 @@ async fn consumer_control_add_cancel_queue_and_cancel() {
         .expect("publish");
     wait_size(transport.as_ref(), &queue_two, 2).await;
 
-    // cancel: lo stream termina, i messaggi in volo restano confermabili.
+    // Cancellation preserves pending acknowledgments.
     transport
         .publish(PublishRequest::new(
             None::<&str>,
@@ -1183,13 +1174,13 @@ async fn consumer_control_add_cancel_queue_and_cancel() {
     assert!(
         tokio::time::timeout(WAIT, next(&mut stream))
             .await
-            .expect("nessun timeout")
+            .expect("no timeout")
             .is_none()
     );
     transport
         .ack(&inflight.delivery_tag)
         .await
-        .expect("ack dopo cancel");
+        .expect("ack after cancel");
     assert!(matches!(control.set_prefetch(1).await, Err(Error::Closed)));
     assert!(matches!(
         control.add_queue(&queue_one).await,
@@ -1233,7 +1224,7 @@ async fn publisher_confirms_work() {
                 message(&format!("c{index}")),
             ))
             .await
-            .expect("publish confermato");
+            .expect("confirmed publish");
     }
     wait_size(transport.as_ref(), &queue, 20).await;
     assert_eq!(transport.purge(&queue).await.expect("purge"), 20);
@@ -1258,13 +1249,13 @@ async fn close_emits_connection_lost_once_and_stream_ends() {
     transport.close().await.expect("close");
     let first = tokio::time::timeout(WAIT, next(&mut stream))
         .await
-        .expect("nessun timeout")
-        .expect("nessun None prima di ConnectionLost");
+        .expect("no timeout")
+        .expect("no None before ConnectionLost");
     assert!(matches!(first, Err(Error::ConnectionLost(_))));
     assert!(
         tokio::time::timeout(WAIT, next(&mut stream))
             .await
-            .expect("nessun timeout")
+            .expect("no timeout")
             .is_none()
     );
     assert!(matches!(
@@ -1288,7 +1279,7 @@ async fn connection_failure_is_reported_without_retry() {
     )
     .await
     .err()
-    .expect("connessione rifiutata");
+    .expect("connection refused");
     assert!(matches!(
         error,
         Error::Connect {
@@ -1313,7 +1304,7 @@ async fn no_ack_consumer_acks_on_delivery_and_supports_queue_changes() {
         transport
             .declare_queue(&QueueDecl::new(queue.as_str()))
             .await
-            .expect("coda");
+            .expect("queue");
     }
     for queue in [&queue_one, &queue_two] {
         transport
@@ -1336,9 +1327,9 @@ async fn no_ack_consumer_acks_on_delivery_and_supports_queue_changes() {
     let control = consumer.control;
     let first = recv(&mut stream).await;
     assert_eq!(first.routing_key, queue_one);
-    // Con no_ack il broker considera la coda vuota senza alcun ack.
+
     wait_size(transport.as_ref(), &queue_one, 0).await;
-    // ack su una consegna no_ack resta un no-op.
+
     transport.ack(&first.delivery_tag).await.expect("ack no-op");
 
     control.add_queue(&queue_two).await.expect("add_queue");
@@ -1354,7 +1345,7 @@ async fn no_ack_consumer_acks_on_delivery_and_supports_queue_changes() {
     assert!(
         tokio::time::timeout(WAIT, next(&mut stream))
             .await
-            .expect("nessun timeout")
+            .expect("no timeout")
             .is_none()
     );
 }
@@ -1389,7 +1380,10 @@ async fn control_replies_reuse_channel_without_changing_regular_consumers() {
         channel = Some(current);
         consumer.control.cancel().await.unwrap();
     }
-    let mut regular = transport.consume(std::slice::from_ref(&queue), 1).await.unwrap();
+    let mut regular = transport
+        .consume(std::slice::from_ref(&queue), 1)
+        .await
+        .unwrap();
     transport
         .publish(PublishRequest::new(
             None::<&str>,

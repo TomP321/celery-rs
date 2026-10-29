@@ -1,9 +1,4 @@
-//! Binding Python del client Redis del result backend.
-//!
-//! Espone `_celery_rs.RedisClient`, `RedisPipeline` e `RedisPubSub`: le stesse
-//! operazioni che il backend usa da redis-py, con l'I/O in Rust. Il GIL resta
-//! rilasciato per tutta la durata delle chiamate (`py.detach`), e il runtime
-//! tokio è quello condiviso di `transport.rs` (stesso fork safety).
+//! Redis backend Python bindings using Rust I/O with the GIL released and the shared fork-aware runtime.
 
 use crate::fork::ForkSafe;
 
@@ -28,8 +23,7 @@ fn block<T>(future: impl Future<Output = Result<T, RedisError>>) -> PyResult<T> 
     runtime.block_on(future).map_err(redis_error)
 }
 
-/// Le eccezioni sono quelle di redis-py: `connection_errors`, `ensure` e
-/// `_reconnect_pubsub` del backend restano invariati.
+/// Preserve redis-py exceptions so backend retry and reconnect logic stays compatible.
 static REDIS_EXCEPTIONS: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
 
 fn redis_exceptions(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
@@ -71,7 +65,7 @@ fn bytes_arg(value: &Bound<'_, PyAny>) -> PyResult<Bytes> {
         return Ok(Bytes::copy_from_slice(text.to_str()?.as_bytes()));
     }
     Err(PyTypeError::new_err(
-        "argomenti Redis: attesi bytes, bytearray o str",
+        "redis arguments: expected bytes, bytearray or str",
     ))
 }
 
@@ -79,7 +73,7 @@ fn timeouts(seconds: Option<f64>) -> PyResult<Option<Duration>> {
     match seconds {
         None => Ok(None),
         Some(seconds) if seconds < 0.0 => Err(PyValueError::new_err(
-            "timeout negativo non valido per Redis",
+            "negative timeout is invalid for Redis",
         )),
         Some(seconds) => Ok(Some(Duration::from_secs_f64(seconds))),
     }
@@ -101,7 +95,6 @@ fn reply_to_py(py: Python<'_>, reply: Reply) -> PyResult<Py<PyAny>> {
     })
 }
 
-/// Comando singolo: un wrapper sottile su [`Command`].
 #[pyclass(module = "_celery_rs")]
 pub struct RedisClient {
     inner: ForkSafe<Arc<Client>>,
@@ -142,8 +135,7 @@ impl RedisClient {
             None if ssl => Address::Tls {
                 host: host.to_string(),
                 port,
-                // Solo `CERT_REQUIRED` arriva qui: le altre modalità restano
-                // su redis-py (attivazione in `RedisBackend`).
+                // Only CERT_REQUIRED reaches this path; other modes use redis-py in RedisBackend.
                 insecure: matches!(
                     ssl_cert_reqs.as_deref(),
                     Some("CERT_NONE") | Some("none") | Some("0")
@@ -400,7 +392,7 @@ impl RedisClient {
         })
     }
 
-    /// Scarta le connessioni inattive (`ConnectionPool.reset()`).
+    /// Discards idle pooled connections.
     fn reset(&self) {
         self.inner.reset();
     }
@@ -611,14 +603,14 @@ impl RedisPubSub {
         py.detach(|| block(self.inner.unsubscribe(&channels)))
     }
 
-    /// `can_read(timeout=0)`: c'è un messaggio senza consumarlo?
+    /// Checks for a buffered message without consuming it.
     #[pyo3(signature = (timeout=None))]
     fn can_read(&self, py: Python<'_>, timeout: Option<f64>) -> PyResult<bool> {
         let timeout = timeouts(timeout)?;
         py.detach(|| block(self.inner.can_read(timeout)))
     }
 
-    /// `get_message(timeout)`: messaggio o `None`.
+    /// Returns a message or None within the timeout.
     #[pyo3(signature = (timeout=None))]
     fn get_message(&self, py: Python<'_>, timeout: Option<f64>) -> PyResult<Option<Py<PyDict>>> {
         let timeout = timeouts(timeout)?;

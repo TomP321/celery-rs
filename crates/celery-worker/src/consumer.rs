@@ -1,15 +1,5 @@
-//! Consumer del worker sopra [`celery_transport`].
-//!
-//! Il loop Python del master non parla con il broker: un task tokio possiede
-//! il consumatore del trasporto e riempie una coda limitata dal prefetch. Il
-//! master dorme in [`Waker::wait`] e viene svegliato a ogni consegna; poi
-//! svuota la coda con [`WorkerConsumer::drain`]. Ack/reject e dichiarazioni
-//! usano la stessa connessione e possono arrivare da qualunque thread (il
-//! master le esegue fuori dal task del consumer, per esempio da un callback).
-//!
-//! La coda è limitata: quando è piena il task smette di pollare lo stream e il
-//! broker non consegna oltre il prefetch. Il body è un [`bytes::Bytes`] fino
-//! alla conversione in `bytes` Python, che avviene una sola volta.
+//! Worker consumer over celery_transport. A tokio task fills a bounded queue and
+//! wakes the master; bodies remain Bytes until converted once at the Python boundary.
 
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -25,11 +15,10 @@ use tokio::sync::Notify;
 
 use crate::Waker;
 
-/// Capacità della coda quando il prefetch è illimitato (`0`): evita di
-/// accumulare messaggi senza limite se il master è lento.
+// Bounds queued messages even when prefetch is unlimited and the master falls behind.
 const UNLIMITED_CAPACITY: usize = 1024;
 
-/// Consegna in attesa di essere letta dal master.
+/// Delivery waiting for the master.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct ConsumerStats {
     pub received: u64,
@@ -45,8 +34,7 @@ struct State {
     capacity: usize,
     deliveries: VecDeque<Delivery>,
     control: Option<Arc<dyn ConsumerControl>>,
-    /// Ultimo errore non ancora letto dal master (connessione persa o start
-    /// fallito). Lo stream si ferma: il master deve riconnettere.
+    // Unread connection or startup error; the stopped stream requires master reconnection.
     error: Option<String>,
     started: bool,
     stats: ConsumerStats,
@@ -62,8 +50,7 @@ impl State {
     }
 
     fn push_error(&mut self, error: &Error) {
-        // Le consegne non ancora lette sono perse per questo consumatore: il
-        // broker le riconsegnerà (non sono state confermate).
+        // The broker will redeliver unread messages because they were never acknowledged.
         self.deliveries.clear();
         self.error = Some(error.to_string());
     }
@@ -85,20 +72,18 @@ struct Shared {
     transport: Arc<dyn Transport>,
     waker: Waker,
     state: Mutex<State>,
-    /// Il master ha chiesto la chiusura.
+
     closed: AtomicBool,
-    /// Il consumatore è stato cancellato (`Tasks.stop`): lo stream che
-    /// termina non è una connessione persa.
+    // Distinguishes normal Tasks.stop cancellation from connection loss.
     cancelled: AtomicBool,
-    /// `basic.consume(no_ack=true)`: le consegne vanno confermate subito dal
-    /// task di lettura (pidbox e gossip non hanno ack dal master).
+    // Acknowledge no_ack fallback deliveries in the reader task; pidbox and gossip
+    // receive no acknowledgments from the master.
     no_ack: AtomicBool,
-    /// Il consumer possiede la connessione e la chiude; gli ausiliari
-    /// (pidbox/gossip) la condividono con il consumer dei task.
+    // Only the main consumer owns the connection; pidbox and gossip share it.
     owns_transport: AtomicBool,
-    /// Sveglia il task del consumer quando c'è spazio nella coda.
+
     space: Notify,
-    /// Ferma il task del consumer senza chiudere il trasporto.
+
     stop: Notify,
 }
 
@@ -108,8 +93,7 @@ impl Shared {
         state.stats.received += 1;
         state.deliveries.push_back(delivery);
         drop(state);
-        // Notifica sempre: il master può essere già sveglio, nel qual caso la
-        // notifica resta pendente e il prossimo `wait` non dorme.
+        // Always notify: if the master is already awake, the pending flag prevents its next wait.
         self.waker.notify();
     }
 
@@ -124,18 +108,14 @@ impl Shared {
     }
 }
 
-/// Consumer del worker: code multiple, prefetch dinamico, ack/reject per tag.
-///
-/// La connessione è già aperta (il binding la crea da URL/opzioni). `start`
-/// crea il consumatore del trasporto e avvia il task di lettura; `close`
-/// ferma tutto e chiude la connessione. Chiamare `start` dopo `close`
-/// restituisce [`Error::Closed`].
+/// Worker consumer with dynamic queues, prefetch and tagged acknowledgments.
+/// The connection is already open; close stops consumption and closes it.
 pub struct WorkerConsumer {
     shared: Arc<Shared>,
 }
 
 impl WorkerConsumer {
-    /// Crea il consumer sopra una connessione già aperta.
+    /// Creates a consumer on an open connection.
     pub fn new(transport: Box<dyn Transport>, waker: Waker, prefetch: u16) -> Self {
         Self {
             shared: Arc::new(Shared {
@@ -152,16 +132,13 @@ impl WorkerConsumer {
         }
     }
 
-    /// Trasporto condiviso (dichiarazioni e ack passano da qui).
+    /// Returns the transport shared by declarations and acknowledgments.
     pub fn transport(&self) -> &Arc<dyn Transport> {
         &self.shared.transport
     }
 
-    /// Consumer ausiliario (pidbox/gossip) sullo stesso trasporto.
-    ///
-    /// Condivide socket e runtime con il consumer dei task: la coda di servizio
-    /// non apre una seconda connessione. `close` dell'ausiliario ferma solo il
-    /// suo stream; la connessione si chiude col consumer principale.
+    /// Creates an auxiliary consumer sharing the task connection and runtime. Closing
+    /// the auxiliary stops only its stream; the main consumer owns connection closure.
     pub fn aux(&self, prefetch: u16) -> Self {
         Self {
             shared: Arc::new(Shared {
@@ -178,26 +155,17 @@ impl WorkerConsumer {
         }
     }
 
-    /// Avvia il consumatore sulle code indicate (o su quelle già impostate).
-    ///
-    /// Va chiamata dentro un runtime tokio: il task di lettura vive col
-    /// runtime del processo.
+    /// Starts consuming the supplied or previously configured queues inside a tokio runtime.
     pub async fn start(&self, queues: Option<Vec<CompactString>>) -> Result<()> {
         self.start_inner(queues, false).await
     }
 
-    /// Come [`WorkerConsumer::start`] ma con `basic.consume(no_ack=true)`:
-    /// pidbox e gossip non confermano nulla, il task di lettura fa l'ack (o lo
-    /// omette, per i trasporti che lo supportano nativamente) appena consegna.
+    /// Starts no_ack consumption, settling fallback acknowledgments in the reader task.
     pub async fn start_no_ack(&self, queues: Option<Vec<CompactString>>) -> Result<()> {
         self.start_inner(queues, true).await
     }
 
-    async fn start_inner(
-        &self,
-        queues: Option<Vec<CompactString>>,
-        no_ack: bool,
-    ) -> Result<()> {
+    async fn start_inner(&self, queues: Option<Vec<CompactString>>, no_ack: bool) -> Result<()> {
         if self.shared.closed.load(Ordering::Acquire) {
             return Err(Error::Closed);
         }
@@ -208,14 +176,17 @@ impl WorkerConsumer {
             }
             if state.queues.is_empty() {
                 return Err(Error::InvalidArgument(
-                    "consume richiede almeno una coda".to_string(),
+                    "consume requires at least one queue".to_string(),
                 ));
             }
             (state.queues.clone(), state.prefetch)
         };
         self.shared.no_ack.store(no_ack, Ordering::Release);
         let consumer = if no_ack {
-            self.shared.transport.consume_no_ack(&queues, prefetch).await?
+            self.shared
+                .transport
+                .consume_no_ack(&queues, prefetch)
+                .await?
         } else {
             self.shared.transport.consume(&queues, prefetch).await?
         };
@@ -232,7 +203,7 @@ impl WorkerConsumer {
         Ok(())
     }
 
-    /// Prende fino a `max` consegne già pronte, senza bloccare.
+    /// Returns up to max ready deliveries without blocking.
     pub fn drain(&self, max: usize) -> Vec<Delivery> {
         if max == 0 {
             return Vec::new();
@@ -248,17 +219,17 @@ impl WorkerConsumer {
         deliveries
     }
 
-    /// Numero di consegne pronte.
+    /// Returns the number of ready deliveries.
     pub fn pending(&self) -> usize {
         lock(&self.shared.state).deliveries.len()
     }
 
-    /// Errore pendente (connessione persa), consumato una sola volta.
+    /// Returns and clears a pending connection error.
     pub fn take_error(&self) -> Option<String> {
         lock(&self.shared.state).error.take()
     }
 
-    /// Statistiche del consumer (usate dai test e da `inspect stats`).
+    /// Returns statistics for tests and inspect stats.
     pub fn stats(&self) -> ConsumerStats {
         lock(&self.shared.state).stats
     }
@@ -284,7 +255,7 @@ impl WorkerConsumer {
         })
     }
 
-    /// Cambia il prefetch (e quindi la capacità della coda) a runtime.
+    /// Changes prefetch and queue capacity at runtime.
     pub async fn set_prefetch(&self, prefetch: u16) -> Result<()> {
         if self.shared.closed.load(Ordering::Acquire) {
             return Err(Error::Closed);
@@ -298,7 +269,7 @@ impl WorkerConsumer {
         if let Some(control) = control {
             control.set_prefetch(prefetch).await?;
         }
-        // La capacità può essere cresciuta: il task può riprendere a leggere.
+        // A larger capacity may let the reader resume.
         self.shared.space.notify_one();
         Ok(())
     }
@@ -331,12 +302,8 @@ impl WorkerConsumer {
         Ok(())
     }
 
-    /// Cancella il consumatore del trasporto ma lascia la connessione aperta
-    /// (i tag già consegnati restano confermabili, come `basic_cancel`).
-    ///
-    /// Il controllo resta nello stato: per AMQP tiene vivo il canale su cui
-    /// arrivano gli ack dei task che stanno finendo. Viene rilasciato solo da
-    /// [`WorkerConsumer::close`].
+    /// Cancels consumption while keeping the connection and pending tags usable. Retains
+    /// the AMQP control handle until close so finishing tasks can acknowledge deliveries.
     pub async fn cancel(&self) -> Result<()> {
         self.shared.cancelled.store(true, Ordering::Release);
         let control = lock(&self.shared.state).control.clone();
@@ -348,7 +315,7 @@ impl WorkerConsumer {
         Ok(())
     }
 
-    /// Ferma il consumer e chiude la connessione. Idempotente.
+    /// Stops consumption and closes the connection idempotently.
     pub async fn close(&self) -> Result<()> {
         if self.shared.closed.swap(true, Ordering::AcqRel) {
             return Ok(());
@@ -371,18 +338,22 @@ impl WorkerConsumer {
         result
     }
 
-    /// `true` dopo `close`.
+    /// Returns whether the consumer has been closed.
     pub fn is_closed(&self) -> bool {
         self.shared.closed.load(Ordering::Acquire)
     }
 
-    // ------------------------------------------------------------ dichiarazioni
-
-    pub fn declare_exchange<'a>(&'a self, declaration: &'a ExchangeDecl) -> BoxFuture<'a, Result<()>> {
+    pub fn declare_exchange<'a>(
+        &'a self,
+        declaration: &'a ExchangeDecl,
+    ) -> BoxFuture<'a, Result<()>> {
         self.shared.transport.declare_exchange(declaration)
     }
 
-    pub fn declare_queue<'a>(&'a self, declaration: &'a QueueDecl) -> BoxFuture<'a, Result<QueueInfo>> {
+    pub fn declare_queue<'a>(
+        &'a self,
+        declaration: &'a QueueDecl,
+    ) -> BoxFuture<'a, Result<QueueInfo>> {
         self.shared.transport.declare_queue(declaration)
     }
 
@@ -412,8 +383,7 @@ async fn run_stream(shared: Arc<Shared>, mut stream: DeliveryStream) {
             item = next(&mut stream) => match item {
                 Some(Ok(delivery)) => {
                     if shared.no_ack.load(Ordering::Acquire) {
-                        // Best effort: per AMQP `consume_no_ack` non richiede
-                        // ack (no-op), per Redis chiude il messaggio in volo.
+                        // AMQP no_ack needs no settlement; fallback transports settle pending deliveries here.
                         let _ = shared.transport.ack(&delivery.delivery_tag).await;
                     }
                     shared.push(delivery);
@@ -423,13 +393,12 @@ async fn run_stream(shared: Arc<Shared>, mut stream: DeliveryStream) {
                     return;
                 }
                 None => {
-                    // Fine dello stream senza errore: `cancel` normale oppure
-                    // il trasporto ha chiuso (in tal caso notifica come persa).
+                    // An unexpected stream end indicates connection loss unless cancellation was requested.
                     if !shared.cancelled.load(Ordering::Acquire)
                         && !shared.closed.load(Ordering::Acquire)
                     {
                         shared.fail(&Error::ConnectionLost(
-                            "lo stream delle consegne è terminato".to_string(),
+                            "delivery stream ended".to_string(),
                         ));
                     }
                     return;
@@ -439,7 +408,6 @@ async fn run_stream(shared: Arc<Shared>, mut stream: DeliveryStream) {
     }
 }
 
-/// Attesa con timeout, usata dai test per non dipendere da sleep fissi.
 pub async fn wait_for(mut condition: impl FnMut() -> bool, timeout: Duration) -> bool {
     let deadline = tokio::time::Instant::now() + timeout;
     while tokio::time::Instant::now() < deadline {
@@ -461,7 +429,9 @@ mod tests {
     };
 
     async fn origin() -> Box<dyn Transport> {
-        connect("memory:///worker-consumer-tests").await.expect("memory")
+        connect("memory:///worker-consumer-tests")
+            .await
+            .expect("memory")
     }
 
     async fn publish(transport: &dyn Transport, queue: &str, body: &str) {
@@ -502,7 +472,10 @@ mod tests {
         let deliveries = consumer.drain(10);
         assert_eq!(deliveries.len(), 1);
         assert_eq!(&deliveries[0].message.body[..], b"one");
-        consumer.ack(&deliveries[0].delivery_tag).await.expect("ack");
+        consumer
+            .ack(&deliveries[0].delivery_tag)
+            .await
+            .expect("ack");
         assert_eq!(consumer.stats().acked, 1);
         assert_eq!(consumer.stats().received, 1);
         consumer.close().await.expect("close");
@@ -514,7 +487,12 @@ mod tests {
         setup(&["worker-consumer-q2"]).await;
         let producer = origin().await;
         for index in 0..3 {
-            publish(producer.as_ref(), "worker-consumer-q2", &format!("m{index}")).await;
+            publish(
+                producer.as_ref(),
+                "worker-consumer-q2",
+                &format!("m{index}"),
+            )
+            .await;
         }
         let consumer = WorkerConsumer::new(origin().await, Waker::new(), 1);
         consumer
@@ -522,8 +500,7 @@ mod tests {
             .await
             .expect("start");
         assert!(wait_for(|| consumer.pending() == 1, Duration::from_secs(5)).await);
-        // Il prefetch è 1: il trasporto non consegna il secondo finché il
-        // primo non è confermato.
+        // Prefetch one must hold the second delivery until the first is acknowledged.
         tokio::time::sleep(Duration::from_millis(50)).await;
         assert_eq!(consumer.pending(), 1);
         let first = consumer.drain(1);
@@ -546,13 +523,19 @@ mod tests {
         assert!(wait_for(|| consumer.pending() == 1, Duration::from_secs(5)).await);
         consumer.drain(1);
 
-        consumer.add_queue("worker-consumer-q3b").await.expect("add");
+        consumer
+            .add_queue("worker-consumer-q3b")
+            .await
+            .expect("add");
         publish(producer.as_ref(), "worker-consumer-q3b", "b").await;
         assert!(wait_for(|| consumer.pending() == 1, Duration::from_secs(5)).await);
         let delivery = consumer.drain(1);
         assert_eq!(&delivery[0].message.body[..], b"b");
 
-        consumer.cancel_queue("worker-consumer-q3b").await.expect("cancel");
+        consumer
+            .cancel_queue("worker-consumer-q3b")
+            .await
+            .expect("cancel");
         publish(producer.as_ref(), "worker-consumer-q3b", "c").await;
         tokio::time::sleep(Duration::from_millis(100)).await;
         assert_eq!(consumer.pending(), 0);
@@ -564,7 +547,12 @@ mod tests {
         setup(&["worker-consumer-q4"]).await;
         let producer = origin().await;
         for index in 0..3 {
-            publish(producer.as_ref(), "worker-consumer-q4", &format!("p{index}")).await;
+            publish(
+                producer.as_ref(),
+                "worker-consumer-q4",
+                &format!("p{index}"),
+            )
+            .await;
         }
         let consumer = WorkerConsumer::new(origin().await, Waker::new(), 1);
         consumer
@@ -608,12 +596,11 @@ mod tests {
             .await
             .expect("start");
         tokio::time::sleep(Duration::from_millis(20)).await;
-        // Il trasporto è dentro il consumer: la sua chiusura arriva come
-        // `ConnectionLost` una volta sola.
+        // Transport closure must surface exactly one ConnectionLost.
         consumer.shared.transport.close().await.expect("close");
         assert!(
             wait_for(|| consumer.take_error().is_some(), Duration::from_secs(5)).await,
-            "errore di connessione non riportato"
+            "connection error not reported"
         );
         assert!(consumer.take_error().is_none());
         consumer.close().await.expect("close");

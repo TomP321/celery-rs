@@ -1,8 +1,5 @@
-//! `saferepr` identico a `celery.utils.saferepr.saferepr`.
-//!
-//! L'implementazione è iterativa (stack esplicito sullo heap) per non esaurire
-//! lo stack nativo con strutture profonde. Solo le chiavi dei dict ricorrono
-//! come nel riferimento Python, con un limite che produce `RecursionError`.
+//! Celery-compatible saferepr using a heap stack for deep structures. Dictionary
+//! keys recurse with a limit that raises RecursionError, matching the reference.
 
 use std::borrow::Cow;
 use std::collections::HashSet;
@@ -28,12 +25,8 @@ fn number_type(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
     Ok(v.bind(py).clone())
 }
 
-/// `decimal.Decimal`, senza importare `decimal` quando non è già caricato.
-///
-/// Importarlo a ogni `saferepr` costava il modulo `decimal` (e le estensioni
-/// C che porta) nel processo client, dove il protocollo è Rust (spec 08b).
-/// Un'istanza di Decimal può esistere solo se qualcuno ha già importato
-/// `decimal`, quindi la classe si prende da `sys.modules`.
+/// Looks up Decimal in sys.modules to avoid loading decimal and its C extensions
+/// in clients that do not use it. Decimal instances require the module to be loaded already.
 fn decimal_type(py: Python<'_>) -> PyResult<Option<Py<PyAny>>> {
     if let Some(v) = DECIMAL_TYPE.get(py) {
         return Ok(Some(v.clone_ref(py)));
@@ -47,10 +40,9 @@ fn decimal_type(py: Python<'_>) -> PyResult<Option<Py<PyAny>>> {
     Ok(Some(v))
 }
 
-/// Limite per le chiavi annidate: il riferimento consuma circa due frame
-/// Python per livello, oltre ai frame del chiamante.
+/// The reference uses about two Python frames per nested dictionary key, plus caller frames.
 fn key_recursion_limit() -> usize {
-    // SAFETY: `Py_GetRecursionLimit` non richiede stato aggiuntivo.
+    // SAFETY: Py_GetRecursionLimit requires no additional state.
     let limit = unsafe { ffi::Py_GetRecursionLimit() }.max(1) as usize;
     ((limit.saturating_sub(8)) / 2).clamp(1, KEY_RECURSION_HARD_CAP)
 }
@@ -69,7 +61,7 @@ pub fn saferepr(
 
 struct Out {
     buf: Vec<u32>,
-    /// Budget residuo in code point; `None` = illimitato.
+    /// Remaining code point budget; None is unlimited.
     maxlen: Option<i64>,
 }
 
@@ -92,7 +84,6 @@ impl Out {
         }
     }
 
-    /// Token literal (parentesi, separatori): non viene mai troncato.
     fn token_literal(&mut self, s: &str) -> bool {
         if self.exhausted() {
             self.push_str(", ...");
@@ -104,7 +95,6 @@ impl Out {
         true
     }
 
-    /// Token di testo: applica `truncate` con il budget residuo.
     fn token_text(&mut self, cps: &[u32]) -> bool {
         if self.exhausted() {
             self.push_str(", ...");
@@ -296,7 +286,7 @@ impl<'py> Engine<'py> {
                         other => {
                             self.stack[idx].kind = other;
                             return Err(pyo3::exceptions::PyRuntimeError::new_err(
-                                "saferepr: stato interno non valido",
+                                "saferepr: invalid internal state",
                             ));
                         }
                     }
@@ -377,7 +367,6 @@ impl<'py> Engine<'py> {
         }
 
         if self.stopped {
-            // Parentesi di chiusura pendenti, dalla più interna alla più esterna.
             for frame in self.stack.iter().rev() {
                 self.out.push_forced(&frame.end);
             }
@@ -389,14 +378,14 @@ impl<'py> Engine<'py> {
         let py = self.py;
         let ptr = obj.as_ptr();
 
-        // Decimal prima di Number, come nel riferimento.
+        // Check Decimal before Number, matching the reference.
         if let Some(decimal) = decimal_type(py)?
             && obj.is_instance(decimal.bind(py))?
         {
             return Ok(Prepared::Text(text_cps(py, &obj.repr()?)?));
         }
 
-        // SAFETY: `ptr` è un oggetto Python vivo; i check di tipo non lo modificano.
+        // SAFETY: ptr references a live Python object; type checks do not modify it.
         unsafe {
             if ffi::PyBool_Check(ptr) != 0
                 || ffi::PyLong_Check(ptr) != 0
@@ -418,7 +407,6 @@ impl<'py> Engine<'py> {
             }
         }
 
-        // `numbers.Number` non builtin (es. Fraction).
         if obj.is_instance(&number_type(py)?)? {
             return Ok(Prepared::Text(text_cps(py, &obj.str()?)?));
         }
@@ -428,7 +416,7 @@ impl<'py> Engine<'py> {
             return Ok(Prepared::Text(text_cps(py, &obj.repr()?)?));
         }
 
-        // SAFETY: `ptr` è un oggetto Python vivo; i check di tipo non lo modificano.
+        // SAFETY: ptr references a live Python object; type checks do not modify it.
         unsafe {
             if ffi::PySet_Check(ptr) != 0 || ffi::PyFrozenSet_Check(ptr) != 0 {
                 return self.prepare_set(obj);
@@ -459,7 +447,7 @@ impl<'py> Engine<'py> {
             let name = type_name(obj)?;
             return Ok(Prepared::Text(str_cps(&format!("{name}()"))));
         }
-        // SAFETY: `obj` è un set/frozenset vivo.
+        // SAFETY: obj is a live set or frozenset.
         let exact_set = unsafe { ffi::PySet_CheckExact(obj.as_ptr()) != 0 };
         if exact_set {
             self.prepare_container(obj, false, Cow::Borrowed("{"), Cow::Borrowed("}"))

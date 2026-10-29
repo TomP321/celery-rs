@@ -1,4 +1,4 @@
-//! Oggetti precaricati condivisi dal master e dai figli (PEP 683).
+//! Preloaded objects shared between master and children using PEP 683 immortality.
 use pyo3::{ffi, prelude::*, types::PyList};
 use std::os::raw::{c_int, c_void};
 
@@ -10,9 +10,8 @@ struct Visitor {
 }
 
 unsafe extern "C" fn visit(obj: *mut ffi::PyObject, arg: *mut c_void) -> c_int {
-    // SAFETY: tp_traverse passa riferimenti vivi; il chiamante mantiene il GIL.
-    // La visita non esegue Python né rimuove riferimenti. Il marcatore precede
-    // la ricorsione e interrompe i cicli senza un insieme di visitati.
+    // SAFETY: tp_traverse supplies live references under the GIL. Traversal runs no
+    // Python code and removes no references. Marking before recursion breaks cycles.
     unsafe {
         let state = arg.cast::<Visitor>();
         let counter = obj.cast::<u32>();
@@ -29,10 +28,9 @@ unsafe extern "C" fn visit(obj: *mut ffi::PyObject, arg: *mut c_void) -> c_int {
         {
             return 0;
         }
-        // SAFETY: CPython 3.12/3.13 usa UINT32_MAX nei 32 bit bassi
-        // di ob_refcnt; 3.14 usa 3<<30 (Include/refcount.h). Solo build
-        // GIL, little-endian a 64 bit: questo campo è il primo u32.
-        // Non tocchiamo i bit alti, riservati ai flag nelle versioni nuove.
+        // SAFETY: GIL-enabled, little-endian 64-bit CPython stores the immortal marker
+        // in the first u32: UINT32_MAX in 3.12/3.13, 3<<30 in 3.14 (Include/refcount.h).
+        // The upper flag bits remain unchanged.
         *counter = (*state).initial;
         (*state).count += 1;
         let slot = ffi::PyType_GetSlot(ty, ffi::Py_tp_traverse);
@@ -72,7 +70,7 @@ pub fn _immortalize(objects: &Bound<'_, PyList>) -> PyResult<usize> {
     let Some(initial) = initial_refcount(version, cpython, gil_disabled, trace_refs) else {
         return Ok(0);
     };
-    // Tipi reali: le riesportazioni Python possono essere sostituite dall'utente.
+    // Use actual types because users can replace Python re-exports.
     let excluded = [
         py.get_type::<crate::cron::CronParseError>().as_ptr().cast(),
         py.get_type::<crate::cron::PyCronSpec>().as_ptr().cast(),
@@ -102,7 +100,7 @@ pub fn _immortalize(objects: &Bound<'_, PyList>) -> PyResult<usize> {
         excluded,
     };
     for obj in objects.iter() {
-        // SAFETY: la lista e il GIL mantengono vivi tutti gli oggetti radice.
+        // SAFETY: the list and GIL keep all root objects alive.
         unsafe {
             visit(obj.as_ptr(), (&mut state as *mut Visitor).cast());
         }

@@ -1,10 +1,4 @@
-"""Interoperabilità del trasporto Redis: kombu 5.7 vs ``_celery_rs.Connection``.
-
-I due client parlano con lo stesso server (``CELERY_RS_TEST_REDIS``, default
-``redis://127.0.0.1:6390``). Ogni test usa nomi univoci e azzera il database:
-lo stato sul broker (liste, hash ``unacked``, zset, insiemi di binding) è
-confrontato con quello prodotto da kombu a parità di operazioni.
-"""
+"""Compare Redis transport messages, broker state and wire commands with kombu using a real server."""
 
 from __future__ import annotations
 
@@ -52,7 +46,7 @@ def flush(url: str = REDIS_URL) -> None:
 
 
 def kombu_message(message, *, decode=False):
-    """Tupla normalizzata di un messaggio kombu (delivery_tag escluso)."""
+    """Normalize a kombu message without its delivery tag."""
     properties = dict(message.properties)
     properties.pop("delivery_tag", None)
     body = message.body if not decode else message.decode()
@@ -103,7 +97,7 @@ def collect_rs(connection, queues, count, *, timeout=2.0, prefetch=0, ack=True):
 
 
 def collect_rs_until_empty(connection, queue_name, *, timeout=1.0):
-    """Drena una coda fino a timeout (il cambio code attende il BRPOP in corso)."""
+    """Drain until timeout, waiting for pending BRPOP before switching queues."""
     bodies = []
     deadline = time.monotonic() + timeout
     empty = 0
@@ -150,11 +144,8 @@ def clean_redis():
     flush()
 
 
-# ---------------------------------------------------------------- messaggi
-
-
 def test_publish_and_consume_match_kombu():
-    """Rust -> kombu e kombu -> Rust: stesso body/header/properties/delivery_info."""
+    """Compare body, headers, properties and delivery information in both directions."""
     exchange_name = unique("ex")
     queue_name = unique("q")
     exchange = Exchange(exchange_name, type="direct", durable=False, auto_delete=False)
@@ -169,7 +160,7 @@ def test_publish_and_consume_match_kombu():
     headers = {"task": "add", "retries": 2, "flag": True}
     properties = {"correlation_id": "abc", "reply_to": "reply", "message_id": "m1"}
 
-    # kombu pubblica, Rust consuma.
+
     producer.publish(
         b'{"args": [1, 2]}',
         exchange=exchange,
@@ -191,7 +182,7 @@ def test_publish_and_consume_match_kombu():
     assert delivery[3] == {"exchange": exchange_name, "routing_key": "rk"}
     ours.ack(delivery[4])
 
-    # Rust pubblica, kombu consuma.
+
     ours.publish(
         b'{"args": [1, 2]}',
         exchange=exchange_name,
@@ -210,7 +201,7 @@ def test_publish_and_consume_match_kombu():
 
 
 def test_publish_envelope_is_identical_to_kombu():
-    """Lo stesso publish produce la stessa lista Redis (a meno dell'uuid)."""
+    """Verify identical publications produce identical Redis lists, excluding UUIDs."""
     exchange_name = unique("same")
     queue_name = unique("q")
     exchange = Exchange(exchange_name, type="direct")
@@ -256,7 +247,7 @@ def test_publish_envelope_is_identical_to_kombu():
     first, second = (UUID_RE.sub("<id>", item.decode()) for item in raw)
     assert first == second
 
-    # Stesso `get` dalla coda: kombu e Rust decodificano lo stesso envelope.
+    # Verify both clients decode the same Redis envelope.
     expected = kombu_message(queue(channel).get(no_ack=False))
     delivery = ours.get(queue_name)
     assert rs_message(delivery) == expected
@@ -286,14 +277,14 @@ def test_header_types_roundtrip():
         "list": [1, "two", None, {"three": 3}],
         "dict": {"a": [True, False], "b": b"raw"},
     }
-    # Rust -> kombu.
+
     ours.publish(b"body", exchange=exchange_name, routing_key="rk", headers=headers)
     expected = kombu_message(queue(channel).get(no_ack=False))
     assert expected[1]["big"] == 2**70
     assert expected[1]["bytes"] == b"\x00\xff\x80"
     assert expected[1]["utf8"] == b"abc"
 
-    # kombu -> Rust.
+
     producer.publish(b"body", exchange=exchange, routing_key="rk", headers=headers)
     delivery = ours.get(queue_name)
     assert rs_message(delivery) == expected
@@ -328,11 +319,8 @@ def test_datetime_and_decimal_headers():
     assert isinstance(received[1]["price"], decimal.Decimal)
 
 
-# ---------------------------------------------------------------- routing
-
-
 def test_topic_routing_matches_kombu():
-    """Stesse binding su due exchange: le stesse code ricevono gli stessi messaggi."""
+    """Verify matching bindings route the same messages to the same queues."""
     bindings = [
         ("all", "#"),
         ("created", "*.created"),
@@ -398,7 +386,7 @@ def test_topic_routing_matches_kombu():
 
 
 def test_direct_multiple_queues():
-    """Routing direct su più code, con lo stesso esito di kombu."""
+    """Compare direct routing to multiple queues with kombu."""
     keys = ("a", "b")
 
     def scenario(prefix, kombu_side):
@@ -436,8 +424,8 @@ def test_direct_multiple_queues():
 
 
 def test_fanout_broadcast_to_multiple_consumers():
-    """Fanout: broadcast a più consumer e interoperabilità con kombu."""
-    # A) Un publish Rust raggiunge due consumer Rust su code diverse.
+    """Compare fanout broadcasts across multiple consumers and kombu."""
+
     exchange_name = unique("fan")
     exchange = Exchange(exchange_name, type="fanout")
     queues = [
@@ -446,8 +434,8 @@ def test_fanout_broadcast_to_multiple_consumers():
     ]
     ours = rs.Connection(REDIS_URL)
     declare_rs(ours, exchange, queues)
-    # Ogni consumatore dichiara il proprio binding fanout: come in kombu il
-    # tipo di exchange è stato locale alla connessione.
+    # Each consumer declares its own fanout binding; exchange types are connection-local in kombu.
+
     first = rs.Connection(REDIS_URL)
     second = rs.Connection(REDIS_URL)
     for connection, queue in ((first, queues[0]), (second, queues[1])):
@@ -464,7 +452,7 @@ def test_fanout_broadcast_to_multiple_consumers():
     assert first_batch[0][3] == {"exchange": exchange_name, "routing_key": ""}
     assert second_batch[0][3] == {"exchange": exchange_name, "routing_key": ""}
 
-    # B) Un publish kombu raggiunge il consumer Rust.
+
     exchange_b = Exchange(unique("fank"), type="fanout")
     queue_b = Queue(unique("kq"), exchange=exchange_b, routing_key="")
     kombu_conn = KombuConnection(REDIS_URL)
@@ -478,7 +466,7 @@ def test_fanout_broadcast_to_multiple_consumers():
     batch = collect_rs(consumer_rs, [queue_b.name], 1)
     assert [item[0] for item in batch] == [b"from-kombu"]
 
-    # C) Un publish Rust raggiunge il consumer kombu.
+
     exchange_c = Exchange(unique("fanr"), type="fanout")
     queue_c = Queue(unique("rq"), exchange=exchange_c, routing_key="")
     kombu_conn_c = KombuConnection(REDIS_URL)
@@ -488,7 +476,7 @@ def test_fanout_broadcast_to_multiple_consumers():
         channel_c, queues=[queue_c], callbacks=[lambda b, m: received.append(m)]
     )
     consumer_c.consume()
-    # Registra la PSUBSCRIBE prima del publish (pub/sub non ha backlog).
+    # Subscribe before publishing because pub/sub has no backlog.
     try:
         kombu_conn_c.drain_events(timeout=0.3)
     except TimeoutError:
@@ -507,7 +495,7 @@ def test_fanout_broadcast_to_multiple_consumers():
 
 
 def test_priority_matches_kombu():
-    """Priorità: stesse liste per step e stesso ordine di consumo di kombu."""
+    """Compare priority lists and consumption order with kombu."""
     priorities = [0, 9, 4, 1]
 
     def scenario(prefix, kombu_side):
@@ -547,11 +535,8 @@ def test_priority_matches_kombu():
     assert [priority for _, priority in received_order] == [0, 1, 4, 9]
 
 
-# ---------------------------------------------------------------- ack/qos
-
-
 def test_ack_reject_and_requeue_match_kombu():
-    """ack/reject/requeue: stesso esito (body, header, ordine, redelivered)."""
+    """Compare acknowledgment, rejection and requeue metadata and order."""
     bodies = [b"one", b"two", b"three"]
 
     def scenario(prefix, kombu_side):
@@ -611,21 +596,21 @@ def test_ack_reject_and_requeue_match_kombu():
     assert received[1][1].get("redelivered") is True
     assert received[1][2].get("redelivered") is True
 
-    # Requeue di un tag sconosciuto: il contratto del trasporto richiede
-    # `UnknownDeliveryTag` (il QoS Redis di kombu è invece un no-op: HGET non
-    # trova nulla e `ack` marca il tag, senza sollevare).
+    # The transport contract rejects unknown requeue tags, while kombu Redis QoS ignores them.
+
+
     conn = rs.Connection(REDIS_URL)
     with pytest.raises(KeyError):
         conn.reject("missing-tag", requeue=True)
 
 
 def test_prefetch_matches_kombu():
-    """Prefetch 2: due messaggi in volo, il terzo dopo un ack (kombu e Rust)."""
+    """Verify prefetch two holds the third delivery until an acknowledgment."""
     def publish(prefix, producer_publish, queue_name):
         for index in range(5):
             producer_publish(index, queue_name)
 
-    # kombu
+
     queue_k = Queue(unique("prefetch-k"))
     kombu_conn = KombuConnection(REDIS_URL)
     channel = kombu_conn.default_channel
@@ -650,7 +635,7 @@ def test_prefetch_matches_kombu():
     with pytest.raises(TimeoutError):
         kombu_conn.drain_events(timeout=0.05)
 
-    # Rust
+
     queue_r = unique("prefetch-r")
     ours = rs.Connection(REDIS_URL)
     ours.declare_queue(queue_r)
@@ -666,9 +651,6 @@ def test_prefetch_matches_kombu():
     third = collect_rs(ours, [queue_r], 1, timeout=0.5, prefetch=2, ack=False)
     assert [item[0] for item in third] == [b"2"]
     assert [message.body for message in received_k] == [b"0", b"1", b"2"]
-
-
-# ---------------------------------------------------------------- stato Redis
 
 
 def _normalized_state(client, norm):
@@ -696,7 +678,7 @@ def _normalized_state(client, norm):
                     for m, score in client.zrange(key, 0, -1, withscores=True)
                 ),
             )
-        else:  # pragma: no cover - tipi non usati dal trasporto
+        else:  # pragma: no cover - types unused by the transport
             value = (kind, "<ignorato>")
         state[name] = value
     return state
@@ -708,11 +690,11 @@ def _publish_scenario(publish, queue_name, exchange_name):
 
 
 def test_state_after_publish_matches_kombu():
-    """Dopo un publish lo stato delle chiavi è identico (a meno degli uuid)."""
+    """Compare Redis key state after publication, excluding UUIDs."""
     exchange_name = unique("stateex")
     queue_name = unique("stateq")
 
-    # kombu sul db 0, Rust sul db 1: stesso scenario, stato confrontabile.
+    # Use separate databases for comparable broker state.
     flush(with_db(REDIS_URL, 0))
     flush(with_db(REDIS_URL, 1))
 
@@ -750,8 +732,8 @@ def test_state_after_publish_matches_kombu():
     _publish_scenario(publish_kombu, queue_name, exchange_name)
     _publish_scenario(publish_rs, queue_name, exchange_name)
 
-    # Un Normalizer per lato: gli uuid sono diversi, i segnaposto devono
-    # essere assegnati nello stesso ordine (chiavi ordinate).
+    # Normalize UUIDs independently but assign placeholders in the same sorted-key order.
+
     expected = _normalized_state(redis_for(with_db(REDIS_URL, 0)), Normalizer())
     received = _normalized_state(redis_for(with_db(REDIS_URL, 1)), Normalizer())
     assert received == expected
@@ -796,7 +778,7 @@ def test_state_after_unacked_consume_matches_kombu():
     assert "unacked" in expected
     assert received == expected
 
-    # Il valore di `unacked` è già confrontato sopra, a meno di uuid e score.
+    # Unacked values were compared above, excluding generated UUIDs and scores.
     assert redis_for(with_db(REDIS_URL, 1)).hget("unacked", delivery[4]) is not None
 
     ours.ack(delivery[4])
@@ -806,10 +788,10 @@ def test_state_after_unacked_consume_matches_kombu():
 
 
 def test_visibility_timeout_restores_between_kombu_and_rust():
-    """Un messaggio non confermato torna visibile anche all'altro client."""
+    """Verify another client can restore an unacknowledged message."""
     options = {"visibility_timeout": 1}
 
-    # Rust consuma senza ack; un consumer kombu lo ripristina.
+
     queue_one = unique("visible")
     kombu_conn_one = KombuConnection(REDIS_URL, transport_options=options)
     channel_one = kombu_conn_one.default_channel
@@ -830,11 +812,11 @@ def test_visibility_timeout_restores_between_kombu_and_rust():
             kombu_conn_one.drain_events(timeout=0.2)
         except TimeoutError:
             pass
-    assert restored, "kombu non ha ripristinato il messaggio non confermato"
+    assert restored, "kombu failed to restore the unacknowledged message"
     assert restored[0].body == b"from-rust"
     assert dict(restored[0].headers).get("redelivered") is True
 
-    # Kombu consuma senza ack; un consumer Rust lo ripristina.
+
     queue_two = unique("visible2")
     kombu_conn = KombuConnection(REDIS_URL, transport_options=options)
     channel_two = kombu_conn.default_channel
@@ -853,19 +835,16 @@ def test_visibility_timeout_restores_between_kombu_and_rust():
         if batch:
             found = batch[0]
         else:
-            # Il drain crea il consumer: il suo loop ripristina i visibili.
+            # Drain creates the consumer whose loop restores visible messages.
             time.sleep(0.2)
-    assert found is not None, "Rust non ha ripristinato il messaggio non confermato"
+    assert found is not None, "Rust failed to restore the unacknowledged message"
     assert found[0] == b"from-kombu"
     assert found[1].get("redelivered") is True
     ours_two.ack(found[4])
 
 
-# ---------------------------------------------------------------- wire
-
-
 def _wire_declare(scenario):
-    """Comandi di declare+bind / publish confrontati con MONITOR."""
+    """Compare declaration, binding and publication commands using MONITOR."""
     norm = Normalizer()
     with RedisCapture() as capture:
         scenario()
@@ -928,9 +907,9 @@ def _compare_wire(kind, routing_key, *, publish=True, priority=0, fanout=False):
             kind, exchange_name, queue_name, routing_key, publish, priority
         )
     )
-    # Stessi nomi di exchange/coda, quindi le due sequenze devono coincidere
-    # comando per comando (a meno di uuid e timestamp, normalizzati).
-    assert received, "nessun comando catturato"
+    # Identical entity names let normalized commands be compared in order.
+
+    assert received, "no commands captured"
     assert received == expected
 
 
@@ -952,9 +931,6 @@ def test_wire_topic_declare_and_bind():
 
 def test_wire_fanout_publish():
     _compare_wire("fanout", "", fanout=True)
-
-
-# ---------------------------------------------------------------- errori
 
 
 def test_url_and_transport_options():

@@ -1,4 +1,4 @@
-//! Esposizione di `kombu.compression` al modulo nativo.
+//! Native bindings for kombu compression.
 
 use pyo3::exceptions::{PyKeyError, PyValueError};
 use pyo3::prelude::*;
@@ -15,8 +15,7 @@ pub fn compress(
     let data = body.as_bytes();
     let addr = data.as_ptr() as usize;
     let len = data.len();
-    // SAFETY: `body` resta vivo e i `bytes` sono immutabili; durante `detach`
-    // nessun codice Python può modificare o liberare il buffer.
+    // SAFETY: body stays alive and bytes are immutable; releasing the GIL cannot invalidate the buffer.
     let out = py.detach(move || unsafe {
         compression::compress(name, std::slice::from_raw_parts(addr as *const u8, len))
     });
@@ -33,7 +32,7 @@ pub fn decompress(
     let data = body.as_bytes();
     let addr = data.as_ptr() as usize;
     let len = data.len();
-    // SAFETY: vedi `compress`.
+    // SAFETY: body stays alive and its immutable bytes remain valid while the GIL is released.
     let out = py.detach(move || unsafe {
         compression::decompress(
             content_type,

@@ -1,7 +1,4 @@
-//! Trasporti broker: memory, redis, amqp (vedi PLAN.md, fase 2).
-//!
-//! `connect` restituisce un `Box<dyn Transport>`: `memory://`, `redis://`/`rediss://` e
-//! `amqp://`/`amqps://`/`pyamqp://` sono tutti implementati.
+//! Broker transports for memory, Redis and AMQP URLs.
 
 pub mod amqp;
 pub mod control;
@@ -27,12 +24,12 @@ pub use transport::{
 };
 pub use url::{FanoutPrefix, QueueOrderStrategy, TransportKind, TransportOptions, Url, UrlInfo};
 
-/// Connessione al broker da URL, con le opzioni di trasporto di default.
+/// Connects to a broker URL with default transport options.
 pub async fn connect(url: &str) -> Result<Box<dyn Transport>> {
     connect_with(url, TransportOptions::default()).await
 }
 
-/// Connessione al broker da URL con `transport_options`.
+/// Connects to a broker URL with transport options.
 pub async fn connect_with(
     url: &str,
     transport_options: TransportOptions,
@@ -47,13 +44,13 @@ pub async fn connect_with(
     .await
 }
 
-/// Connessione al broker da URL con configurazione completa.
+/// Connects to a broker URL with a complete configuration.
 pub async fn connect_with_config(url: &str, config: &ConnectConfig) -> Result<Box<dyn Transport>> {
     let parsed = Url::parse(url)?;
     connect_parsed_with_config(&parsed, config).await
 }
 
-/// Connessione da URL già scomposto (evita un secondo parsing nel binding Python).
+/// Connects to a parsed URL to avoid parsing twice in Python bindings.
 pub async fn connect_parsed(
     url: &Url,
     transport_options: TransportOptions,
@@ -68,7 +65,7 @@ pub async fn connect_parsed(
     .await
 }
 
-/// Connessione da URL già scomposto con configurazione completa.
+/// Connects to a parsed URL with a complete configuration.
 pub async fn connect_parsed_with_config(
     url: &Url,
     config: &ConnectConfig,
@@ -108,11 +105,11 @@ mod tests {
     fn redis_database_is_parsed_from_virtual_host() {
         use crate::redis::parse_db;
         assert_eq!(parse_db("/").expect("default"), 0);
-        assert_eq!(parse_db("").expect("vuoto"), 0);
+        assert_eq!(parse_db("").expect("empty"), 0);
         assert_eq!(parse_db("3").expect("db"), 3);
-        assert_eq!(parse_db("/7").expect("db con slash"), 7);
+        assert_eq!(parse_db("/7").expect("db with slash"), 7);
         assert!(parse_db("nope").is_err());
-        // Come kombu: si toglie un solo slash, quindi "//" non è un numero.
+        // kombu removes only one slash, so `//` is not a number.
         assert!(parse_db("//").is_err());
     }
 

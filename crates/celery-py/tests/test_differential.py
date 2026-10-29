@@ -1,7 +1,4 @@
-"""Test differenziali contro Celery 5.7.0rc1 (.venv-ref).
-
-Tutti i confronti avvengono nello stesso processo: riferimento e ``_celery_rs``.
-"""
+"""Compare the native extension with Celery 5.7.0rc1 in the same .venv-ref process."""
 
 from __future__ import annotations
 
@@ -130,7 +127,7 @@ def same(a, b) -> bool:
 
 def random_string(rng):
     if rng.random() < 0.06:
-        # Stringa lunga con spazi: esercita truncate con maxlen 64/1024.
+        # Exercise truncation with long whitespace-containing strings.
         target = rng.randrange(220, 420)
         parts = []
         total = 0
@@ -157,7 +154,7 @@ def random_string(rng):
         elif kind == 4:
             chars.append(rng.choice(["'", '"', "\\", "\n", "\r", "\t"]))
         else:
-            # Surrogato isolato.
+
             chars.append(chr(rng.randrange(0xD800, 0xE000)))
     return "".join(chars)
 
@@ -246,11 +243,6 @@ def many_values(n, depth=6):
         yield random_value(rng, rng.randrange(depth + 1))
 
 
-# ---------------------------------------------------------------------------
-# json_dumps
-# ---------------------------------------------------------------------------
-
-
 def test_json_dumps_50k():
     rng = random.Random(SEED)
     for i, value in enumerate(many_values(50_000)):
@@ -259,7 +251,7 @@ def test_json_dumps_50k():
         assert got == expected, f"valore #{i}: {value!r}"
 
 
-def test_json_dumps_errori():
+def test_json_dumps_errors():
     cycle = []
     cycle.append(cycle)
     cases = [
@@ -276,7 +268,7 @@ def test_json_dumps_errori():
         assert str(got_err.value) == str(ref_err.value)
 
 
-def test_json_dumps_sottoclassi_e_chiavi():
+def test_json_dumps_subclasses_and_keys():
     values = [
         Signature("x", args=(1,)),
         NT(1, 2),
@@ -288,11 +280,6 @@ def test_json_dumps_sottoclassi_e_chiavi():
     ]
     for value in values:
         assert rs.json_dumps(value, DEFAULT).decode() == kjson.dumps(value)
-
-
-# ---------------------------------------------------------------------------
-# json_loads
-# ---------------------------------------------------------------------------
 
 
 CORPUS = [
@@ -377,7 +364,7 @@ CORPUS = [
 def outcome(func, data):
     try:
         return ("ok", func(data))
-    except Exception as exc:  # noqa: BLE001 - confrontiamo il tipo esatto
+    except Exception as exc:  # noqa: BLE001 - compare exact exception types
         return ("err", type(exc), getattr(exc, "pos", None), str(exc))
 
 
@@ -389,7 +376,7 @@ def test_json_loads_corpus():
         if ref[0] == "ok":
             assert same(got[1], ref[1]), text
         else:
-            # Tipo, posizione e messaggio di JSONDecodeError.
+
             assert got[1:] == ref[1:], text
 
 
@@ -401,7 +388,7 @@ def test_json_loads_roundtrip_50k():
         assert same(got, ref), f"valore #{i}: {value!r}"
 
 
-def test_json_loads_tipi_input():
+def test_json_loads_input_types():
     body = b'{"a": [1, 2]}'
     expected = kjson.loads(body)
     assert rs.json_loads(body, kjson.object_hook) == expected
@@ -410,11 +397,6 @@ def test_json_loads_tipi_input():
     assert rs.json_loads(body.decode(), kjson.object_hook) == expected
     with pytest.raises(TypeError):
         rs.json_loads(1, kjson.object_hook)
-
-
-# ---------------------------------------------------------------------------
-# saferepr
-# ---------------------------------------------------------------------------
 
 
 REPR_OBJECTS = [
@@ -454,7 +436,7 @@ def random_repr_value(rng, depth=0):
     return rng.choice(REPR_OBJECTS)(rng)
 
 
-def test_saferepr_20k_combinazioni():
+def test_saferepr_20k_combinations():
     rng = random.Random(SEED)
     values = [random_repr_value(rng, rng.randrange(4)) for _ in range(20_000)]
     for value in values:
@@ -465,7 +447,7 @@ def test_saferepr_20k_combinazioni():
                 assert got == expected, (value, maxlen, maxlevels)
 
 
-def test_saferepr_ricorsione_e_troncamento():
+def test_saferepr_recursion_and_truncation():
     cycle = []
     cycle.append(cycle)
     mapping = {}
@@ -499,12 +481,12 @@ def build_deep_list(depth):
     return root
 
 
-def test_saferepr_profondita():
+def test_saferepr_depth():
     deep = build_deep_list(10_000)
     assert rs.saferepr(deep, None, 0) == ref_saferepr(deep, None, 0)
 
-    # 200.000 livelli: il riferimento è troppo lento, verifichiamo solo che
-    # l'implementazione Rust non esaurisca lo stack nativo.
+    # The reference is too slow at 200,000 levels; check Rust's native stack safety.
+
     deeper = build_deep_list(200_000)
     text = rs.saferepr(deeper, None, 0)
     assert len(text) == 2 * (200_000 + 1)
@@ -512,7 +494,7 @@ def test_saferepr_profondita():
 
 
 def test_saferepr_maxlevels_none():
-    """`maxlevels=None` (task_repr_maxlevels illimitato) come il riferimento."""
+    """Match the reference with unlimited representation depth."""
     values = [
         [1, [2, [3, [4, [5]]]]],
         {"a": ["b", {"c": "d"}]},
@@ -525,7 +507,7 @@ def test_saferepr_maxlevels_none():
             )
 
 
-def test_saferepr_chiavi_annidate():
+def test_saferepr_nested_keys():
     for depth in (10, 100, 300):
         cur = HashableDict({1: 0})
         for _ in range(depth):
@@ -533,8 +515,8 @@ def test_saferepr_chiavi_annidate():
         root = {cur: 1}
         assert rs.saferepr(root, None, 0) == ref_saferepr(root, None, 0)
 
-    # Molto in profondità il riferimento solleva RecursionError: non dobbiamo
-    # andare in stack overflow nativo.
+    # Deep inputs may raise RecursionError but must not overflow the native stack.
+
     cur = HashableDict({1: 0})
     for _ in range(5000):
         cur = HashableDict({cur: 0})
@@ -542,7 +524,7 @@ def test_saferepr_chiavi_annidate():
         rs.saferepr({cur: 1}, None, 0)
 
 
-def test_saferepr_stringhe_lunghe():
+def test_saferepr_long_strings():
     rng = random.Random(SEED)
     for _ in range(200):
         text = random_string(rng)
@@ -550,7 +532,7 @@ def test_saferepr_stringhe_lunghe():
             assert rs.saferepr(text, maxlen) == ref_saferepr(text, maxlen)
 
 
-def test_json_profondita():
+def test_json_depth():
     deep = build_deep_list(10_000)
     with pytest.raises(RecursionError) as ref_err:
         kjson.dumps(deep)
@@ -558,7 +540,7 @@ def test_json_profondita():
         rs.json_dumps(deep, DEFAULT)
     assert str(got_err.value) == str(ref_err.value)
 
-    # Qualsiasi profondità: valore o RecursionError, mai crash nativo.
+
     for depth in (2_000, 20_000, 200_000):
         deep = build_deep_list(depth)
         try:
@@ -610,19 +592,14 @@ def depth_threshold(serialize, make):
 
 
 def threshold_in_fresh_thread(serialize, make, stack_size=None):
-    """Misura la soglia in un thread nuovo.
-
-    Il contatore C di CPython è per-thread: un thread nuovo parte dallo stesso
-    budget del riferimento standalone, mentre il thread di pytest può averne
-    già consumato una parte.
-    """
+    """Measure the recursion threshold in a fresh thread with an unused CPython C recursion budget."""
 
     result = []
 
     def worker():
         try:
             result.append(("ok", depth_threshold(serialize, make)))
-        except BaseException as exc:  # noqa: BLE001 - riporta al thread chiamante
+        except BaseException as exc:  # noqa: BLE001 - propagate to the calling thread
             result.append(("err", type(exc).__name__, str(exc)))
 
     old_size = None
@@ -640,7 +617,7 @@ def threshold_in_fresh_thread(serialize, make, stack_size=None):
     return result[0][1]
 
 
-def test_json_dumps_soglia_profondita():
+def test_json_dumps_depth_threshold():
     ref_list = threshold_in_fresh_thread(kjson.dumps, build_deep_list)
     rs_list = threshold_in_fresh_thread(
         lambda value: rs.json_dumps(value, DEFAULT), build_deep_list
@@ -660,7 +637,7 @@ def test_json_dumps_soglia_profondita():
     )
 
 
-def test_json_dumps_thread_stack_piccolo():
+def test_json_dumps_small_thread_stack():
     deep_list = build_deep_list(9_997)
     deep_dict = build_deep_dict(9_997)
     results = []
@@ -673,7 +650,7 @@ def test_json_dumps_thread_stack_piccolo():
                     len(rs.json_dumps(deep_dict, DEFAULT)),
                 )
             )
-        except BaseException as exc:  # noqa: BLE001 - riporta al thread chiamante
+        except BaseException as exc:  # noqa: BLE001 - propagate to the calling thread
             results.append((type(exc).__name__, str(exc)))
 
     old_size = threading.stack_size(256 * 1024)
@@ -697,16 +674,11 @@ def test_truncate_fixture():
             assert ref_truncate(text, maxlen) is not None
 
 
-# ---------------------------------------------------------------------------
-# encode_task_v2
-# ---------------------------------------------------------------------------
-
-
 def make_app():
     return Celery("differential", broker="memory://", backend="cache+memory://")
 
 
-def test_encode_task_v2_500_combinazioni():
+def test_encode_task_v2_500_combinations():
     rng = random.Random(SEED)
     app = make_app()
     headers_options = ["custom_a", "custom_b", "x"]
@@ -798,11 +770,6 @@ def test_encode_task_v2_500_combinazioni():
         assert (sent_event is None) == (ref.sent_event is None), i
 
 
-# ---------------------------------------------------------------------------
-# compressione
-# ---------------------------------------------------------------------------
-
-
 def available_algorithms():
     names = []
     for alias in ("gzip", "bzip2", "xz", "brotli", "zstd"):
@@ -827,16 +794,14 @@ def test_compression_interop():
             assert rs.decompress(py_body, py_ct) == payload
 
 
-def test_compression_nome_sconosciuto():
+def test_compression_unknown_name():
     with pytest.raises(KeyError):
-        rs.compress(b"x", "sconosciuto")
+        rs.compress(b"x", "unknown")
     with pytest.raises(KeyError):
-        rs.decompress(b"x", "sconosciuto")
+        rs.decompress(b"x", "unknown")
 
 
-# ---------------------------------------------------------------------------
-# micro-benchmark informativo (non è un gate)
-# ---------------------------------------------------------------------------
+# Informational microbenchmark, excluded from acceptance gates.
 
 
 def test_micro_benchmark(capsys):

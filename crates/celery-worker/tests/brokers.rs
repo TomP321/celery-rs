@@ -1,8 +1,5 @@
-//! Test del consumer del worker contro Redis e RabbitMQ reali.
-//!
-//! Richiedono i broker di test (`tools/dev/with-brokers cargo test`):
-//! Redis `redis://127.0.0.1:6390` e AMQP `amqp://guest:guest@127.0.0.1:5673//`,
-//! sovrascrivibili con `CELERY_RS_TEST_REDIS`/`CELERY_RS_TEST_AMQP`.
+//! Worker consumer tests against real Redis and RabbitMQ brokers. Run through
+//! tools/dev/with-brokers; CELERY_RS_TEST_REDIS and CELERY_RS_TEST_AMQP override URLs.
 
 use std::time::Duration;
 
@@ -30,7 +27,7 @@ fn unique(prefix: &str) -> String {
 async fn open(url: &str) -> Box<dyn Transport> {
     connect(url)
         .await
-        .unwrap_or_else(|error| panic!("broker non disponibile su {url}: {error}"))
+        .unwrap_or_else(|error| panic!("broker unavailable at {url}: {error}"))
 }
 
 async fn publish(transport: &dyn Transport, queue: &str, body: &str) {
@@ -75,7 +72,7 @@ async fn consume_and_ack(url: &str) {
         .expect("start");
     assert!(
         wait_for(|| consumer.pending() == 2, Duration::from_secs(10)).await,
-        "prefetch non rispettato"
+        "prefetch limit exceeded"
     );
     let first = consumer.drain(2);
     assert_eq!(first.len(), 2);
@@ -180,7 +177,7 @@ async fn amqp_redelivers_unacked_after_reconnect() {
         .await
         .expect("start");
     assert!(wait_for(|| consumer.pending() == 1, Duration::from_secs(10)).await);
-    // Non confermato: chiudendo la connessione il broker lo rimette in coda.
+    // Closing the connection must requeue the unacknowledged delivery.
     consumer.close().await.expect("close");
 
     let again = WorkerConsumer::new(open(&amqp_url()).await, Waker::new(), 1);
@@ -191,14 +188,10 @@ async fn amqp_redelivers_unacked_after_reconnect() {
     assert!(wait_for(|| again.pending() == 1, Duration::from_secs(10)).await);
     let redelivered = again.drain(1);
     assert_eq!(&redelivered[0].message.body[..], b"lost");
-    again
-        .ack(&redelivered[0].delivery_tag)
-        .await
-        .expect("ack");
+    again.ack(&redelivered[0].delivery_tag).await.expect("ack");
     again.close().await.expect("close");
     producer.delete_queue(&queue).await.expect("delete");
 }
-
 
 async fn ack_after_cancel(url: &str) {
     let queue = unique("rs-worker-broker-cancel");
@@ -217,11 +210,11 @@ async fn ack_after_cancel(url: &str) {
     assert!(wait_for(|| consumer.pending() == 1, Duration::from_secs(10)).await);
     let delivery = consumer.drain(1);
     consumer.cancel().await.expect("cancel");
-    // Come `basic_cancel` di kombu: il tag già consegnato resta confermabile.
+    // kombu basic_cancel preserves pending acknowledgments.
     consumer
         .ack(&delivery[0].delivery_tag)
         .await
-        .expect("ack dopo cancel");
+        .expect("ack after cancel");
     assert_eq!(transport.queue_size(&queue).await.expect("size"), 0);
     consumer.close().await.expect("close");
     transport.delete_queue(&queue).await.expect("delete");

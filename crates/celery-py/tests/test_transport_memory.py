@@ -1,9 +1,4 @@
-"""Interoperabilità del trasporto memory: kombu vs ``_celery_rs.Connection``.
-
-Ogni scenario esegue le stesse operazioni con il kombu di riferimento
-(``memory://``) e con il nostro trasporto, e confronta i messaggi ricevuti:
-body, header, properties e delivery_info nello stesso ordine.
-"""
+"""Compare memory transport messages with kombu, preserving delivery order and metadata."""
 
 from __future__ import annotations
 
@@ -25,7 +20,7 @@ def unique(prefix: str) -> str:
 
 
 def kombu_message(message):
-    """Tupla normalizzata di un messaggio kombu (delivery_tag escluso: è un uuid)."""
+    """Normalize a kombu message, excluding its generated delivery tag."""
     properties = dict(message.properties)
     properties.pop("delivery_tag", None)
     return (
@@ -57,7 +52,7 @@ def declare_rs(connection, exchange, queue):
 
 
 def collect_rs(connection, queues, count, *, timeout=1.0, prefetch=0, ack=True):
-    """Raccoglie fino a ``count`` messaggi (un drain può restituirne più di uno)."""
+    """Collect up to count messages, allowing each drain to return a batch."""
     collected = []
     deadline = time.monotonic() + timeout
     while len(collected) < count:
@@ -75,7 +70,7 @@ def collect_rs(connection, queues, count, *, timeout=1.0, prefetch=0, ack=True):
 
 
 def collect_kombu(connection, queues, count, *, timeout=1.0, prefetch=0, ack=True):
-    """Raccoglie fino a ``count`` messaggi da un Consumer kombu."""
+    """Collect up to count messages from a kombu consumer."""
     received = []
 
     def on_message(body, message):
@@ -100,7 +95,7 @@ def collect_kombu(connection, queues, count, *, timeout=1.0, prefetch=0, ack=Tru
 
 
 def take_rs(connection, queue_name, *, timeout=1.0):
-    """Un solo messaggio (prefetch=1 evita di prelevarne altri)."""
+    """Fetch one message with prefetch set to one."""
     batch = connection.drain([queue_name], timeout=timeout, prefetch=1)
     assert len(batch) == 1, batch
     return batch[0]
@@ -202,8 +197,8 @@ def test_datetime_and_decimal_headers():
     ours = rs.Connection("memory://")
     declare_rs(ours, exchange, queue)
 
-    # py-amqp normalizza i timestamp a datetime naive in UTC e i decimali a
-    # Decimal((sign, digits, exponent)): qui verifichiamo lo stesso round-trip.
+    # Match py-amqp's naive UTC timestamps and Decimal tuple normalization.
+
     headers = {
         "when": datetime.datetime(2020, 1, 2, 3, 4, 5),
         "price": decimal.Decimal("1.25"),
@@ -232,7 +227,7 @@ def test_unsupported_or_unrepresentable_headers_are_rejected():
         ours.publish(
             b"x", routing_key=queue_name, headers={"big": decimal.Decimal("1E+100")}
         )
-    # Nessun messaggio è stato accodato.
+
     assert ours.size(queue_name) == 0
 
 
@@ -278,8 +273,8 @@ def test_topic_routing_matches_kombu():
             rs_message(delivery)
             for delivery in collect_rs(ours, [queue.name], len(expected))
         ]
-        assert received == expected, f"coda {queue.routing_key!r}"
-        assert received, f"la coda {queue.routing_key!r} non ha ricevuto nulla"
+        assert received == expected, f"queue {queue.routing_key!r}"
+        assert received, f"queue {queue.routing_key!r} received nothing"
 
 
 def test_fanout_and_anonymous_exchange():
@@ -307,7 +302,7 @@ def test_fanout_and_anonymous_exchange():
         assert received == expected
         assert received[3] == {"exchange": exchange_name, "routing_key": ""}
 
-    # Exchange anonimo: la routing key è la coda.
+    # The default exchange routes directly to the queue name.
     producer.publish(b"direct-to-queue", routing_key=queues[0].name)
     ours.publish(b"direct-to-queue", routing_key=queues[0].name)
     expected = kombu_message(queues[0](channel).get(no_ack=True))
@@ -333,13 +328,13 @@ def test_ack_reject_and_requeue_order():
         producer.publish(body, exchange=exchange, routing_key="rk")
         ours.publish(body, exchange=exchange_name, routing_key="rk")
 
-    # reject senza requeue: il messaggio sparisce
+
     first = queue(channel).get(no_ack=False)
     first.reject()
     delivery = take_rs(ours, queue_name)
     ours.reject(delivery[4], requeue=False)
 
-    # reject con requeue: torna in fondo
+    # Memory requeue appends at the tail.
     second = queue(channel).get(no_ack=False)
     second.reject(requeue=True)
     delivery = take_rs(ours, queue_name)
@@ -354,7 +349,7 @@ def test_ack_reject_and_requeue_order():
     assert received == expected
     assert [item[0] for item in received] == [b"three", b"two"]
 
-    # la coda è vuota
+
     assert ours.size(queue_name) == 0
 
 
@@ -392,7 +387,7 @@ def test_prefetch_matches_kombu():
 
     first_batch = collect_rs(ours, [queue_name], 5, timeout=0.2, prefetch=2, ack=False)
     assert [item[0] for item in first_batch] == [b"0", b"1"]
-    # Prefetch raggiunto: il drain successivo non restituisce nulla.
+
     assert ours.drain([queue_name], timeout=0.2, prefetch=2) == []
 
     channel.basic_ack(received[0].delivery_tag)
@@ -452,7 +447,7 @@ def test_priority_is_preserved_and_fifo():
     expected = [kombu_message(queue(channel).get(no_ack=True)) for _ in priorities]
     received = [rs_message(delivery) for delivery in collect_rs(ours, [queue_name], 4)]
     assert received == expected
-    # Il memory transport non riordina per priorità: ordine FIFO.
+    # Memory preserves FIFO order regardless of priority.
     assert [item[0] for item in received] == [b"m0", b"m1", b"m2", b"m3"]
     assert [item[2]["priority"] for item in received] == priorities
 
@@ -482,7 +477,7 @@ def test_purge_size_delete_queue():
     ours.publish(b"again", exchange=exchange_name, routing_key="rk")
     ours.delete_queue(queue_name)
     assert ours.size(queue_name) == 0
-    # dopo il delete il binding è sparito: il messaggio non viene più accodato
+
     ours.publish(b"lost", exchange=exchange_name, routing_key="rk")
     assert ours.size(queue_name) == 0
 
@@ -537,7 +532,7 @@ def test_drain_zero_timeout_is_non_blocking():
 
 
 def test_url_and_transport_options_errors():
-    # redis:// e amqp:// sono implementati (spec 02b/02c): qui restano gli URL non validi.
+
     with pytest.raises(ValueError):
         rs.Connection("not-a-url")
     with pytest.raises(ValueError):
@@ -587,14 +582,14 @@ def test_get_matches_kombu():
         producer.publish(body, exchange=exchange, routing_key="rk")
         ours.publish(body, exchange=exchange_name, routing_key="rk")
 
-    # no_ack=True: il messaggio non resta in volo.
+
     expected = kombu_message(queue(channel).get(no_ack=True))
     received = ours.get(queue_name, no_ack=True)
     assert received is not None
     assert rs_message(received) == expected
     ours.ack(received[4])
 
-    # no_ack=False: va confermato.
+
     expected = kombu_message(queue(channel).get(no_ack=False))
     received = ours.get(queue_name, no_ack=False)
     assert rs_message(received) == expected
@@ -681,25 +676,25 @@ def test_delete_exchange_matches_kombu():
     channel.exchange_delete(exchange=exchange_name)
     ours.delete_exchange(exchange_name)
 
-    # L'exchange non esiste più e la dichiarazione passiva fallisce.
+
     with pytest.raises(ChannelError):
         Exchange(exchange_name).declare(passive=True, channel=channel)
     with pytest.raises(LookupError):
         ours.declare_exchange(exchange_name, passive=True)
 
-    # La coda vuota è stata eliminata insieme ai suoi binding.
+
     with pytest.raises(ChannelError):
         empty.queue_declare(passive=True, channel=channel)
     with pytest.raises(LookupError):
         ours.declare_queue(empty.name, passive=True)
 
-    # La coda con messaggi è rimasta.
+
     info = full.queue_declare(passive=True, channel=channel)
     assert info[1] == 1
     assert ours.declare_queue(full.name, passive=True) == full.name
     assert ours.size(full.name) == 1
 
-    # I publish sull'exchange eliminato non vengono più instradati.
+
     producer.publish(b"lost", exchange=exchange, routing_key="full")
     ours.publish(b"lost", exchange=exchange_name, routing_key="full")
     assert ours.size(full.name) == 1
@@ -771,7 +766,7 @@ def test_prefetch_can_change_between_drains():
     assert [item[0] for item in ours_first] == [b"0", b"1"]
     assert ours.drain([queue_name], timeout=0.2, prefetch=2) == []
 
-    # Aumento del prefetch tra due drain: stesso consumatore, nessuna perdita.
+    # Update prefetch on the existing consumer to preserve pending deliveries.
     consumer.qos(prefetch_count=4)
     deadline = time.monotonic() + 0.5
     while len(received) < 4 and time.monotonic() < deadline:
@@ -783,7 +778,7 @@ def test_prefetch_can_change_between_drains():
     assert [item[0] for item in ours_second] == [b"2", b"3"]
     assert ours.drain([queue_name], timeout=0.2, prefetch=4) == []
 
-    # set_prefetch esplicito: con 4 in volo e soglia 2 non arriva nulla.
+
     ours.set_prefetch(2)
     assert ours.drain([queue_name], timeout=0.2, prefetch=2) == []
 
@@ -816,7 +811,7 @@ def test_drain_reconciles_queue_set_without_losing_consumer():
         f"{queue_one}-0".encode(),
         f"{queue_one}-1".encode(),
     ]
-    # q2 non è ancora consumata.
+
     assert ours.size(queue_two) == 2
 
     second = ours.drain([queue_one, queue_two], timeout=0.2)
@@ -827,7 +822,7 @@ def test_drain_reconciles_queue_set_without_losing_consumer():
     for delivery in first + second:
         ours.ack(delivery[4])
 
-    # Togliendo q2 il consumatore smette di prelevare da lì.
+
     assert ours.drain([queue_one], timeout=0.05) == []
     ours.publish(b"later", routing_key=queue_two)
     assert ours.drain([queue_one], timeout=0.05) == []

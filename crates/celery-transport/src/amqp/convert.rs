@@ -1,10 +1,4 @@
-//! Conversione fra i tipi condivisi ([`Message`], [`HeaderValue`]) e quelli AMQP
-//! di lapin/amq-protocol.
-//!
-//! I tipi di header prodotti sono quelli di py-amqp (`serialization._write_item`):
-//! stringhe e bytes diventano `longstr` (al ricevimento py-amqp li decodifica in
-//! `str` se UTF-8 validi, altrimenti `bytes`), gli interi `int32` se ci stanno e
-//! `int64` altrimenti, i float `double`, i decimali `D`, i timestamp `T`.
+//! Converts shared message types to AMQP types using py-amqp header encodings.
 
 use bytes::Bytes;
 use compact_str::CompactString;
@@ -14,13 +8,13 @@ use lapin::types::{AMQPValue, DecimalValue, FieldArray, FieldTable, LongString, 
 use crate::message::{Decimal, HeaderValue, Headers, Message, Properties};
 use crate::transport::{Error, Result};
 
-/// `ShortString` AMQP (max 255 byte) senza panico.
+/// Returns an AMQP short string, rejecting values over 255 bytes.
 pub(crate) fn short_string(value: &str) -> Result<ShortString> {
     ShortString::try_new(value.to_string())
-        .map_err(|_| Error::InvalidArgument(format!("stringa troppo lunga per AMQP: {value:?}")))
+        .map_err(|_| Error::InvalidArgument(format!("string too long for AMQP: {value:?}")))
 }
 
-/// Tabella AMQP da una mappa ordinata di header.
+/// Converts ordered headers to an AMQP table.
 pub(crate) fn to_field_table(headers: &Headers) -> Result<FieldTable> {
     let mut table = FieldTable::default();
     for (key, value) in headers.iter() {
@@ -29,7 +23,7 @@ pub(crate) fn to_field_table(headers: &Headers) -> Result<FieldTable> {
     Ok(table)
 }
 
-/// Valore AMQP da un [`HeaderValue`].
+/// Converts a shared header value to AMQP.
 pub(crate) fn value_to_amqp(value: &HeaderValue) -> Result<AMQPValue> {
     Ok(match value {
         HeaderValue::Null => AMQPValue::Void,
@@ -39,14 +33,14 @@ pub(crate) fn value_to_amqp(value: &HeaderValue) -> Result<AMQPValue> {
             Err(_) => AMQPValue::LongLongInt(*number),
         },
         HeaderValue::BigInt(text) => {
-            // py-amqp codifica gli interi con `>q`: oltre i 64 bit non c'è tipo.
+            // py-amqp uses signed 64-bit integers on the wire.
             let number = text.parse::<i64>().map_err(|_| {
-                Error::InvalidArgument(format!("intero troppo grande per AMQP: {text}"))
+                Error::InvalidArgument(format!("integer too large for AMQP: {text}"))
             })?;
             AMQPValue::LongLongInt(number)
         }
         HeaderValue::Float(number) => AMQPValue::Double(*number),
-        // Come py-amqp: str e bytes sono entrambi `longstr`.
+        // py-amqp encodes both strings and bytes as `longstr`.
         HeaderValue::Str(text) => AMQPValue::LongString(LongString::from(text.as_bytes())),
         HeaderValue::Bytes(bytes) => AMQPValue::LongString(LongString::from(bytes.as_ref())),
         HeaderValue::List(items) => AMQPValue::FieldArray(FieldArray::from(
@@ -58,19 +52,19 @@ pub(crate) fn value_to_amqp(value: &HeaderValue) -> Result<AMQPValue> {
         HeaderValue::Map(headers) => AMQPValue::FieldTable(to_field_table(headers)?),
         HeaderValue::Timestamp(seconds) => {
             let seconds = u64::try_from(*seconds).map_err(|_| {
-                Error::InvalidArgument(format!("timestamp negativo per AMQP: {seconds}"))
+                Error::InvalidArgument(format!("negative AMQP timestamp: {seconds}"))
             })?;
             AMQPValue::Timestamp(seconds)
         }
         HeaderValue::Decimal(decimal) => AMQPValue::DecimalValue(DecimalValue {
             scale: decimal.scale,
-            // Il valore è a 32 bit con segno sui fili: si conservano i bit.
+            // Preserve the bits of the signed 32-bit wire value.
             value: decimal.value as u32,
         }),
     })
 }
 
-/// [`HeaderValue`] da un valore AMQP, con i tipi che vede py-amqp.
+/// Converts an AMQP value to the header types exposed by py-amqp.
 pub(crate) fn value_from_amqp(value: &AMQPValue) -> HeaderValue {
     match value {
         AMQPValue::Boolean(boolean) => HeaderValue::Bool(*boolean),
@@ -88,7 +82,7 @@ pub(crate) fn value_from_amqp(value: &AMQPValue) -> HeaderValue {
             value: decimal.value as i32,
         }),
         AMQPValue::LongString(text) => match std::str::from_utf8(text.as_bytes()) {
-            // py-amqp prova prima a decodificare in UTF-8 e ripiega sui bytes.
+            // py-amqp falls back to bytes when UTF-8 decoding fails.
             Ok(text) => HeaderValue::Str(CompactString::from(text)),
             Err(_) => HeaderValue::Bytes(Bytes::copy_from_slice(text.as_bytes())),
         },
@@ -119,11 +113,11 @@ fn property_string(key: &str, value: &HeaderValue) -> Result<ShortString> {
         HeaderValue::Bytes(bytes) => match std::str::from_utf8(bytes) {
             Ok(text) => short_string(text),
             Err(_) => Err(Error::InvalidArgument(format!(
-                "proprietà {key} non è UTF-8"
+                "property {key} is not UTF-8"
             ))),
         },
         other => Err(Error::InvalidArgument(format!(
-            "proprietà {key}: attesa stringa, trovato {other:?}"
+            "property {key}: expected string, got {other:?}"
         ))),
     }
 }
@@ -131,13 +125,12 @@ fn property_string(key: &str, value: &HeaderValue) -> Result<ShortString> {
 fn property_u8(key: &str, value: &HeaderValue) -> Result<u8> {
     let number = value
         .as_i64()
-        .ok_or_else(|| Error::InvalidArgument(format!("proprietà {key}: atteso intero")))?;
+        .ok_or_else(|| Error::InvalidArgument(format!("property {key}: expected integer")))?;
     u8::try_from(number)
-        .map_err(|_| Error::InvalidArgument(format!("proprietà {key}: fuori da 0..=255")))
+        .map_err(|_| Error::InvalidArgument(format!("property {key}: outside 0..=255")))
 }
 
-/// Proprietà AMQP native del messaggio (content-type, headers e `properties`
-/// di kombu). Le chiavi sconosciute sono ignorate, come fa py-amqp.
+/// Builds native AMQP properties, ignoring unknown keys as py-amqp does.
 pub(crate) fn message_to_properties(message: &Message) -> Result<BasicProperties> {
     let mut properties = BasicProperties::default();
     if let Some(content_type) = message.content_type.as_deref() {
@@ -186,17 +179,16 @@ pub(crate) fn message_to_properties(message: &Message) -> Result<BasicProperties
                     HeaderValue::Timestamp(seconds) | HeaderValue::Int(seconds) => *seconds,
                     other => {
                         return Err(Error::InvalidArgument(format!(
-                            "proprietà timestamp: atteso intero, trovato {other:?}"
+                            "timestamp property: expected integer, got {other:?}"
                         )));
                     }
                 };
                 let seconds = u64::try_from(seconds).map_err(|_| {
-                    Error::InvalidArgument("proprietà timestamp negativa".to_string())
+                    Error::InvalidArgument("negative timestamp property".to_string())
                 })?;
                 properties = properties.with_timestamp(seconds);
             }
-            // Campi del trasporto virtuale o derivati dagli header: py-amqp li
-            // ignora, non sono proprietà AMQP native.
+            // py-amqp ignores virtual transport fields and header-derived properties.
             "content_type"
             | "content_encoding"
             | "application_headers"
@@ -209,12 +201,7 @@ pub(crate) fn message_to_properties(message: &Message) -> Result<BasicProperties
     Ok(properties)
 }
 
-/// Messaggio condiviso da una proprietà AMQP consegnata dal broker.
-///
-/// `properties` contiene le proprietà native; `content_type`,
-/// `content_encoding` e `application_headers` restano nei campi dedicati
-/// (`Message::content_type`, `Message::headers`) per non duplicare gli header
-/// nel percorso caldo. Il binding Python li ricompone come fa kombu.
+/// Builds a shared message without duplicating headers in `properties`.
 pub(crate) fn message_from_amqp(body: Vec<u8>, properties: &BasicProperties) -> Message {
     let headers = headers_from_properties(properties);
     let mut map = Properties::new();
@@ -237,7 +224,7 @@ pub(crate) fn message_from_amqp(body: Vec<u8>, properties: &BasicProperties) -> 
         map.insert("message_id", HeaderValue::from(value.as_str()));
     }
     if let Some(value) = properties.timestamp() {
-        // py-amqp espone il timestamp come int nella mappa delle proprietà.
+        // py-amqp exposes timestamps as integers in the properties map.
         map.insert(
             "timestamp",
             HeaderValue::Int(i64::try_from(*value).unwrap_or(i64::MAX)),
@@ -278,7 +265,7 @@ fn headers_from_properties(properties: &BasicProperties) -> Headers {
         .unwrap_or_default()
 }
 
-/// Verifica che un valore AMQP sia rappresentabile come header condiviso.
+/// Checks whether an AMQP value can be represented as a shared header.
 #[cfg(test)]
 pub(crate) fn roundtrip_value(value: &HeaderValue) -> Result<HeaderValue> {
     Ok(value_from_amqp(&value_to_amqp(value)?))
@@ -326,7 +313,7 @@ mod tests {
         let mut headers = Headers::new();
         headers.insert("map", HeaderValue::Map(inner));
         headers.insert("list", HeaderValue::List(vec![HeaderValue::Bool(false)]));
-        let table = to_field_table(&headers).expect("tabella");
+        let table = to_field_table(&headers).expect("table");
         assert_eq!(field_table_to_headers(&table), headers);
     }
 
@@ -356,7 +343,7 @@ mod tests {
             .with_content_encoding("utf-8")
             .with_headers(Headers::new())
             .with_properties(properties);
-        let amqp = message_to_properties(&message).expect("proprietà");
+        let amqp = message_to_properties(&message).expect("properties");
         let decoded = message_from_amqp(b"{}".to_vec(), &amqp);
         assert_eq!(decoded.content_type.as_deref(), Some("application/json"));
         assert_eq!(decoded.content_encoding.as_deref(), Some("utf-8"));
@@ -390,7 +377,7 @@ mod fuzz_support;
 
 #[cfg(test)]
 #[test]
-#[ignore = "campagna di almeno dieci minuti: tools/fuzz/run"]
+#[ignore = "run for at least ten minutes: tools/fuzz/run"]
 fn fuzz_amqp_properties() {
     let seeds = [vec![0; 256], (0..=255).collect(), vec![255; 1024]];
     fuzz_support::campaign(&seeds, |bytes| {

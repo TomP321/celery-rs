@@ -1,26 +1,17 @@
-//! Risveglio del loop principale del worker.
-//!
-//! Il loop Python del master dorme nel poller dell'hub (epoll) con il fd di
-//! [`Waker::fileno`] registrato; quando un componente Rust — consumer del
-//! broker, supervisore del pool, timer — ha eventi pronti chiama
-//! [`Waker::notify`], che rende leggibile il fd. È l'unico punto di contatto
-//! tra i componenti: ognuno tiene la propria coda di eventi e il loop, una
-//! volta sveglio, le svuota tutte senza bloccare.
-//!
-//! [`Waker::wait`] resta per chi non ha un poller (driver dei test del pool):
-//! stessa semantica di prima, senza fd.
+//! Coalesced notifications wake the Python hub through a readable descriptor.
+//! Components retain their own event queues; wait also supports callers without a poller.
 
 use std::sync::{Arc, Condvar, Mutex, PoisonError};
 
 #[derive(Debug, Default)]
 struct State {
-    /// Notifiche arrivate dopo l'ultimo `wait`: più notifiche valgono una sola.
+    // Coalesces notifications received since the last wait.
     pending: bool,
 }
 
 #[cfg(target_os = "linux")]
 mod fd {
-    //! `eventfd` su Linux: un solo descrittore, contatore a 64 bit.
+    //! Linux eventfd notifications using one descriptor and a 64-bit counter.
 
     use std::io;
     use std::os::fd::{AsRawFd, RawFd};
@@ -33,8 +24,7 @@ mod fd {
 
     impl NotifyFd {
         pub fn new() -> io::Result<Self> {
-            // SAFETY: `eventfd` con flag validi; il fd restituito è posseduto
-            // da `NotifyFd`, che lo chiude in `Drop`.
+            // SAFETY: eventfd receives valid flags; NotifyFd owns and closes the returned descriptor.
             let fd = unsafe { libc::eventfd(0, libc::EFD_CLOEXEC | libc::EFD_NONBLOCK) };
             if fd < 0 {
                 Err(io::Error::last_os_error())
@@ -48,9 +38,8 @@ mod fd {
 
         pub fn signal(&self) {
             let value: u64 = 1;
-            // SAFETY: scrittura di 8 byte da un `u64` valido sul fd eventfd;
-            // l'errore (contatore pieno, fd chiuso) non è recuperabile qui e
-            // non deve fermare il chiamante.
+            // SAFETY: the source is a valid eight-byte u64 and fd is an eventfd. Write errors
+            // need no recovery here and must not stop the caller.
             unsafe {
                 libc::write(
                     self.fd,
@@ -63,8 +52,8 @@ mod fd {
         pub fn drain(&self) {
             let mut value: u64 = 0;
             loop {
-                // SAFETY: lettura di 8 byte in un `u64` valido; il fd è
-                // non bloccante, quindi EAGAIN termina il ciclo.
+                // SAFETY: the destination is a valid eight-byte u64; the descriptor is nonblocking,
+                // so EAGAIN ends the drain loop.
                 let read = unsafe {
                     libc::read(
                         self.fd,
@@ -86,7 +75,7 @@ mod fd {
     impl Drop for NotifyFd {
         fn drop(&mut self) {
             self._registration.take();
-            // SAFETY: il fd è nostro e non viene usato dopo la chiusura.
+            // SAFETY: this object owns the descriptor and never uses it after closure.
             unsafe {
                 libc::close(self.fd);
             }
@@ -96,7 +85,7 @@ mod fd {
 
 #[cfg(not(target_os = "linux"))]
 mod fd {
-    //! Pipe non bloccante sulle altre piattaforme Unix.
+    //! Nonblocking pipe notifications on other Unix platforms.
 
     use std::io;
     use std::os::fd::RawFd;
@@ -110,13 +99,12 @@ mod fd {
     impl NotifyFd {
         pub fn new() -> io::Result<Self> {
             let mut fds = [0 as RawFd; 2];
-            // SAFETY: `pipe` riempie l'array di due fd validi.
+            // SAFETY: pipe initializes the two-element descriptor array on success.
             if unsafe { libc::pipe(fds.as_mut_ptr()) } < 0 {
                 return Err(io::Error::last_os_error());
             }
             for fd in fds {
-                // SAFETY: fd appena creato e valido; i flag non cambiano la
-                // proprietà del descrittore.
+                // SAFETY: the descriptor is newly created and valid; flags do not change its ownership.
                 unsafe {
                     libc::fcntl(fd, libc::F_SETFL, libc::O_NONBLOCK);
                     libc::fcntl(fd, libc::F_SETFD, libc::FD_CLOEXEC);
@@ -130,7 +118,7 @@ mod fd {
 
         pub fn signal(&self) {
             let byte = 1u8;
-            // SAFETY: scrittura di un byte valido sul lato di scrittura.
+            // SAFETY: the source byte is valid and fd is the pipe's write endpoint.
             unsafe {
                 libc::write(self.write, (&byte as *const u8).cast::<libc::c_void>(), 1);
             }
@@ -139,7 +127,7 @@ mod fd {
         pub fn drain(&self) {
             let mut buffer = [0u8; 64];
             loop {
-                // SAFETY: lettura in un buffer nostro; il fd non blocca.
+                // SAFETY: the destination buffer is owned here and the descriptor is nonblocking.
                 let read = unsafe {
                     libc::read(
                         self.read,
@@ -160,7 +148,7 @@ mod fd {
 
     impl Drop for NotifyFd {
         fn drop(&mut self) {
-            // SAFETY: entrambi i fd sono nostri e non vengono più usati.
+            // SAFETY: both descriptors are owned here and never used after closure.
             unsafe {
                 libc::close(self.read);
                 libc::close(self.write);
@@ -172,12 +160,11 @@ mod fd {
 struct Inner {
     state: Mutex<State>,
     cvar: Condvar,
-    /// `None` solo se il sistema non sa creare il descrittore: il Waker
-    /// continua a funzionare con `wait` (il loop ricade sul polling).
+    // Descriptor creation failure falls back to wait and polling.
     fd: Option<fd::NotifyFd>,
 }
 
-/// Segnale condiviso (clonabile) tra i produttori di eventi e il loop.
+/// Shared, cloneable notification signal for event producers and the master loop.
 #[derive(Clone)]
 pub struct Waker {
     inner: Arc<Inner>,
@@ -222,7 +209,7 @@ impl Waker {
             .unwrap_or_else(PoisonError::into_inner)
     }
 
-    /// Sveglia il loop; non blocca mai e può essere chiamata da qualunque thread.
+    /// Wakes the loop without blocking from any thread.
     pub fn notify(&self) {
         let mut state = self.lock();
         if !state.pending {
@@ -234,18 +221,14 @@ impl Waker {
         }
     }
 
-    /// fd leggibile quando c'è una notifica (`-1` se non disponibile).
-    ///
-    /// Va registrato nel poller del loop; la callback deve chiamare
-    /// [`Waker::drain`] per consumare la notifica.
+    /// Returns the notification descriptor, or -1 when unavailable. Register it with
+    /// the loop poller and call [`Waker::drain`] from its callback.
     pub fn fileno(&self) -> i32 {
         self.inner.fd.as_ref().map_or(-1, fd::NotifyFd::fileno)
     }
 
-    /// Consuma la notifica: svuota il fd e azzera lo stato `pending`.
-    ///
-    /// Il lock evita la corsa con [`Waker::notify`]: una notifica arrivata
-    /// dopo la lettura non può essere persa né lasciare il fd sporco.
+    /// Consumes pending notifications and drains the descriptor under a lock, preventing
+    /// concurrent notifications from being lost or leaving the descriptor readable.
     pub fn drain(&self) {
         let mut state = self.lock();
         if let Some(fd) = &self.inner.fd {
@@ -254,11 +237,8 @@ impl Waker {
         state.pending = false;
     }
 
-    /// Attende una notifica per al più `timeout` (`None` = senza limite).
-    ///
-    /// Ritorna `true` se è arrivata una notifica (anche prima della chiamata),
-    /// `false` allo scadere del timeout. Azzera lo stato: la notifica successiva
-    /// sveglierà la prossima attesa.
+    /// Waits for a notification up to the timeout; None waits indefinitely. Returns
+    /// false on timeout and clears pending state so the next notification wakes a new wait.
     pub fn wait(&self, timeout: Option<std::time::Duration>) -> bool {
         use std::time::Instant;
 
@@ -304,7 +284,7 @@ mod tests {
             events: libc::POLLIN,
             revents: 0,
         };
-        // SAFETY: un solo pollfd valido, timeout 0.
+        // SAFETY: poll receives one valid pollfd and a zero timeout.
         let ready = unsafe { libc::poll(&mut pollfd, 1, 0) };
         ready > 0 && pollfd.revents & libc::POLLIN != 0
     }
@@ -352,13 +332,13 @@ mod tests {
     fn fileno_becomes_readable_and_drain_clears_it() {
         let waker = Waker::new();
         let fd = waker.fileno();
-        assert!(fd >= 0, "il Waker deve esporre un fd");
+        assert!(fd >= 0, "waker must expose a descriptor");
         assert!(!readable(fd));
         waker.notify();
         assert!(readable(fd));
         waker.drain();
         assert!(!readable(fd));
-        // drain azzera anche la notifica pendente: il prossimo wait dorme.
+
         assert!(!waker.wait(Some(Duration::from_millis(10))));
     }
 
@@ -372,8 +352,7 @@ mod tests {
         });
         waker.drain();
         handle.join().expect("thread");
-        // Una notifica concorrente può essere consumata o restare pendente:
-        // in entrambi i casi non deve essere persa per sempre.
+        // Concurrent notifications may be consumed or remain pending, but must never be lost.
         if !waker.wait(Some(Duration::from_millis(50))) {
             waker.notify();
             assert!(waker.wait(Some(Duration::from_millis(50))));
