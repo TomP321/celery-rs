@@ -53,16 +53,17 @@ per disattivarlo). Le altre righe sono misurate con la versione 0.1.1.
 
 ## Come risparmia memoria
 
-Oltre al lavoro del master spostato in Rust, quattro meccanismi tengono leggeri i figli del pool
-prefork (script: `tools/docs/make_memory_gifs.py`; numeri misurati con `bench/memprobe/`).
+Oltre al lavoro del master spostato in Rust, tre meccanismi tengono leggeri i figli del pool
+prefork. Ogni animazione mostra prima l'idea e poi il suo effetto sulla RAM, con i numeri misurati
+in `bench/memprobe/` (script: `tools/docs/make_memory_gifs.py`).
 
-![Architettura: master Python dell'originale contro master Rust e zygote di celery-rs; figli da 32,5 MB contro 5,7 MB.](docs/assets/memoria-1-architettura.gif)
+![Copy-on-write: in Python leggere un oggetto ne scrive il contatore dei riferimenti e il kernel copia la pagina; dopo 2000 task un figlio di Celery ha copiato 26,8 MB, uno di celery-rs 3,7 MB.](docs/assets/memoria-1-copy-on-write.gif)
 
-![Copy-on-write: dopo 2000 task un figlio di Celery ha copiato 26,8 MB su 49,8 MB, uno di celery-rs 3,7 MB su 28,0 MB.](docs/assets/memoria-2-copy-on-write.gif)
+![Zygote: i figli di Celery nascono dal master al lavoro (353 MB in totale), quelli di celery-rs da uno zygote leggero con il master in Rust (78 MB).](docs/assets/memoria-2-zygote.gif)
 
-![Inizializzazione preparata una volta nello zygote e memoria restituita dopo ogni task.](docs/assets/memoria-3-inizializzazione.gif)
+![Inizializzazione preparata una volta nello zygote invece che in ogni figlio: worker a riposo da 72,5 a 62,1 MB.](docs/assets/memoria-3-inizializzazione.gif)
 
-![Bilancio della RAM al picco sotto carico: 353 MB nell'originale, 78 MB su Python 3.11, 52 MB su Python 3.13.](docs/assets/memoria-4-bilancio.gif)
+![Bilancio al picco sotto carico: 353 MB nell'originale, 78 MB su Python 3.11, 52 MB su Python 3.13.](docs/assets/memoria-4-bilancio.gif)
 
 ## Installazione
 
