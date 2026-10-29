@@ -19,10 +19,10 @@ uno *zygote* già riscaldato e condividono in copy-on-write tutto ciò che posso
 
 | | Celery 5.7 | celery-rs | |
 |---|---:|---:|---:|
-| worker `-c 10` a riposo, Python 3.12+ | 352 MB | **51 MB** | **−85%** |
-| worker `-c 10`, picco sotto carico, Python 3.12+ | 353 MB | **55–56 MB** | **−84%** |
-| worker `-c 10` a riposo, Python 3.10/3.11 | 352 MB | **73 MB** | −79% |
-| worker `-c 10`, picco sotto carico, Python 3.10/3.11 | 353 MB | **84–86 MB** | −76% |
+| worker `-c 10` a riposo, Python 3.12+ | 352 MB | **46–47 MB** | **−87%** |
+| worker `-c 10`, picco sotto carico, Python 3.12+ | 353 MB | **52 MB** | **−85%** |
+| worker `-c 10` a riposo, Python 3.10/3.11 | 352 MB | **62 MB** | −82% |
+| worker `-c 10`, picco sotto carico, Python 3.10/3.11 | 353 MB | **78–79 MB** | −78% |
 | figlio prefork a riposo, Python 3.12+ | 29 MB | **~4 MB** | −86% |
 | worker `-c 100` dopo il carico | 2.751 MB | **686 MB** | −75% |
 | worker `-P threads -c 10` | 47 MB | **39 MB** | −18% |
@@ -60,7 +60,7 @@ soddisfa le dipendenze di chi richiede `celery`.
 
 ```toml
 # pyproject.toml, al posto di "celery==…": una riga, l'architettura (x86_64/aarch64) è scelta da sola
-"celery[redis] @ https://github.com/TomP321/celery-rs/raw/wheels/celery-5.7.0rc1%2Brs.0.1.2.tar.gz",
+"celery[redis] @ https://github.com/TomP321/celery-rs/raw/wheels/celery-5.7.0rc1%2Brs.0.1.3.tar.gz",
 ```
 
 Il pacchetto sorgente contiene solo un selettore (`tools/selector/`) che scarica e verifica
