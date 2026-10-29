@@ -1,4 +1,4 @@
-"""Regressioni 09a confrontate con il pacchetto di riferimento."""
+"""Integration regressions compared with the reference package."""
 import json
 import os
 from pathlib import Path

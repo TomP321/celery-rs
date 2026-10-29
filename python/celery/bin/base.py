@@ -45,8 +45,7 @@ def _load_pygments():
 
 def __getattr__(name):
     if name in _PYGMENTS_NAMES:
-        # Il worker non stampa dizionari evidenziati: lexer e regex servono
-        # soltanto a inspect/control o all'accesso esplicito ai nomi pubblici.
+        # Workers do not highlight dictionaries; defer lexers and regexes until inspect/control or public access.
         _load_pygments()
         if name in globals():
             return globals()[name]

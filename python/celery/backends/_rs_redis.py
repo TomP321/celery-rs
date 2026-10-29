@@ -1,24 +1,13 @@
-"""Shim redis-py sopra il client Redis del core Rust.
-
-Il backend ``celery.backends.redis`` continua a usare la stessa logica del
-riferimento; cambia solo l'oggetto restituito da ``_create_client``. Questo
-modulo riproduce le firme e i tipi di ritorno di redis-py per il sottoinsieme
-usato dal backend (comandi singoli, pipeline, pub/sub, pool) e lascia passare
-le eccezioni di redis-py, così ``connection_errors``, ``ensure`` e
-``_reconnect_pubsub`` restano invariati.
-
-Il percorso Rust è attivo solo quando tutti i parametri di connessione sono
-mappati (vedi :meth:`RsRedis.supports`); ``CELERY_RS_BACKEND=0`` lo disattiva.
-"""
+"""Redis-py interface backed by Rust for supported backend connection options."""
 from __future__ import annotations
 
 import os
 import threading
 import weakref
 
-try:  # il pacchetto completo lo installa sempre; il riferimento no.
+try:  # The full package installs the extension; the reference may not.
     import _celery_rs
-except ImportError:  # pragma: no cover - solo senza estensione nativa
+except ImportError:  # pragma: no cover - native extension unavailable
     _celery_rs = None
 
 __all__ = (
@@ -26,7 +15,7 @@ __all__ = (
     'RsPubSubConnectionPool', 'RsConnection', 'use_rs_backend', 'stats',
 )
 
-#: Variabile d'ambiente per tornare al client redis-py.
+# Environment switch to restore redis-py.
 ENV_DISABLE = 'CELERY_RS_BACKEND'
 
 
@@ -44,13 +33,12 @@ def _reset_on_broker_restart(app, broker):
             or url.hostname != (params.get('host') or 'localhost')
             or (url.port or 6379) != int(params.get('port') or 6379)):
         return False
-    # I socket inattivi sono del server riavviato; redis-py li scarta
-    # prima del comando, senza trasformare il primo GET in un errore del task.
+    # Discard stale sockets before a command, as redis-py does, to avoid failing the first GET after restart.
     client.reset()
     return True
 
 
-#: Contatori interni (i test verificano che il backend usi davvero Rust).
+# Counters let tests verify that the backend uses Rust.
 _STATS = {
     'clients': 0,
     'pipelines': 0,
@@ -62,13 +50,11 @@ _STATS = {
 
 
 def stats():
-    """Copia dei contatori del client Rust."""
+    """Copy Rust client counters."""
     return dict(_STATS)
 
 
-#: Istanze vive: dopo `fork()` si tengono referenziate per sempre nel figlio
-#: (vedi `after_fork`), così i loro `Drop` Rust non toccano il runtime tokio
-#: del padre, che nel figlio non esiste più.
+# Keep inherited instances alive in children so Drop cannot access the parent's absent tokio runtime.
 _LIVE = weakref.WeakSet()
 _ORPHANED = []
 
@@ -81,21 +67,16 @@ def _enabled():
 
 
 def _data_error(message):
-    """``redis.exceptions.DataError`` importato solo quando serve.
-
-    A import di questo modulo non si carica redis-py: il client Rust non ne
-    ha bisogno e il costo in RSS si vedrebbe su ogni comando che usa il
-    backend (``celery call``/``result``).
-    """
+    """Import ``redis.exceptions.DataError`` on demand."""
     try:
         from redis.exceptions import DataError
-    except ImportError:  # pragma: no cover - redis-py è una dipendenza del backend
+    except ImportError:  # pragma: no cover - redis-py backend dependency
         return ValueError(message)
     return DataError(message)
 
 
 def _is_connection_error(exc):
-    """True per gli errori di connessione di redis-py (o builtin equivalenti)."""
+    """Return whether an exception is a redis-py connection error or builtin equivalent."""
     try:
         from redis.exceptions import ConnectionError as RedisConnectionError
         from redis.exceptions import TimeoutError as RedisTimeoutError
@@ -107,7 +88,7 @@ def _is_connection_error(exc):
 
 
 def _encode(value):
-    """Stessa codifica degli argomenti di ``redis.Encoder``."""
+    """Encode arguments as ``redis.Encoder`` does."""
     if isinstance(value, (bytes, bytearray, memoryview)):
         return bytes(value)
     if isinstance(value, bool):
@@ -126,14 +107,13 @@ def _encode(value):
 
 
 def _flatten(args):
-    """``list_or_args`` di redis-py: una sequenza singola o argomenti vari."""
+    """Accept a sequence or separate arguments as redis-py does."""
     if len(args) == 1 and isinstance(args[0], (list, tuple, set, frozenset)):
         return list(args[0])
     return list(args)
 
 
-#: Parametri che il client Rust sa applicare. Qualunque altro lascia il
-#: backend su redis-py: meglio lenti che diversi.
+# Unsupported parameters retain redis-py to preserve behavior.
 _ALLOWED_PARAMS = frozenset({
     'host', 'port', 'db', 'password', 'username', 'max_connections',
     'socket_timeout', 'socket_connect_timeout', 'client_name',
@@ -148,8 +128,7 @@ _REQUIRED_CERT_REQS = frozenset({
 
 
 def _is_ssl_connection(connection_class):
-    # Confronto per nome: la classe vera di redis-py (o il segnaposto lazy del
-    # backend) senza importare il pacchetto.
+    # Check the real or lazy module by name without importing redis-py.
     return (getattr(connection_class, '__name__', '') == 'SSLConnection' and
             str(getattr(connection_class, '__module__', '')).startswith('redis'))
 
@@ -161,7 +140,7 @@ def _is_unix_connection(connection_class):
 
 
 class RsRedis:
-    """Stessa superficie di ``redis.Redis`` usata dal result backend."""
+    """Provide the ``redis.Redis`` interface used by the result backend."""
 
     def __init__(self, **params):
         self._params = dict(params)
@@ -195,7 +174,7 @@ class RsRedis:
 
     @classmethod
     def supports(cls, params):
-        """True se tutti i parametri di connessione sono mappati dal core."""
+        """Return whether Rust supports all connection parameters."""
         if _celery_rs is None:
             return False
         unknown = set(params) - _ALLOWED_PARAMS
@@ -222,9 +201,7 @@ class RsRedis:
         if _is_ssl_connection(connection_class):
             if params.get('ssl_cert_reqs') not in _REQUIRED_CERT_REQS:
                 return False
-        # `socket_keepalive` e `health_check_interval` sono accettati: redis-rs
-        # gestisce socket e riconnessione della connessione multiplexata e
-        # questi valori non cambiano i comandi inviati al server.
+        # redis-rs manages multiplexed socket reconnection; keepalive and health checks do not alter wire commands.
         if 'path' in params and not params.get('path'):
             return False
         for key in ('host', 'path', 'client_name'):
@@ -241,7 +218,6 @@ class RsRedis:
                 return False
         return True
 
-    # ------------------------------------------------------------ comandi
 
     def get(self, name):
         _STATS['commands'] += 1
@@ -259,7 +235,7 @@ class RsRedis:
         if px is not None or nx or xx or keepttl or get or exat is not None \
                 or pxat is not None:
             raise NotImplementedError(
-                'opzione SET non supportata dal client Redis Rust')
+                'SET option unsupported by Rust Redis client')
         _STATS['commands'] += 1
         return self._rs.set(_encode(name), _encode(value),
                             ex=None if ex is None else int(ex))
@@ -292,7 +268,7 @@ class RsRedis:
              gt=False, lt=False):
         if nx or xx or ch or incr or gt or lt:
             raise NotImplementedError(
-                'opzioni ZADD non supportate dal client Redis Rust')
+                'ZADD options unsupported by Rust Redis client')
         pairs = [(_encode(score), _encode(member))
                  for member, score in mapping.items()]
         _STATS['commands'] += 1
@@ -308,7 +284,7 @@ class RsRedis:
         if desc or withscores or byscore or bylex or offset is not None \
                 or num is not None:
             raise NotImplementedError(
-                'opzioni ZRANGE non supportate dal client Redis Rust')
+                'ZRANGE options unsupported by Rust Redis client')
         _STATS['commands'] += 1
         return self._rs.zrange(_encode(name), int(start), int(end))
 
@@ -324,7 +300,6 @@ class RsRedis:
         _STATS['commands'] += 1
         return self._rs.lrange(_encode(name), int(start), int(end))
 
-    # ------------------------------------------------------- pipeline/pubsub
 
     def pipeline(self, transaction=True, shard_hint=None):
         _STATS['pipelines'] += 1
@@ -351,7 +326,7 @@ class RsRedis:
 
 
 class RsPipeline:
-    """Pipeline redis-py: comandi concatenabili e MULTI/EXEC di default."""
+    """Redis-py pipeline with chainable commands and MULTI/EXEC by default."""
 
     def __init__(self, client, transaction=True):
         self._client = client
@@ -386,7 +361,7 @@ class RsPipeline:
         if px is not None or nx or xx or keepttl or get or exat is not None \
                 or pxat is not None:
             raise NotImplementedError(
-                'opzione SET non supportata dal client Redis Rust')
+                'SET option unsupported by Rust Redis client')
         return self._push('set', _encode(name), _encode(value),
                           None if ex is None else int(ex))
 
@@ -410,7 +385,7 @@ class RsPipeline:
              gt=False, lt=False):
         if nx or xx or ch or incr or gt or lt:
             raise NotImplementedError(
-                'opzioni ZADD non supportate dal client Redis Rust')
+                'ZADD options unsupported by Rust Redis client')
         pairs = [(_encode(score), _encode(member))
                  for member, score in mapping.items()]
         return self._push('zadd', _encode(name), pairs)
@@ -424,7 +399,7 @@ class RsPipeline:
         if desc or withscores or byscore or bylex or offset is not None \
                 or num is not None:
             raise NotImplementedError(
-                'opzioni ZRANGE non supportate dal client Redis Rust')
+                'ZRANGE options unsupported by Rust Redis client')
         return self._push('zrange', _encode(name), int(start), int(end))
 
     def rpush(self, name, *values):
@@ -443,11 +418,7 @@ class RsPipeline:
 
 
 class RsConnection:
-    """``redis.Connection`` minimo visto da ``ResultConsumer``.
-
-    ``can_read`` è l'unico metodo che il drainer usa sul socket; la parte
-    privata ``_sock`` non serve perché ``ResultConsumer`` riconosce lo shim.
-    """
+    """Provide the ``redis.Connection`` interface used by ``ResultConsumer``."""
 
     _sock = None
 
@@ -482,7 +453,7 @@ class RsConnection:
 
 
 class RsConnectionPool:
-    """``ConnectionPool`` del client (solo ``reset`` e ``get_engine``)."""
+    """Client connection pool supporting ``reset`` and ``get_engine``."""
 
     def __init__(self, client):
         self._client = client
@@ -494,11 +465,9 @@ class RsConnectionPool:
         self._client.reset()
 
     def get_connection(self, *args, **kwargs):
-        # Il backend non preleva connessioni dal pool del client: il pub/sub
-        # ha il proprio pool (``RsPubSubConnectionPool``). Meglio un errore
-        # esplicito che una connessione inutilizzabile.
+        # Only pubsub has a usable connection pool; fail explicitly for other callers.
         raise NotImplementedError(
-            'RsConnectionPool.get_connection non è usato dal result backend')
+            'RsConnectionPool.get_connection is not used by the result backend')
 
     def release(self, connection):
         pass
@@ -512,7 +481,7 @@ class RsConnectionPool:
 
 
 class RsPubSubConnectionPool:
-    """Vista del pool legata a un pubsub (``get_connection`` restituisce quella)."""
+    """Expose a pubsub connection through ``get_connection``."""
 
     def __init__(self, pubsub):
         self._pubsub = pubsub
@@ -528,9 +497,9 @@ class RsPubSubConnectionPool:
 
 
 class RsPubSub:
-    """``redis.client.PubSub`` per il ``ResultConsumer`` del backend."""
+    """Provide ``redis.client.PubSub`` for the backend result consumer."""
 
-    #: Marker usato da ``ResultConsumer`` per il ramo dedicato (solo shim).
+    # Marker for ResultConsumer's shim-specific path.
     _celery_rs_shim = True
 
     def __init__(self, native, ignore_subscribe_messages=False, client=None):
@@ -594,10 +563,7 @@ class RsPubSub:
         except Exception as exc:
             if not _is_connection_error(exc):
                 raise
-            # Stesso contratto di ``_socket_readable``: un socket chiuso o
-            # sostituito è "leggibile". L'errore vero viene sollevato dal
-            # successivo ``can_read`` dentro ``reconnect_on_error``, così il
-            # backend riconnette invece di far fallire ``get()``.
+            # Report replaced sockets as readable so reconnect_on_error handles the next can_read failure.
             return True
 
     def on_connect(self, connection):
@@ -618,23 +584,21 @@ class RsPubSub:
 
 
 def _channel_key(channel):
-    """Canale come stringa per il binding Rust."""
+    """Convert a channel to a string for the Rust binding."""
     if isinstance(channel, bytes):
         return channel.decode('utf-8')
     return str(channel)
 
 
 def use_rs_backend(backend):
-    """True se *backend* può usare :class:`RsRedis` al posto di redis-py."""
+    """Return whether the backend can use :class:`RsRedis`."""
     if _celery_rs is None or not _enabled():
         return False
-    # Sostituzioni di `Backend.redis` nei test upstream (finto modulo): lì
-    # deve restare redis-py. Il modulo segnaposto del backend si chiama
-    # ``redis`` ed è un ``module``, senza importare redis-py.
+    # Keep redis-py for replaced Backend.redis modules; the lazy module retains its real name and type.
     module = getattr(backend, 'redis', None)
     if type(module).__name__ != 'module' or getattr(module, '__name__', None) != 'redis':
         return False
-    # `_get_client` sovrascritto (Sentinel o test): resta redis-py.
+    # Custom _get_client implementations, including Sentinel, must retain redis-py.
     getter = getattr(type(backend), '_get_client', None)
     if (getattr(getter, '__module__', None) != 'celery.backends.redis' or
             getattr(getter, '__name__', None) != '_get_client'):
@@ -648,23 +612,19 @@ _pid = os.getpid()
 
 
 def after_fork():
-    """Nel figlio i contatori restano, le connessioni Rust si scartano."""
+    """Discard inherited Rust connections while keeping counters in the child."""
     global _pid
     pid = os.getpid()
     if pid == _pid:
         return
     _pid = pid
     _STATS['forks'] += 1
-    # Nel figlio i client/pubsub ereditati non sono utilizzabili; tenerli vivi
-    # evita che il GC ne esegua il Drop (che risveglierebbe il driver tokio
-    # del padre, ormai assente).
+    # Retain inherited clients to prevent Drop from waking the parent's absent tokio driver.
     if _LIVE:
         _ORPHANED.extend(_LIVE)
         _LIVE.clear()
     if _celery_rs is not None:
-        # Il runtime tokio del padre non è utilizzabile nel figlio: il modulo
-        # nativo lo ricrea al primo uso. Lo fa già `_rs_producer`, ma il
-        # backend deve essere fork-safe anche se il producer non è importato.
+        # Reset the runtime here too: the backend may be used without importing _rs_producer.
         _celery_rs.after_fork()
 
 

@@ -44,8 +44,7 @@ def __dir__():
 
 
 class _PoolImplementation:
-    # Il master Rust risolve TaskPool ma non usa i pool tradizionali.
-    # Al primo accesso si conserva la classe vera anche per le sottoclassi.
+    # Resolve the real classes lazily; the Rust master does not use traditional pools.
     def __init__(self, attribute):
         self.attribute = attribute
 
@@ -79,23 +78,21 @@ warning, debug = logger.warning, logger.debug
 #: :func:`process_initializer` for :func:`process_destructor`.
 _process_hostname = None
 
-#: Parti di :func:`process_initializer` già eseguite nello zygote:
-#: ``(app, argomenti di log.setup, tracer per nome)``.
+# Initializer state prepared in the zygote: app, log.setup arguments and tracers by name.
 _prepared = None
 
 
 def _log_setup_args(hostname):
     logfile = os.environ.get('CELERY_LOG_FILE') or None
     if logfile and '%i' in logfile.lower():
-        return None  # un file per figlio: va configurato nel figlio
+        return None  # Per-child log files must be configured in the child.
     return (int(os.environ.get('CELERY_LOG_LEVEL', 0) or 0), logfile,
             bool(os.environ.get('CELERY_LOG_REDIRECT', False)),
             str(os.environ.get('CELERY_LOG_REDIRECT_LEVEL')), hostname)
 
 
 def prepare_process_initializer(app, hostname):
-    """Esegue nello zygote, prima del fork, le parti dell'initializer uguali in
-    ogni figlio: le pagine restano condivise invece di essere ricreate N volte."""
+    """Prepare shared initializer state in the zygote before forking children."""
     global _prepared
     args = _log_setup_args(hostname)
     if args is None or os.environ.get('FORKED_BY_MULTIPROCESSING'):
@@ -113,7 +110,7 @@ def prepare_process_initializer(app, hostname):
 
 
 def _finish_prepared(app, hostname):
-    """Nel figlio: completa ciò che lo zygote ha preparato; False se non vale."""
+    """Complete initialization in the child; return False if preparation is invalid."""
     if (_prepared is None or _prepared[0] is not app
             or os.environ.get('FORKED_BY_MULTIPROCESSING')):
         return False
@@ -121,7 +118,7 @@ def _finish_prepared(app, hostname):
     if args != _prepared[1]:
         return False
     tracers = _prepared[2]
-    # Task aggiunti o tracer sostituiti da init_worker_process vanno ricostruiti.
+    # Rebuild tracers for tasks added or replaced by init_worker_process.
     for name, task in app.tasks.items():
         if (name not in tracers
                 or getattr(task, '__trace__', None) is not tracers[name]):

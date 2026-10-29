@@ -22,7 +22,7 @@ debug, info = logger.debug, logger.info
 
 
 class _RsReceiver:
-    """Il minimo di ``EventReceiver`` per ``event_from_message`` (nessun canale)."""
+    """Provide ``event_from_message`` without an EventReceiver channel."""
 
     __slots__ = ('app', 'clock', 'adjust_clock', 'forward_clock')
 
@@ -91,11 +91,10 @@ class Gossip(bootsteps.ConsumerStep):
         super().__init__(c, **kwargs)
 
     def _compatible(self, c):
-        """True se il trasporto supporta gossip; senza aprire kombu su Rust."""
+        """Check gossip support without opening a kombu transport on Rust."""
         from celery.worker import _rs_consumer
         if _rs_consumer.use_rs_worker(c):
-            # Stesso `driver_type` del trasporto, ma letto dallo schema: nessun
-            # import di redis-py/py-amqp.
+            # Read driver_type from the scheme without importing broker clients.
             from celery.app._rs_producer import driver_type_of
             return driver_type_of(c.conninfo) in self.compatible_transports
         return self.compatible_transport(c.app)
@@ -138,10 +137,9 @@ class Gossip(bootsteps.ConsumerStep):
         super().start(c)
         self.dispatcher = c.event_dispatcher
 
-    # ------------------------------------------------------------ trasporto Rust
 
     def _start_rs(self, c):
-        """``get_consumers`` sul consumer Rust, con gli stessi handler Python."""
+        """Create Rust consumers with the original Python handlers."""
         from celery.worker import _rs_mailbox
         if self._rs_consumer is not None:
             self._rs_consumer.close()

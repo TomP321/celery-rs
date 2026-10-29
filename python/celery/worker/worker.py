@@ -141,9 +141,7 @@ class WorkController:
         self.ready_callback = ready_callback or self.on_consumer_ready
 
         # this connection won't establish, only used for params
-        # Sul percorso Rust non serve istanziare il trasporto kombu (che
-        # importerebbe redis-py/py-amqp): `FastConnection` espone gli stessi
-        # parametri e lo stesso `driver_type` senza aprirlo.
+        # Read FastConnection parameters without importing a kombu transport.
         from celery.app import _rs_producer
         self._conninfo = (
             _rs_producer.fast_connection(
@@ -314,8 +312,7 @@ class WorkController:
 
     def should_use_eventloop(self):
         from celery.app import _rs_producer
-        # `FastConnection` descrive un trasporto Rust (Redis/AMQP): è
-        # asincrono come quelli di kombu, ma leggerlo importerebbe il trasporto.
+        # FastConnection is asynchronous; querying the kombu transport would import broker clients.
         if _rs_producer.is_fast_connection(self._conninfo):
             return detect_environment() == 'default' and not self.app.IS_WINDOWS
         return (detect_environment() == 'default' and

@@ -1,10 +1,4 @@
-"""Backend ``rpc://``: client celery-rs, worker Celery di riferimento.
-
-I test usano RabbitMQ (``127.0.0.1:5673``) e avviano un worker
-``.venv-ref/bin/celery worker -P solo``; il client gira in ``.venv-rs`` e deve
-consumare i risultati con :class:`RsResultConsumer`, senza aprire connessioni
-py-amqp.
-"""
+"""RPC backend tests using the Rust client and a reference solo worker on RabbitMQ."""
 from __future__ import annotations
 
 import base64
@@ -61,7 +55,7 @@ def rabbit_connections(connection_name):
 
 
 def wait_connections(connection_name, minimum=1, timeout=10):
-    """Le connessioni compaiono nel management API con un piccolo ritardo."""
+    """Wait for connections to appear in the management API."""
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         connections = rabbit_connections(connection_name)
@@ -96,8 +90,8 @@ def broker():
         sock.settimeout(1)
         try:
             sock.connect((host, port))
-        except OSError as exc:  # pragma: no cover - infrastruttura assente
-            pytest.skip(f'broker non raggiungibile su {host}:{port}: {exc}')
+        except OSError as exc:  # pragma: no cover - infrastructure unavailable
+            pytest.skip(f'broker unreachable su {host}:{port}: {exc}')
         finally:
             sock.close()
 
@@ -146,9 +140,9 @@ def worker(broker):
         if _ping(env, nodename):
             break
         time.sleep(0.5)
-    else:  # pragma: no cover - worker lento o non avviato
+    else:  # pragma: no cover - worker slow or unavailable
         os.killpg(process.pid, signal.SIGTERM)
-        raise RuntimeError('worker non pronto')
+        raise RuntimeError('worker not ready')
     instance = Worker(process, queue, nodename, env)
     try:
         yield instance
@@ -199,7 +193,7 @@ def submit(app, name, args=(), **options):
 
 
 def direct_result(app, task_id, state, result):
-    """Pubblica un risultato direttamente sulla coda di risposta del client."""
+    """Publish a result directly to the client's reply queue."""
     request = Context(reply_to=app.backend.oid, correlation_id=task_id)
     return app.backend.store_result(task_id, result, state, request=request)
 
@@ -209,9 +203,6 @@ def declare_reply_queue(app, task_id):
         app.backend.on_task_call(producer, task_id)
 
 
-# ---------------------------------------------------------------------------
-# messaggio Rust compatibile con kombu.Message
-# ---------------------------------------------------------------------------
 
 class _FakeConsumer:
     _rs_connection = None
@@ -236,9 +227,6 @@ def test_rs_message_decodes_json_and_honours_accept():
         denied.payload
 
 
-# ---------------------------------------------------------------------------
-# consumer Rust e assenza di py-amqp
-# ---------------------------------------------------------------------------
 
 def test_consumer_is_rust_and_no_pyamqp_connection(app):
     pyamqp_loaded = 'kombu.transport.pyamqp' in sys.modules
@@ -247,19 +235,18 @@ def test_consumer_is_rust_and_no_pyamqp_connection(app):
 
     consumer = app.backend.result_consumer
     assert isinstance(consumer, RsResultConsumer)
-    # Il consumer non ha istanziato il trasporto py-amqp di kombu (se un
-    # altro test non lo aveva già importato nel processo).
+    # The consumer must not instantiate kombu's py-amqp transport; another test may already have imported it.
     if not pyamqp_loaded:
         assert 'kombu.transport.pyamqp' not in sys.modules
 
     connections = wait_connections(
         app._rs_test_connection_name, minimum=2)
-    assert connections, 'connessioni del client non visibili'
+    assert connections, 'client connections not visible'
     products = {connection.get('client_properties', {}).get('product')
                 for connection in connections}
     assert 'py-amqp' not in products, products
     assert 'lapin' in products, products
-    # Una connessione lapin per il producer e una per il consumer.
+    # One lapin connection for publishing and one for consumption.
     lapin = [connection for connection in connections
              if connection.get('client_properties', {}).get('product')
              == 'lapin']
@@ -321,9 +308,6 @@ def test_timeout_matches_celery(app):
     assert error.value.args == ('The operation timed out.',)
 
 
-# ---------------------------------------------------------------------------
-# basic.get, backlog e BacklogLimitExceeded
-# ---------------------------------------------------------------------------
 
 def test_get_task_meta_with_backlog(app):
     task_id = str(uuid.uuid4())
@@ -335,7 +319,7 @@ def test_get_task_meta_with_backlog(app):
     meta = app.backend.get_task_meta(task_id)
     assert meta['status'] == states.SUCCESS
     assert meta['result'] == 42
-    # La cache serve i poll successivi senza tornare sulla coda.
+    # Subsequent polls must use the cache without accessing the queue.
     assert app.backend.get_task_meta(task_id)['result'] == 42
 
 
@@ -347,9 +331,6 @@ def test_get_task_meta_backlog_limit(app):
         app.backend.get_task_meta(task_id, backlog_limit=1)
 
 
-# ---------------------------------------------------------------------------
-# riconnessione e fork
-# ---------------------------------------------------------------------------
 
 def test_connection_closed_by_management_api_is_recovered(app, tmp_path):
     import threading
@@ -367,10 +348,9 @@ def test_connection_closed_by_management_api_is_recovered(app, tmp_path):
                 break
             time.sleep(0.05)
         before = consumer._rs_reconnects
-        # Due connessioni: producer e consumer di risultati. Il management API
-        # può mostrare la prima prima della seconda: attendere entrambe.
+        # Wait for both connections; the management API may show the producer before the result consumer.
         assert close_connections(app._rs_test_connection_name, minimum=2) >= 2
-        # Il worker aspetta il file: rilasciarlo solo dopo la riconnessione.
+        # Release the waiting worker only after reconnection.
         deadline = time.monotonic() + 20
         while time.monotonic() < deadline:
             if consumer._rs_reconnects > before:
@@ -386,7 +366,7 @@ def test_connection_closed_by_management_api_is_recovered(app, tmp_path):
     finally:
         thread.join(30)
     assert reconnected.is_set()
-    # Il consumer ha ricreato la connessione dopo la caduta.
+    # The consumer must recreate its connection after loss.
     assert isinstance(backend.result_consumer, RsResultConsumer)
     assert backend.result_consumer._rs_connection is not None
 
@@ -406,7 +386,7 @@ def _run_script(source, queue, timeout=180):
         [sys.executable, '-c', source], cwd=TESTS_DIR, env=env,
         capture_output=True, text=True, timeout=timeout)
     assert result.returncode == 0, (
-        f'script figlio fallito ({result.returncode}):\n'
+        f'child script failed ({result.returncode}):\n'
         f'{result.stdout[-4000:]}\n{result.stderr[-8000:]}')
 
 
@@ -480,7 +460,7 @@ if __name__ == '__main__':
 '''
 
 
-@pytest.mark.skipif(not hasattr(os, 'fork'), reason='os.fork non disponibile')
+@pytest.mark.skipif(not hasattr(os, 'fork'), reason='os.fork unavailable')
 def test_fork_child_receives_its_own_results(worker):
     _run_script(FORK_SCRIPT, worker.queue)
 
@@ -490,9 +470,6 @@ def test_billiard_child_receives_its_own_results(worker):
     _run_script(BILLIARD_SCRIPT, worker.queue)
 
 
-# ---------------------------------------------------------------------------
-# attivazione e ritorno al consumer kombu
-# ---------------------------------------------------------------------------
 
 def test_env_disables_rust_consumer(app, monkeypatch):
     monkeypatch.setenv('CELERY_RS_BACKEND', '0')
@@ -510,7 +487,7 @@ def test_repeated_ping_keeps_rpc_consumer_usable(app, worker):
         replies = app.control.inspect(destination=[worker.nodename], timeout=5).ping()
         assert replies == {worker.nodename: {'ok': 'pong'}}
         assert result.get(timeout=15) == index + 1
-    # La cancellazione del consumer temporaneo non chiude i canali ordinari.
+    # Cancelling the temporary consumer must not close ordinary channels.
     assert submit(app, 'rs_rpc.add', (40, 2)).get(timeout=15) == 42
 
 
@@ -523,7 +500,7 @@ def test_ping_preserves_durable_reply_queue_like_reference(app, worker):
     try:
         assert app.control.inspect(destination=[worker.nodename], timeout=5).ping()
         with Connection(AMQP_URL) as connection:
-            # Il riferimento cancella il consumer, non una coda senza auto-delete.
+            # Match the reference: cancel consumption but retain a queue without auto-delete.
             declared = connection.default_channel.queue_declare(queue=queue, passive=True)
             observed = declared.consumer_count
         code = """
@@ -533,7 +510,7 @@ from kombu import Connection
 app = Celery('durable-control-ref', broker=sys.argv[1])
 app.conf.update(control_queue_durable=True, control_queue_exclusive=False)
 with app.connection_for_write() as connection:
-    # La broadcast del riferimento usa una copia del mailbox, con un altro oid.
+    # Reference broadcasts copy the mailbox, giving it a different oid.
     mailbox = app.control.mailbox(connection)
     queue = mailbox.get_reply_queue().name
     try:

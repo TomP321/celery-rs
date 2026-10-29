@@ -25,13 +25,7 @@ logger = get_logger(__name__)
 
 
 def declare_native_delayed_delivery_exchanges_and_queues(connection, queue_type):
-    """``kombu.transport.native_delayed_delivery`` importato solo quando serve.
-
-    Il bootstep è nel blueprint di ogni consumer, quindi un import a livello di
-    modulo caricherebbe ``kombu.transport`` anche nel master senza quorum queue.
-    La funzione ha lo stesso nome del riferimento: i test la sostituiscono con
-    ``patch`` sul modulo.
-    """
+    """Import native delayed delivery on demand, avoiding transport imports without quorum queues."""
     from kombu.transport.native_delayed_delivery import (
         declare_native_delayed_delivery_exchanges_and_queues as declare,
     )
@@ -39,7 +33,7 @@ def declare_native_delayed_delivery_exchanges_and_queues(connection, queue_type)
 
 
 def bind_queue_to_native_delayed_delivery_exchange(connection, queue):
-    """Come sopra: binding di una coda all'exchange del delayed delivery."""
+    """Bind a queue to the delayed delivery exchange on demand."""
     from kombu.transport.native_delayed_delivery import (
         bind_queue_to_native_delayed_delivery_exchange as bind,
     )
@@ -80,7 +74,7 @@ class DelayedDelivery(bootsteps.StartStopStep):
         Returns:
             bool: True if quorum queues are detected, False otherwise
         """
-        # `FastConnection` espone già il driver senza importare il trasporto.
+        # FastConnection exposes the driver without importing the transport.
         driver = getattr(c.conninfo, 'driver_type', None)
         if driver is None:
             driver = c.app.connection_for_write().transport.driver_type

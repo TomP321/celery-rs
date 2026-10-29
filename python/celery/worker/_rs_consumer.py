@@ -1,23 +1,4 @@
-"""Consumer del broker del worker nel core Rust.
-
-Sostituisce, per il worker con pool Rust (``-P solo`` e ``-P prefork``), la
-parte kombu del consumer: la connessione di lettura, la sottoscrizione alle
-code, il prefetch, ack/reject e il loop principale. Il master (bootstep,
-strategie, ``Request``, segnali) resta il codice Python del riferimento.
-
-Cosa resta su kombu (su una connessione lazy aperta solo quando serve):
-remote control/pidbox, mingle, gossip ed eventi in *lettura*. I loro fd sono
-registrati sull'hub del worker e vengono serviti dal poll di :func:`rsloop`,
-che dorme su epoll col fd del ``Waker`` Rust e il timeout del prossimo timer
-kombu. I timer (ETA/countdown, rate limit, heartbeat degli eventi e la
-manutenzione periodica delle binding Redis) restano sul timer kombu.
-
-Gli eventi del worker (``worker-online``, ``task-received``, ...) escono dal
-producer Rust: ``Consumer.connection_for_write`` restituisce una
-``FastConnection`` e il dispatcher usa ``RsProducer``.
-
-``CELERY_RS_WORKER=0`` riporta tutto al percorso del riferimento.
-"""
+"""Rust broker consumer with Celery bootsteps, strategies, signals and timers."""
 from __future__ import annotations
 
 import json
@@ -33,26 +14,25 @@ from celery.utils.queue_arguments import to_rabbitmq_queue_arguments
 from celery._rs_message import RsMessage
 from celery.app import _rs_producer
 
-try:  # il pacchetto completo lo installa sempre; il riferimento no.
+try:  # The full package installs the extension; the reference may not.
     import _celery_rs
-except ImportError:  # pragma: no cover - solo senza estensione nativa
+except ImportError:  # pragma: no cover - native extension unavailable
     _celery_rs = None
 
 __all__ = ('RsConnection', 'RsTaskConsumer', 'rsloop', 'use_rs_worker',
            'use_rs_pool', 'connection', 'is_rs_connection', 'stats',
            'new_waker')
 
-#: Variabile d'ambiente per tornare al consumer di kombu.
+# Environment switch to restore kombu consumption.
 ENV_DISABLE = 'CELERY_RS_WORKER'
 
-#: Se impostata, il worker scrive qui un JSON con lo stato del consumer
-#: (usato dai test per verificare che sia davvero quello Rust).
+# Optional JSON consumer diagnostics for tests.
 ENV_STATE = 'CELERY_RS_WORKER_STATE'
 
-#: Logger del consumer: gli stessi nomi del riferimento.
+# Match the reference consumer logger names.
 logger = logging.getLogger('celery.worker.consumer')
 
-#: Contatori interni (verificati dai test: il worker usa davvero Rust).
+# Counters let tests verify that consumption uses Rust.
 _STATS = {
     'connections': 0,
     'consumers': 0,
@@ -66,7 +46,7 @@ _STATS = {
 
 
 def stats():
-    """Copia dei contatori interni del consumer Rust."""
+    """Copy internal Rust consumer counters."""
     return dict(_STATS)
 
 
@@ -78,7 +58,7 @@ def _enabled():
 
 
 def new_waker():
-    """Un ``_celery_rs.Waker`` nuovo (usato dal pool prefork Rust)."""
+    """Create a ``_celery_rs.Waker`` for the Rust prefork pool."""
     return _celery_rs.Waker()
 
 
@@ -103,7 +83,7 @@ def _write_state():
         with open(temporary, 'w', encoding='utf-8') as handle:
             json.dump(payload, handle)
         os.replace(temporary, path)
-    except OSError:  # la diagnostica non deve mai fermare il worker
+    except OSError:  # Diagnostics must never stop the worker.
         pass
 
 
@@ -115,18 +95,18 @@ def _pool_is_solo(consumer):
 def _pool_is_rs_prefork(consumer):
     try:
         from celery.concurrency.rs_prefork import RsTaskPool
-    except ImportError:  # pragma: no cover - solo senza estensione nativa
+    except ImportError:  # pragma: no cover - native extension unavailable
         return False
     return isinstance(getattr(consumer, 'pool', None), RsTaskPool)
 
 
 def _pool_is_rs(consumer):
-    """True per i pool serviti dal consumer Rust (``solo`` o prefork Rust)."""
+    """Return whether the pool uses the Rust consumer."""
     return _pool_is_solo(consumer) or _pool_is_rs_prefork(consumer)
 
 
 def transport_is_eligible(connection):
-    """Stesse regole di ``use_fast_producer`` sul trasporto della connessione."""
+    """Check transport support using ``use_fast_producer`` rules."""
     scheme = getattr(connection, 'transport_cls', None)
     if not _rs_producer._scheme_is_fast(scheme):
         return False
@@ -143,28 +123,21 @@ def transport_is_eligible(connection):
 
 
 def use_rs_worker(consumer):
-    """True se *consumer* può usare il consumer Rust."""
+    """Return whether the consumer can use Rust."""
     if not _enabled() or _celery_rs is None:
         return False
-    # `worker_disable_prefetch` (solo Redis) modifica `can_consume` del QoS del
-    # canale kombu: il consumer Rust non lo userebbe, quindi si resta su kombu.
+    # worker_disable_prefetch modifies kombu channel QoS, so it requires the kombu consumer.
     if consumer.app.conf.worker_disable_prefetch:
         return False
     if not _pool_is_rs(consumer):
         return False
-    # Trasporto non coperto dal core (es. `memory://` nei test): il consumer
-    # Rust non saprebbe parlare col broker, si resta sul riferimento.
+    # Keep unsupported transports such as memory:// on the reference path.
     conninfo = getattr(consumer, 'conninfo', None)
     return conninfo is None or transport_is_eligible(conninfo)
 
 
 def use_rs_pool(worker):
-    """True se il pool di *worker* può essere ``RsTaskPool``.
-
-    Stesse condizioni del consumer Rust (trasporto, ``CELERY_RS_WORKER``,
-    ``worker_disable_prefetch``) più: solo con il loop asincrono e solo per il
-    pool prefork di default. Un pool scelto dall'utente resta quello richiesto.
-    """
+    """Return whether the default prefork pool can use ``RsTaskPool`` with the asynchronous Rust consumer."""
     if not _enabled() or _celery_rs is None:
         return False
     if not getattr(worker, 'use_eventloop', False):
@@ -173,7 +146,7 @@ def use_rs_pool(worker):
         return False
     import sys
     prefork = sys.modules.get('celery.concurrency.prefork')
-    # Un pool già risolto può essere quello prefork solo se il modulo esiste.
+    # A resolved prefork pool requires its module to be loaded already.
     if prefork is None or getattr(worker, 'pool_cls', None) is not prefork.TaskPool:
         return False
     try:
@@ -183,7 +156,7 @@ def use_rs_pool(worker):
                 worker.app, worker.app.conf.broker_read_url)
             or worker.app.connection_for_read())
         return transport_is_eligible(connection)
-    except Exception:  # configurazione non valida: si resta sul riferimento
+    except Exception:  # Keep the reference path for invalid configuration.
         return False
 
 
@@ -196,7 +169,7 @@ def is_fast_connection(connection):
 
 
 class RsTransport:
-    """Sottoinsieme di ``connection.transport`` usato dal consumer e dai bootstep."""
+    """Transport attributes used by the consumer and bootsteps."""
 
     __slots__ = ('_rs',)
 
@@ -209,7 +182,7 @@ class RsTransport:
 
     @property
     def implements(self):
-        # L'asincronia è del consumer Rust, non del trasporto kombu.
+        # The Rust consumer supplies asynchrony, not the kombu transport.
         return SimpleNamespace(asynchronous=False, heartbeats=False)
 
     def register_with_event_loop(self, connection, hub):
@@ -217,13 +190,7 @@ class RsTransport:
 
 
 class _RsChannel:
-    """Canale presentato al codice Python che chiede un canale kombu.
-
-    Solo ``basic_qos`` è gestito dal consumer Rust; il canale kombu viene
-    aperto alla prima operazione che lo richiede davvero (pidbox/gossip hanno
-    il loro consumer Rust). Sul percorso caldo nessuno lo tocca: il master non
-    importa il trasporto kombu.
-    """
+    """Handle QoS in Rust and open a kombu channel on demand for other operations."""
 
     __slots__ = ('_rs', '_channel')
 
@@ -243,13 +210,7 @@ class _RsChannel:
 
 
 class RsConnection:
-    """Il sottoinsieme di ``kombu.Connection`` usato da ``Consumer`` e bootstep.
-
-    La connessione al broker è quella del consumer Rust
-    (``_celery_rs.WorkerConsumer``); ``kombu_connection``/``channel`` aprono una
-    connessione kombu separata solo se qualcuno li chiede (pidbox, mingle,
-    gossip).
-    """
+    """Provide the kombu connection interface used by consumers and bootsteps."""
 
     def __init__(self, consumer, conninfo, url, options, waker=None):
         self.app = consumer.app
@@ -261,18 +222,17 @@ class RsConnection:
         self.connection_errors = conninfo.connection_errors
         self.channel_errors = conninfo.channel_errors
         self._worker = None
-        # Stesso waker del pool Rust: un solo fd da registrare nel loop.
+        # Share the pool Waker so the loop registers one descriptor.
         self._waker = waker or _celery_rs.Waker()
         self._default_prefetch = 0
         self._hub = None
         self._aux = []
         self._kombu_open = False
         self._closed = False
-        # `bound_open_broker_sockets` legge l'attributo privato.
+        # bound_open_broker_sockets reads the private attribute.
         self._connection = None
         self.transport = RsTransport(self)
 
-    # ------------------------------------------------------------ connessione
 
     def connect(self):
         self._connect()
@@ -282,7 +242,7 @@ class RsConnection:
         if self._worker is not None:
             return self._worker
         if self._closed:
-            raise ConnectionError('connessione chiusa')
+            raise ConnectionError('connection closed')
         worker = _celery_rs.WorkerConsumer(
             self._url, self._waker, self._options,
             retry_policy={'enabled': False})
@@ -294,13 +254,13 @@ class RsConnection:
         return worker
 
     def worker(self):
-        """Il ``WorkerConsumer`` Rust, creato al primo uso."""
+        """Create the Rust ``WorkerConsumer`` on first use."""
         return self._worker if self._worker is not None else self._connect()
 
     def ensure_connection(self, errback=None, max_retries=None,
                           interval_start=2, interval_step=2,
                           interval_max=30, callback=None, **kwargs):
-        """Come ``kombu.Connection.ensure_connection`` (retry lineare)."""
+        """Ensure a connection with kombu-compatible linear retry."""
         retries = 0
         while True:
             if callback is not None:
@@ -328,12 +288,12 @@ class RsConnection:
         try:
             self._conninfo.transport.register_with_event_loop(
                 self._conninfo.connection, hub)
-        except Exception as exc:  # pragma: no cover - trasporto esotico
-            logger.debug('registrazione hub della connessione kombu fallita: %r',
+        except Exception as exc:  # pragma: no cover - custom transport
+            logger.debug('failed to register kombu connection with hub: %r',
                          exc)
 
     def kombu_connection(self):
-        """Connessione kombu lazy per pidbox/mingle/gossip."""
+        """Open a kombu connection on demand for pidbox, mingle or gossip."""
         if not self._kombu_open:
             self._conninfo.connect()
             self._kombu_open = True
@@ -346,31 +306,23 @@ class RsConnection:
 
     @property
     def waker(self):
-        """Il ``_celery_rs.Waker`` condiviso con il pool (fd per l'hub)."""
+        """Return the ``_celery_rs.Waker`` shared with the pool."""
         return self._waker
 
     @property
     def default_channel(self):
-        # Il consumer dei task resta su Rust: il canale serve solo a
-        # basic_qos (prefetch Rust); qualunque altra operazione apre il canale
-        # kombu al primo uso.
+        # Only basic_qos stays in Rust; other operations open the kombu channel on demand.
         return _RsChannel(self)
 
     def channel(self):
-        """Nuovo canale kombu, come ``kombu.Connection.channel``.
-
-        Solo il percorso del riferimento (``CELERY_RS_WORKER=0``) lo usa
-        davvero: pidbox e gossip hanno il loro consumer Rust.
-        """
+        """Open a new kombu channel for the reference consumer path."""
         return _RsChannel(self, self.kombu_connection().channel())
 
-    # --------------------------------------------------------- consumer ausiliari
 
     def new_worker(self):
-        """Un consumer ausiliario Rust che condivide la connessione dei task."""
+        """Create an auxiliary Rust consumer sharing the task connection."""
         if self._worker is None and not self._closed:
-            # Pidbox/gossip possono partire prima del `consume` dei task: la
-            # connessione è la stessa, quindi il consumer ausiliario la crea.
+            # Auxiliary consumers may start before tasks, so they must create the shared connection.
             self._connect()
         if self._worker is not None:
             return self._worker.aux_consumer()
@@ -379,7 +331,7 @@ class RsConnection:
             retry_policy={'enabled': False})
 
     def register_aux(self, consumer):
-        """Registra un consumer ausiliario drenato dal loop del master."""
+        """Register an auxiliary consumer to drain in the master loop."""
         if consumer not in self._aux:
             self._aux.append(consumer)
 
@@ -390,38 +342,37 @@ class RsConnection:
             pass
 
     def drain_aux(self):
-        """Consegna gli handler i messaggi pronti di pidbox/gossip."""
+        """Dispatch ready pidbox and gossip messages to their handlers."""
         for consumer in tuple(self._aux):
             consumer.drain()
 
     def set_default_prefetch(self, prefetch_count):
-        logger.debug('RsConnection: prefetch iniziale %s (worker=%r)',
+        logger.debug('RsConnection: initial prefetch %s (worker=%r)',
                      prefetch_count, self._worker is not None)
         self._default_prefetch = prefetch_count
         if self._worker is not None:
             self._worker.set_prefetch(prefetch_count)
             _STATS['prefetch_updates'] += 1
 
-    # ------------------------------------------------------------ API kombu
 
     def drain_events(self, timeout=None):
-        """Drena la connessione kombu lazy (usata da mingle/pidbox)."""
+        """Drain the lazy kombu connection."""
         return self.kombu_connection().drain_events(timeout=timeout)
 
     def ack(self, delivery_tag):
-        """Conferma una consegna del consumer Rust (``RsMessage``)."""
+        """Acknowledge a Rust consumer delivery."""
         return self.worker().ack(delivery_tag)
 
     def reject(self, delivery_tag, requeue=False):
-        """Scarta o rimette in coda una consegna del consumer Rust."""
+        """Reject or requeue a Rust consumer delivery."""
         return self.worker().reject(delivery_tag, requeue=requeue)
 
     def wait(self, timeout=None):
-        """Dorme fino alla prossima consegna/scadenza; GIL rilasciato."""
+        """Wait for a delivery or deadline with the GIL released."""
         return self._waker.wait(timeout)
 
     def get_heartbeat_interval(self):
-        # Gli heartbeat AMQP sono gestiti dal runtime Rust (lapin).
+        # The Rust lapin runtime handles AMQP heartbeats.
         return 0.0
 
     @property
@@ -433,7 +384,7 @@ class RsConnection:
 
     @property
     def qos_semantics_matches_spec(self):
-        # RabbitMQ 4.x (e i trasporti virtuali) usano il QoS per-consumer.
+        # RabbitMQ 4.x and virtual transports use per-consumer QoS.
         return True
 
     @property
@@ -454,7 +405,7 @@ class RsConnection:
         if self._kombu_open:
             try:
                 self._conninfo.collect(socket_timeout=socket_timeout)
-            except Exception:  # connessione già rotta: best effort
+            except Exception:  # The connection is already broken; ignore close errors.
                 pass
             self._kombu_open = False
 
@@ -476,7 +427,7 @@ class RsConnection:
             if self._kombu_open:
                 try:
                     self._conninfo.close()
-                except Exception:  # best effort in chiusura
+                except Exception:  # Ignore close errors.
                     pass
                 self._kombu_open = False
 
@@ -493,7 +444,7 @@ class RsConnection:
 
 
 class RsTaskConsumer:
-    """Il sottoinsieme di ``kombu.Consumer`` usato dal bootstep ``Tasks``."""
+    """Provide the kombu consumer interface used by the Tasks bootstep."""
 
     def __init__(self, channel, queues=None, accept=None,
                  on_decode_error=None, **kwargs):
@@ -508,7 +459,6 @@ class RsTaskConsumer:
         for queue in self._queues:
             self._declare(queue)
 
-    # ------------------------------------------------------------ code
 
     @property
     def queues(self):
@@ -546,10 +496,7 @@ class RsTaskConsumer:
         names = [queue.name for queue in self._queues]
         worker = self._rs.worker()
         if not self._consuming:
-            # Il prefetch impostato da `Tasks.start` (basic_qos) vale anche se
-            # il consumer viene creato dopo. Non si riapplica ai `consume()`
-            # successivi (add_consumer), che non devono annullare un QoS
-            # incrementato per un task ETA.
+            # Apply initial prefetch once; later add_consumer calls must preserve QoS increments for ETA tasks.
             if self._rs._default_prefetch:
                 worker.set_prefetch(self._rs._default_prefetch)
             worker.consume(names)
@@ -575,7 +522,7 @@ class RsTaskConsumer:
         _write_state()
 
     def cancel(self):
-        """Cancella il consumatore; la connessione resta aperta per gli ack."""
+        """Cancel consumption, keeping the connection open for acknowledgements."""
         if self._rs._worker is not None:
             self._rs._worker.cancel()
         self._consuming = False
@@ -584,10 +531,9 @@ class RsTaskConsumer:
     def close(self):
         self.cancel()
 
-    # ------------------------------------------------------------ messaggi
 
     def drain_messages(self, max_batch=1000):
-        """Consegne pronte come ``RsMessage`` (nessuna attesa)."""
+        """Return ready deliveries as ``RsMessage`` objects without waiting."""
         worker = self._rs._worker
         if worker is None:
             return []
@@ -607,7 +553,6 @@ class RsTaskConsumer:
         worker = self._rs._worker
         return worker.take_error() if worker is not None else None
 
-    # ------------------------------------------------------------ dichiarazioni
 
     def _declare(self, queue):
         if queue is None or queue.name in self._declared:
@@ -664,10 +609,9 @@ class RsTaskConsumer:
 
 
 def connection(consumer, heartbeat=None):
-    """``RsConnection`` per *consumer*, o ``None`` se il trasporto non è idoneo."""
+    """Return an ``RsConnection``, or ``None`` for unsupported transports."""
     from celery.app import _rs_producer
-    # Il descrittore della connessione non deve importare il trasporto kombu:
-    # servono solo URL, opzioni e classi di errore.
+    # The descriptor only needs URL, options and error classes; avoid loading the transport.
     conninfo = (
         _rs_producer.fast_connection(
             consumer.app, consumer.app.conf.broker_read_url)
@@ -687,19 +631,14 @@ def connection(consumer, heartbeat=None):
     if getattr(consumer, 'restart_count', 0) > 0:
         _STATS['reconnects'] += 1
         _write_state()
-    # Il pool Rust (se attivo) è stato creato prima del consumer: il suo waker
-    # è già quello che il loop registra nell'hub, e deve restare lo stesso
-    # anche dopo una riconnessione.
+    # Keep the pool's existing Waker across consumer reconnections because the hub already registers it.
     waker = getattr(getattr(consumer, 'controller', None), '_rs_waker', None)
     return RsConnection(consumer, conninfo, url, options, waker=waker)
 
 
-# ---------------------------------------------------------------------------
-# loop principale
-# ---------------------------------------------------------------------------
 
 def _enable_heartbeats(timer, connection, rate):
-    """Heartbeat AMQP: per le connessioni Rust li gestisce il runtime."""
+    """Let the Rust runtime handle AMQP heartbeats on Rust connections."""
     if connection is None or is_rs_connection(connection) or is_fast_connection(connection):
         return [None]
     from celery.worker import loops
@@ -707,11 +646,7 @@ def _enable_heartbeats(timer, connection, rate):
 
 
 def _hub_tick(hub):
-    """Esegue callback pronti, timer e I/O dell'hub senza mai bloccare.
-
-    Usato solo come ripiego quando il ``Waker`` non espone un fd: il poll
-    viene forzato a 0 e un fd sentinella evita il ramo ``sleep``.
-    """
+    """Run ready callbacks, timers and hub I/O without blocking when the Waker has no descriptor."""
     poll = hub.poller.poll
 
     def _poll_now(_timeout):
@@ -727,19 +662,14 @@ def _hub_tick(hub):
 
 
 def _run_ready(hub):
-    """Esegue subito i callback già pronti (ack/reject accodati dai task).
-
-    Il riferimento li esegue al giro successivo dell'hub; farlo subito dopo
-    ogni consegna manda l'ack prima di qualunque shutdown e riduce la latenza
-    con prefetch piccolo. Gli errori seguono lo stesso percorso del loop hub.
-    """
+    """Run ready callbacks immediately so acknowledgements precede shutdown and reduce prefetch latency."""
     for callback in hub._pop_ready():
         if callback:
             callback()
 
 
 def _process_pool(obj):
-    """Consegna al pool Rust i suoi eventi pronti (callback dei task)."""
+    """Dispatch ready Rust pool events to task callbacks."""
     pool = getattr(obj, 'pool', None)
     process = getattr(pool, 'process_events', None)
     if process is not None:
@@ -752,19 +682,19 @@ def _run_pool_ready(obj, hub):
 
 
 def _pool_fatal_exitcode(obj):
-    """Exit code da usare se il pool è diventato inutilizzabile (zygote)."""
+    """Return the exit code if the pool has lost its zygote."""
     pool = getattr(obj, 'pool', None)
     return getattr(pool, 'fatal_exitcode', None)
 
 
 def _install_sentinel(hub):
-    """fd registrato sull'hub: garantisce che ``create_loop`` faccia poll(0)."""
+    """Register a sentinel descriptor to make ``create_loop`` call ``poll(0)``."""
     read_fd, write_fd = os.pipe()
     try:
         os.set_blocking(read_fd, False)
         os.set_blocking(write_fd, False)
         hub.add_reader(read_fd, lambda: None)
-    except Exception:  # pragma: no cover - piattaforma esotica
+    except Exception:  # pragma: no cover - unsupported platform
         os.close(read_fd)
         os.close(write_fd)
         return None
@@ -777,7 +707,7 @@ def _remove_sentinel(hub, sentinel):
     read_fd, write_fd = sentinel
     try:
         hub.remove(read_fd)
-    except Exception:  # dopo `hub.reset()` il fd non è più registrato
+    except Exception:  # hub.reset() may have removed the descriptor already.
         pass
     for fd in (read_fd, write_fd):
         try:
@@ -786,12 +716,12 @@ def _remove_sentinel(hub, sentinel):
             pass
 
 
-#: Attesa massima del ripiego senza fd del Waker.
+# Maximum fallback wait when the Waker has no descriptor.
 HUB_POLL_INTERVAL = 0.25
 
 
 def _next_timeout(hub, maximum=HUB_POLL_INTERVAL):
-    """Secondi fino alla prossima scadenza del timer kombu (max 0,25s)."""
+    """Return seconds until the next kombu timer deadline, capped at 0.25 seconds."""
     timer = getattr(hub, 'timer', None)
     queue = getattr(timer, '_queue', None) if timer is not None else None
     if queue:
@@ -801,7 +731,7 @@ def _next_timeout(hub, maximum=HUB_POLL_INTERVAL):
 
 
 def _register_waker(hub, waker):
-    """Registra il fd del Waker nel poller dell'hub; ``None`` se assente."""
+    """Register the Waker descriptor with the hub poller, or return ``None`` if unavailable."""
     fd = waker.fileno() if waker is not None else -1
     if fd < 0:
         return None
@@ -814,24 +744,13 @@ def _unregister_waker(hub, fd):
         return
     try:
         hub.remove(fd)
-    except Exception:  # dopo `hub.reset()` il fd non è più registrato
+    except Exception:  # hub.reset() may have removed the descriptor already.
         pass
 
 
 def rsloop(obj, connection, consumer, blueprint, hub, qos, heartbeat, clock,
            hbrate=2.0):
-    """Loop del worker con le consegne dal consumer Rust.
-
-    Stessa semantica di :func:`celery.worker.loops.asynloop` per ordine di
-    ``on_ready``, ``did_start_ok``, ``maybe_shutdown``, aggiornamento del QoS,
-    errori di heartbeat e uscita su ``blueprint.state``. La differenza è
-    l'attesa: il loop dorme nel poller dell'hub (epoll) con il fd del ``Waker``
-    condiviso da consumer Rust e pool Rust; una consegna, un evento del pool o
-    un comando di controllo svegliano il loop subito, senza polling. Il timeout
-    del poll è quello del prossimo timer kombu, quindi la manutenzione
-    periodica (binding Redis, ETA, rate limit, autoscale) gira come in
-    ``asynloop``. I fd di pidbox/gossip sono registrati sullo stesso hub.
-    """
+    """Run the Celery worker loop using the shared Rust Waker and the hub timer deadlines."""
     from celery import bootsteps
     from celery.exceptions import WorkerLostError
     from celery.worker import loops, state
@@ -858,8 +777,7 @@ def rsloop(obj, connection, consumer, blueprint, hub, qos, heartbeat, clock,
     obj.timer_entries_registered = registered_timer_entries
     consumer.consume()
     obj.on_ready()
-    # Import e bootstep lasciano pagine libere: restituirle prima del loop
-    # riduce il residente senza raccogliere oggetti o cambiare il GC utente.
+    # Return free bootstrap pages before the loop without collecting user objects or changing GC settings.
     _celery_rs._release_task_memory(force=True)
 
     if not obj.restart_count and not obj.pool.did_start_ok():
@@ -882,31 +800,27 @@ def rsloop(obj, connection, consumer, blueprint, hub, qos, heartbeat, clock,
             if dispatcher_heartbeat_error[0] is not None:
                 raise dispatcher_heartbeat_error[0]
 
-            # Come asynloop: raggruppa le chiamate QoS e dà priorità ai
-            # comandi di controllo.
+            # Match asynloop: batch QoS updates and prioritize control commands.
             if qos.prev != qos.value:
                 update_qos()
 
-            # Eventi del pool (ack, risultati, timeout, figli persi) prima
-            # delle consegne: i callback possono accodare ack sull'hub.
+            # Process pool events before deliveries because callbacks may queue hub acknowledgements.
             _run_pool_ready(obj, hub)
 
-            # Pidbox e gossip: i loro consumer Rust condividono il Waker, quindi
-            # un comando o un evento di un altro worker ha svegliato il poll.
+            # Pidbox and gossip share the Waker; control commands and peer events also wake this poll.
             drain_aux = getattr(connection, 'drain_aux', None)
             if drain_aux is not None:
                 drain_aux()
 
             deliveries = consumer.drain_messages()
             if deliveries:
-                logger.debug('rsloop: %d consegne dal consumer Rust',
+                logger.debug('rsloop: %d deliveries from Rust consumer',
                              len(deliveries))
             for message in deliveries:
                 try:
                     consumer.on_message(message)
                 finally:
-                    # Ack/reject del task escono subito, prima di un eventuale
-                    # shutdown richiesto durante l'esecuzione.
+                    # Send acknowledgements before any shutdown requested during task execution.
                     _run_ready(hub)
             if deliveries:
                 _run_pool_ready(obj, hub)
@@ -920,23 +834,20 @@ def rsloop(obj, connection, consumer, blueprint, hub, qos, heartbeat, clock,
                 raise SystemExit(fatal_exitcode)
 
             if waker_fd is None:
-                # Ripiego (nessun fd disponibile): non bloccare il loop.
+                # Without a Waker descriptor, the fallback must not block.
                 _hub_tick(hub)
                 if consumer.pending():
                     continue
                 connection.wait(_next_timeout(hub))
                 continue
 
-            # Dorme nel poll dell'hub: timer, fd di pidbox/gossip e fd del
-            # Waker (consegne, eventi del pool). `next` esegue un giro.
+            # One hub iteration waits for timers, mailbox descriptors or the shared Waker.
             try:
                 next(loop)
             except StopIteration:
                 loop = hub.create_loop()
     except Exception:
-        # Come asynloop: ripulisce fd e callback della connessione rotta e
-        # annulla le entry registrate per questa connessione. Il timer non si
-        # azzera: è condiviso con i time limit dei task in corso.
+        # Clear the broken connection's hub entries, preserving the timer shared with active task time limits.
         try:
             hub.reset()
         except Exception as exc:  # pylint: disable=broad-except

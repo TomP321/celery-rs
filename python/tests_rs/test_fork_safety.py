@@ -1,4 +1,4 @@
-"""Regressioni: oggetti raccolti dopo fork e registri senza riferimenti forti."""
+"""Fork cleanup and weak registry regressions."""
 import gc
 import os
 import subprocess
@@ -40,7 +40,7 @@ pubsub = client.pubsub()
 pubsub.subscribe(['09b-fork-' + str(os.getpid())])
 connection = rs.Connection(url)
 waker = rs.Waker()
-# Un ciclo ritarda la distruzione fino al GC, come nella suite completa.
+# A cycle delays destruction until GC, as in the full suite.
 cycle = [client, pubsub, connection, waker]
 cycle.append(cycle)
 del client, pubsub, connection, waker

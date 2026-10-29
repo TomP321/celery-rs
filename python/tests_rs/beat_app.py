@@ -1,9 +1,4 @@
-"""App condivisa dai test di beat (``.venv-rs`` e ``.venv-ref``).
-
-Lo stesso modulo viene importato dal beat e dal worker del riferimento e di
-celery-rs: nomi dei task, schedule e opzioni sono l'unico contratto fra i
-processi. Tutto è configurabile da ambiente.
-"""
+"""Shared beat test app configured through the environment."""
 import atexit
 import json
 import os
@@ -104,18 +99,18 @@ def _make_schedule():
                 'args': ('cron', TAG),
             },
         }
-    raise RuntimeError(f'BEAT_TEST_MODE sconosciuto: {MODE!r}')
+    raise RuntimeError(f'unknown BEAT_TEST_MODE: {MODE!r}')
 
 
 app.conf.beat_schedule = _make_schedule()
 
 
 class RecordingProducer(KombuProducer):
-    """Producer personalizzato: deve restare sul percorso kombu."""
+    """Custom producer that must retain the kombu path."""
 
 
 class RecordingScheduler(PersistentScheduler):
-    """Scheduler personalizzato con ``Producer`` ridefinito."""
+    """Custom scheduler overriding ``Producer``."""
 
     def __init__(self, *args, **kwargs):
         kwargs.setdefault('Producer', RecordingProducer)

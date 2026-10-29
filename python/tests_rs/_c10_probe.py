@@ -1,4 +1,4 @@
-"""Sonda isolata c10: stato GC e crescita del pool a regime."""
+"""Isolated c10 probe for GC state and steady-state pool growth."""
 import gc
 import json
 import os
@@ -10,7 +10,7 @@ from celery import Celery
 
 
 def probe(payload=b''):
-    # Una breve pausa distribuisce le sonde su tutti i figli del pool.
+    # A short pause distributes probes across all pool children.
     if not payload:
         time.sleep(0.02)
     return os.getpid(), gc.isenabled(), gc.get_threshold(), len(payload)

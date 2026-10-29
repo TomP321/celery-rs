@@ -1,8 +1,4 @@
-"""``register_after_fork`` senza importare ``kombu.utils.compat``.
-
-`kombu.utils.compat` importa ``kombu.exceptions`` (e quindi py-amqp); il
-worker master usa solo la registrazione dei callback di fork.
-"""
+"""Fork callbacks without importing kombu and py-amqp."""
 from __future__ import annotations
 
 import os
@@ -11,7 +7,7 @@ from itertools import count
 
 __all__ = ('register_after_fork',)
 
-# Come multiprocessing: il registro non deve tenere vive app e connessioni.
+# Like multiprocessing, the registry must not keep apps and connections alive.
 _after_forkers = weakref.WeakValueDictionary()
 _counter = count()
 _registered = False
@@ -23,7 +19,7 @@ def _run_after_forkers():
 
 
 def register_after_fork(obj, func):
-    """Registra ``func(obj)`` nel figlio di ``fork`` (come kombu)."""
+    """Register ``func(obj)`` to run after fork in the child."""
     global _registered
     _after_forkers[(next(_counter), id(obj), func)] = obj
     if not _registered and hasattr(os, 'register_at_fork'):

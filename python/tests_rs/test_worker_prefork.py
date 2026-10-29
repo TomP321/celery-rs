@@ -1,15 +1,4 @@
-"""Worker ``-P prefork`` con il pool Rust (spec 05c).
-
-Gli stessi scenari di ``test_worker_consumer.py`` ripetuti col pool di default
-(``prefork``), più le opzioni del pool: time limit, ``--max-tasks-per-child``,
-``--max-memory-per-child``, ``--autoscale``, revoke con terminate, figlio e
-zygote uccisi, shutdown warm/cold con task in corso, connessione al broker
-persa mentre un figlio esegue. Ogni scenario è confrontato con il worker di
-riferimento (``.venv-ref``) eseguito con ``-P prefork`` (billiard).
-
-Il worker di celery-rs usa lo zygote (``_rs_zygote``) e i figli sono quindi
-*nipoti* del master: ``pool_children`` distingue i due alberi.
-"""
+"""Compare Rust and reference prefork workers, including limits, failures and shutdown."""
 from __future__ import annotations
 
 import os
@@ -38,9 +27,6 @@ from test_worker_consumer import (
 TIMEOUT = 30
 
 
-# ---------------------------------------------------------------------------
-# helper
-# ---------------------------------------------------------------------------
 
 def children_of(pid):
     out = []
@@ -54,7 +40,7 @@ def children_of(pid):
 
 
 def pool_children(worker):
-    """Pid dei figli del pool (per il worker rs: figli dello zygote)."""
+    """Return pool child pids, using the zygote's children for Rust workers."""
     direct = children_of(worker.process.pid)
     if worker.rust:
         descendants = []
@@ -83,7 +69,7 @@ def start_prefork(broker_name='redis', venv=RS_VENV, rust=True, **kwargs):
 
 
 def pool_info(worker):
-    """La sezione ``pool`` di ``inspect stats`` (stesse chiavi del riferimento)."""
+    """Read the pool section of ``inspect stats``."""
     import json
     import re
     output = worker.inspect('stats', 5).stdout
@@ -99,19 +85,16 @@ def pool_info(worker):
 def result_outcome(result, timeout=TIMEOUT):
     try:
         return ('ok', result.get(timeout=timeout))
-    except Exception as exc:  # noqa: BLE001 - il tipo è l'esito confrontato
+    except Exception as exc:  # noqa: BLE001 - compare exception types
         return (type(exc).__name__, None)
 
 
-# ---------------------------------------------------------------------------
-# fixture
-# ---------------------------------------------------------------------------
 
 @pytest.fixture(scope='module', autouse=True)
 def require_brokers():
     missing = [name for name in BROKERS if not broker_available(name)]
     if missing:
-        pytest.skip(f'broker non raggiungibili: {missing}')
+        pytest.skip(f'brokers unreachable: {missing}')
 
 
 @pytest.fixture(scope='module')
@@ -132,7 +115,7 @@ def workers(tmp_path_factory):
 def worker(request, workers):
     name = request.param
     if name not in workers:
-        pytest.skip(f'broker {name} non raggiungibile')
+        pytest.skip(f'broker {name} unreachable')
     return workers[name]
 
 
@@ -151,9 +134,6 @@ def dedicated(tmp_path):
         worker.cleanup()
 
 
-# ---------------------------------------------------------------------------
-# integrazione: consumer Rust + pool Rust
-# ---------------------------------------------------------------------------
 
 def test_worker_uses_rust_consumer_and_pool(worker):
     result = run_ref('''
@@ -175,7 +155,7 @@ emit({'value': r.get(timeout=15)})
                 'timeouts', 'writes'):
         assert key in info, info
 
-    # Zygote + figli: il master non forka direttamente i processi del pool.
+    # The zygote, not the master, forks pool children.
     direct = children_of(worker.process.pid)
     assert len(direct) == 1, direct
     assert wait_until(lambda: len(pool_children(worker)) == 4), \
@@ -234,9 +214,6 @@ emit({'hard': hard_out, 'soft': soft_out})
         'hard': 'TimeLimitExceeded', 'soft': 'SoftTimeLimitExceeded'}
 
 
-# ---------------------------------------------------------------------------
-# opzioni del pool
-# ---------------------------------------------------------------------------
 
 def _pids_scenario(worker, task, args, count):
     app = rs_app(worker)
@@ -253,7 +230,7 @@ def test_max_tasks_per_child_matches_reference(dedicated):
         worker = dedicated(venv=venv, rust=rust,
                            args=('--max-tasks-per-child=1',))
         pids = _pids_scenario(worker, 'rs_worker.pid', (), 6)
-        # Un figlio esce dopo ogni task: ogni esecuzione ha un pid nuovo.
+        # One task per child must produce a new pid for each execution.
         counts[label] = len(set(pids))
         assert wait_until(lambda: len(pool_children(worker)) == 4), \
             pool_children(worker)
@@ -301,9 +278,6 @@ def test_autoscale_grows_and_shrinks(dedicated):
     assert outcomes['rs']['shrunk'] and outcomes['ref']['shrunk'], outcomes
 
 
-# ---------------------------------------------------------------------------
-# revoke / figli uccisi / zygote
-# ---------------------------------------------------------------------------
 
 def test_revoke_terminate_matches_reference(dedicated):
     outcomes = {}
@@ -321,7 +295,7 @@ def test_revoke_terminate_matches_reference(dedicated):
                                reply=True, timeout=5)
             state = result.state
             outcome = result_outcome(result, timeout=10)
-            # Il worker resta vivo e accetta altri task.
+            # The worker must survive and accept more tasks.
             alive = app.send_task('rs_worker.add', args=(1, 2)).get(timeout=20)
         finally:
             app.close()
@@ -346,7 +320,7 @@ def _kill_children_scenario(dedicated, task, args, timeout=TIMEOUT):
             except ProcessLookupError:
                 pass
         outcome = result_outcome(result, timeout=timeout)
-        # Il supervisore ricrea i figli (lo zygote è vivo).
+        # The live zygote lets the supervisor replace children.
         assert wait_until(lambda: len(pool_children(worker)) == 4, timeout=20)
         ready = redis_queue_len(worker.db, worker.queue)
         return {'outcome': outcome, 'ready': ready}
@@ -373,7 +347,7 @@ def test_child_killed_acks_late_is_redelivered(dedicated):
             lambda **kwargs: dedicated(venv=venv, rust=rust, **kwargs),
             'rs_worker.acks_late_slow', (1.5, 9))
     assert outcomes['rs'] == outcomes['ref'], outcomes
-    # reject_on_worker_lost: il messaggio torna al broker e viene rieseguito.
+    # reject_on_worker_lost must requeue and execute the message again.
     assert outcomes['rs']['outcome'] == ('ok', 9)
     assert outcomes['rs']['ready'] == 0
 
@@ -393,7 +367,7 @@ def test_zygote_lost_shuts_down_with_failure(dedicated):
         code = worker.process.wait(timeout=40)
         time.sleep(0.5)
         log = worker.log()
-        # Il messaggio in volo torna al broker (acks_late + reject_on_worker_lost).
+        # acks_late and reject_on_worker_lost return the in-flight message to the broker.
         ready = redis_queue_len(worker.db, worker.queue)
         descendants = pool_children(worker)
     finally:
@@ -405,9 +379,6 @@ def test_zygote_lost_shuts_down_with_failure(dedicated):
     assert descendants == [], descendants
 
 
-# ---------------------------------------------------------------------------
-# shutdown
-# ---------------------------------------------------------------------------
 
 def _shutdown_scenario(dedicated, venv, rust, sig, seconds=3):
     worker = dedicated(venv=venv, rust=rust, acks_on_failure=False)
@@ -420,7 +391,7 @@ def _shutdown_scenario(dedicated, venv, rust, sig, seconds=3):
         assert worker.wait_started('rs_worker.marker_slow', timeout=20)
         assert wait_until(marker.exists, timeout=10)
         time.sleep(0.3)
-        # Come systemd: il segnale va al master, non a tutto il gruppo.
+        # Match systemd: signal the master rather than the entire process group.
         started = time.monotonic()
         os.kill(worker.process.pid, sig)
         code = worker.process.wait(timeout=45)
@@ -539,14 +510,11 @@ def test_worker_lifecycle_signals(dedicated):
     }, outcomes
 
 
-# ---------------------------------------------------------------------------
-# perdita del broker con un task in corso nei figli
-# ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize('broker_name', list(BROKERS))
 def test_broker_loss_keeps_in_flight_task(dedicated, broker_name):
     if not broker_available(broker_name):
-        pytest.skip(f'broker {broker_name} non raggiungibile')
+        pytest.skip(f'broker {broker_name} unreachable')
     outcomes = {}
     for label, venv, rust in (('rs', RS_VENV, True), ('ref', REF_VENV, False)):
         worker = dedicated(broker_name, venv=venv, rust=rust,
@@ -578,9 +546,6 @@ def test_broker_loss_keeps_in_flight_task(dedicated, broker_name):
     assert outcomes['rs']['reconnected']
 
 
-# ---------------------------------------------------------------------------
-# manutenzione periodica delle binding (kombu) con il loop Rust
-# ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize('pool', ['solo', 'prefork'])
 def test_binding_maintenance_renews_repeatedly(pool):
@@ -603,8 +568,7 @@ def test_binding_maintenance_renews_repeatedly(pool):
                 client.zscore('_kombu.binding_deadlines', 'celeryev'),
             ))
             time.sleep(1.0)
-        # Il timer del trasporto rinnova la binding a ogni secondo (TTL
-        # accelerato dal worker di test): la deadline avanza.
+        # The test worker uses a short binding TTL; periodic renewal must advance the deadline.
         for index in (0, 1):
             values = [sample[index] for sample in samples if sample[index]]
             assert len(set(values)) >= 3, (pool, samples)

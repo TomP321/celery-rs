@@ -1,12 +1,4 @@
-"""App usata dai test del consumer del worker (``test_worker_consumer.py``).
-
-Lo stesso modulo viene importato dal worker ``.venv-ref`` (Celery originale) e
-da ``.venv-rs`` (celery-rs): i nomi dei task e le opzioni con cui sono
-registrati sono l'unico contratto fra i due processi.
-
-Tutto è configurabile da ambiente perché i test avviano worker con broker,
-coda, backend e opzioni diversi.
-"""
+"""Shared worker consumer test app configured through the environment."""
 import os
 import time
 
@@ -25,8 +17,8 @@ def _bool(name, default):
     return value.strip().lower() not in ('0', 'false', 'no', 'off')
 
 
-# Test della manutenzione periodica delle binding Redis: tempi accelerati.
-# Va fatto prima che il worker apra la connessione kombu (pidbox/gossip).
+# Accelerate Redis binding maintenance for tests.
+# Configure before the worker opens a kombu connection.
 if _bool('CELERY_RS_TEST_BINDING_SWEEP', False):
     import kombu.transport.redis as _redis_transport
     _redis_transport.MIN_BINDING_TTL = int(os.environ.get(
@@ -59,11 +51,11 @@ app.conf.update(
     broker_transport_options={},
 )
 
-#: File in cui i figli del pool annotano init/shutdown (test dei segnali).
+# Pool child init/shutdown signal log.
 _CHILD_LIFECYCLE = os.environ.get('CELERY_RS_TEST_CHILD_LIFECYCLE')
-#: File in cui il master annota worker_ready/worker_shutting_down.
+# Master worker_ready/worker_shutting_down signal log.
 _WORKER_LIFECYCLE = os.environ.get('CELERY_RS_TEST_WORKER_LIFECYCLE')
-#: File in cui il probe del gossip annota join/leave/lost (test della spec 08a).
+# Gossip join/leave/lost probe log.
 _GOSSIP_LOG = os.environ.get('CELERY_RS_TEST_GOSSIP_LOG')
 
 
@@ -75,7 +67,7 @@ if _GOSSIP_LOG:
             handle.write(f'{kind} {hostname}\n')
 
     class _GossipProbe(bootsteps.StartStopStep):
-        """Registra gli handler ``on.node_*`` del bootstep Gossip."""
+        """Register Gossip bootstep ``on.node_*`` handlers."""
 
         requires = ('celery.worker.consumer.gossip:Gossip',)
 
@@ -117,7 +109,7 @@ if _WORKER_LIFECYCLE:
         _record_worker('shutting_down')
 
 
-#: File in cui il master scrive i moduli importati (test della spec 08a).
+# Imported module log written by the master.
 _MASTER_MODULES = os.environ.get('CELERY_RS_TEST_MASTER_MODULES')
 
 if _MASTER_MODULES:
@@ -139,7 +131,7 @@ def add(x, y):
 
 @app.task(name='rs_worker.big')
 def big(payload, **kwargs):
-    """Args/kwargs grandi: il body deve sopravvivere al trasporto intatto."""
+    """Return large arguments to check body transport integrity."""
     return {
         'len': len(payload),
         'keys': sorted(kwargs),
@@ -149,7 +141,7 @@ def big(payload, **kwargs):
 
 @app.task(name='rs_worker.marker')
 def marker(path, label='marker', delay=0.0):
-    """Scrive *label* in *path*: verifica l'ordine/l'esecuzione dei task."""
+    """Write *label* to *path* to check task execution order."""
     with open(path, 'a', encoding='utf-8') as handle:
         handle.write(f'{label}\n')
     if delay:
@@ -184,12 +176,12 @@ def rate(x):
 @app.task(name='rs_worker.acks_late_fail_once', bind=True, acks_late=True,
           reject_on_worker_lost=True, max_retries=0)
 def acks_late_fail_once(self, path, x):
-    """Fallisce al primo tentativo; con acks_late il broker lo riconsegna."""
+    """Fail on the first attempt so acks_late triggers redelivery."""
     if os.path.exists(path):
         return x
     with open(path, 'w', encoding='utf-8') as handle:
         handle.write('first\n')
-    raise RuntimeError('primo tentativo')
+    raise RuntimeError('first attempt')
 
 
 @app.task(name='rs_worker.wait_file', acks_late=True)
@@ -214,25 +206,25 @@ def pid():
 
 @app.task(name='rs_worker.allocate')
 def allocate(mb):
-    """Alloca *mb* MiB e torna `(pid, dimensione)`: memory limit per child."""
+    """Allocate *mb* MiB and return pid and size to test per-child memory limits."""
     return os.getpid(), len(bytearray(mb * 1024 * 1024))
 
 
 @app.task(name='rs_worker.reject_once', bind=True, acks_late=True)
 def reject_once(self, path, x):
-    """Rimette in coda il messaggio al primo tentativo (``Reject``)."""
+    """Reject and requeue the message on the first attempt."""
     from celery.exceptions import Reject
     if os.path.exists(path):
         return x
     with open(path, 'w', encoding='utf-8') as handle:
         handle.write('first\n')
-    raise Reject('riprova', requeue=True)
+    raise Reject('retry', requeue=True)
 
 
 @app.task(name='rs_worker.marker_slow', acks_late=True,
           reject_on_worker_lost=True)
 def marker_slow(path, seconds, x):
-    """Segnala l'inizio (file) e dorme: usata nei test di shutdown."""
+    """Create a start marker and sleep for shutdown tests."""
     with open(path, 'w', encoding='utf-8') as handle:
         handle.write('started\n')
     time.sleep(seconds)

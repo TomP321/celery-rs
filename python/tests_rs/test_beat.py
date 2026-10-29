@@ -1,10 +1,4 @@
-"""``celery beat`` di celery-rs contro beat del riferimento (spec 06).
-
-Ogni scenario avvia i due beat (``.venv-ref`` e ``.venv-rs``) in sottoprocessi
-sullo stesso broker Redis, con code e chiavi uniche, e confronta i messaggi
-ricevuti da un worker del riferimento. I casi di broker irraggiungibile o perso
-usano un proxy TCP controllato dal test: i broker condivisi non vengono toccati.
-"""
+"""Compare Rust and reference beat messages using isolated queues and a controlled TCP proxy."""
 from __future__ import annotations
 
 import json
@@ -53,7 +47,7 @@ def tcp_ok(host, port):
 @pytest.fixture(scope='session', autouse=True)
 def require_brokers():
     if not tcp_ok(REDIS_HOST, REDIS_PORT):
-        pytest.skip('Redis non raggiungibile')
+        pytest.skip('Redis unreachable')
 
 
 def unique(prefix):
@@ -99,13 +93,13 @@ def wait_process_ready(path, pattern, process, timeout=TIMEOUT):
     match = wait_log(path, pattern, timeout)
     if not match:
         raise AssertionError(
-            f'processo non pronto ({pattern}):\n'
+            f'process not ready ({pattern}):\n'
             f'{Path(path).read_text(errors="replace")[-3000:]}')
     return match
 
 
 class Beat:
-    """Un ``celery beat`` in sottoprocesso."""
+    """Run celery beat in a subprocess."""
 
     def __init__(self, venv, directory, tag, env_extra, args=(),
                  loglevel='debug', schedule=None):
@@ -149,7 +143,7 @@ class Beat:
 
 
 class Worker:
-    """Un worker del venv indicato sulla coda dedicata."""
+    """Run the selected venv's worker on a dedicated queue."""
 
     def __init__(self, venv, directory, tag, env_extra, queue):
         self.log = Path(directory) / f'{tag}.log'
@@ -187,7 +181,7 @@ class Worker:
 
 
 class EmbeddedWorker(Worker):
-    """Worker con beat incorporato (``-B``)."""
+    """Run a worker with embedded beat."""
 
     def __init__(self, venv, directory, tag, env_extra, queue):
         self.log = Path(directory) / f'{tag}.log'
@@ -206,10 +200,9 @@ class EmbeddedWorker(Worker):
                 stderr=subprocess.STDOUT, start_new_session=True)
 
 
-# --------------------------------------------------------------------- proxy
 
 class TcpProxy:
-    """Proxy TCP controllabile (avvio, perdita del collegamento, riavvio)."""
+    """Controllable TCP proxy for broker outages and restarts."""
 
     def __init__(self, host=REDIS_HOST, port=REDIS_PORT):
         self.target = (host, port)
@@ -221,7 +214,7 @@ class TcpProxy:
         self._stop = threading.Event()
 
     def prepare(self):
-        """Riserva la porta senza accettare connessioni."""
+        """Reserve the port without accepting connections."""
         server = socket.socket()
         server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         server.bind(('127.0.0.1', 0))
@@ -278,7 +271,7 @@ class TcpProxy:
                     self._conns.discard(sock)
 
     def stop(self):
-        """Chiude listener e connessioni in corso (broker "perso")."""
+        """Close the listener and active connections to simulate broker loss."""
         self._stop.set()
         if self.server is not None:
             try:
@@ -303,7 +296,7 @@ class TcpProxy:
             self._thread = None
 
     def restart(self):
-        # La porta resta la stessa: il beat riconnette l'URL invariato.
+        # Keep the port so beat reconnects to the same URL.
         server = socket.socket()
         server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         server.bind(('127.0.0.1', self.port))
@@ -315,7 +308,6 @@ class TcpProxy:
         return f'redis://127.0.0.1:{self.port}/{REDIS_DB}'
 
 
-# --------------------------------------------------------------------- eventi
 
 def read_events(sink):
     client = redis_client()
@@ -327,13 +319,13 @@ def clear_key(sink):
 
 
 def shape(events):
-    """Forma confrontabile: la stessa voce può scattare un numero diverso di volte."""
+    """Normalize entries whose schedules may fire different numbers of times."""
     out = set()
     for event in events:
         headers = event.get('headers') or {}
         out.add((
             event['task'],
-            # L'ultimo argomento è il tag del beat (ref/rs): non va confrontato.
+            # Exclude the final beat tag argument (ref/rs) from comparisons.
             tuple(event['args'][:-1]),
             tuple(sorted(event['kwargs'].items())),
             headers.get('celery_beat_task'),
@@ -355,7 +347,7 @@ def beat_env(queue, sink, mode='interval', broker=REDIS_URL, tag='', **extra):
 
 
 def events_of(events, tag):
-    """Eventi pubblicati dal beat `tag` (il tag è l'ultimo argomento)."""
+    """Select events published by beat *tag*, stored in the last argument."""
     return [event for event in events
             if event['args'] and event['args'][-1] == tag]
 
@@ -369,7 +361,6 @@ def directory(tmp_path):
     return tmp_path
 
 
-# --------------------------------------------------------------------- test
 
 def test_interval_and_relative(directory):
     queue = unique('beat-interval')
@@ -390,7 +381,7 @@ def test_interval_and_relative(directory):
                 beat.stop()
         events = read_events(sink)
         ref_events, rs_events = events_of(events, 'ref'), events_of(events, 'rs')
-        assert ref_events, 'il beat di riferimento non ha pubblicato'
+        assert ref_events, 'reference beat did not publish'
         assert shape(ref_events) == shape(rs_events), (
             shape(ref_events) ^ shape(rs_events))
         assert {event['task'] for event in rs_events} == {'beattest.record'}
@@ -482,7 +473,7 @@ def test_crontab_fires_at_minute(directory):
 
 
 def test_broker_unreachable_at_startup_then_available(directory):
-    proxy = TcpProxy().prepare()  # porta riservata, nessun listener
+    proxy = TcpProxy().prepare()  # Reserved port with no listener.
     queue = unique('beat-proxy')
     sink = unique('sink')
     with Worker(REF_VENV, directory, 'ref-worker', beat_env(queue, sink),
@@ -493,7 +484,7 @@ def test_broker_unreachable_at_startup_then_available(directory):
             for tag, venv in (('ref', REF_VENV), ('rs', RS_VENV))
         }
         try:
-            # Broker irraggiungibile: il beat deve ritentare, non uscire.
+            # Beat must retry rather than exit when the broker is unreachable.
             for beat in beats.values():
                 wait_process_ready(
                     beat.log,
@@ -529,7 +520,7 @@ def test_broker_lost_during_execution_then_recover(directory):
             wait_for(lambda: len(events_of(read_events(sink), 'ref')) >= 2 and
                      len(events_of(read_events(sink), 'rs')) >= 2, 20)
             proxy.stop()
-            # Entrambi devono loggare un errore di pubblicazione e restare vivi.
+            # Both must log publication errors and remain alive.
             for beat in beats.values():
                 wait_log(beat.log, r'Message Error:', 30)
                 assert beat.process.poll() is None
@@ -576,7 +567,7 @@ def test_schedule_file_compatible_both_ways(directory):
     queue = unique('beat-file')
     env = beat_env(queue, 'unused')
 
-    # ref scrive; rs rilegge senza reset; il riferimento rilegge ancora.
+    # Reference writes, Rust reads without resetting, then reference reads again.
     schedule = directory / 'ref-written-schedule'
     ref = Beat(REF_VENV, directory, 'ref-first', env, schedule=schedule)
     ref.ready()
@@ -599,7 +590,7 @@ def test_schedule_file_compatible_both_ways(directory):
     assert after['tz'] == before['tz']
     assert after['utc_enabled'] == before['utc_enabled']
 
-    # rs scrive un file nuovo; il riferimento lo legge e continua i conteggi.
+    # Rust writes a new file; reference reads it and continues counting.
     schedule2 = directory / 'rs-written-schedule'
     rs2 = Beat(RS_VENV, directory, 'rs-first', env, schedule=schedule2)
     rs2.ready()
@@ -640,7 +631,7 @@ def test_custom_scheduler_with_own_producer(directory):
                 beat.stop()
         assert producers['ref'].read_text() == 'RecordingProducer'
         assert producers['rs'].read_text() == 'RecordingProducer', (
-            'con Producer ridefinito il beat rs deve restare su kombu')
+            'Rust beat must retain kombu when Producer is overridden')
         events = read_events(sink)
         assert shape(events_of(events, 'ref')) == shape(events_of(events, 'rs'))
         clear_key(sink)
@@ -668,7 +659,7 @@ def test_producer_env_disable(directory):
         assert shape(events_of(events, 'ref')) == shape(events_of(events, 'rs'))
         imported = json.loads(mods.read_text())
         assert imported['redis'] is True, (
-            'CELERY_RS_PRODUCER=0 usa il trasporto kombu')
+            'CELERY_RS_PRODUCER=0 uses kombu transport')
         clear_key(sink)
 
 
@@ -688,11 +679,11 @@ def test_rust_producer_does_not_import_transport(directory, broker, transport):
     assert imported['redis'] is False
     assert imported['redis_transport'] is False
     assert imported['pyamqp_transport'] is False, (
-        f'il percorso Rust non deve importare {transport}')
+        f'Rust path must not import {transport}')
 
 
 def test_embedded_beat(directory):
-    """``celery worker -B``: beat incorporato, worker rs contro worker ref."""
+    """Compare embedded beat in Rust and reference workers."""
     queue = unique('beat-embedded')
     results = {}
     for tag, venv in (('ref', REF_VENV), ('rs', RS_VENV)):

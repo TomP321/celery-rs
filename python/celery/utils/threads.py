@@ -17,8 +17,7 @@ except ImportError:  # pragma: no cover
 
 
 def __getattr__(name):
-    # `get_ident` pubblico è quello del riferimento (`greenlet.getcurrent` se
-    # installato), risolto al primo accesso: il client non paga greenlet.
+    # Resolve the reference get_ident lazily to avoid importing greenlet for clients.
     if name != 'get_ident':
         raise AttributeError(
             f'module {__name__!r} has no attribute {name!r}')
@@ -34,7 +33,7 @@ def __dir__():
     return sorted(set(globals()) | {'get_ident'})
 
 
-if False:  # solo per pyflakes: il nome vero arriva da __getattr__
+if False:  # For pyflakes; __getattr__ resolves the real name.
     from greenlet import getcurrent as get_ident
     _FOR_PYFLAKES = (get_ident,)
 

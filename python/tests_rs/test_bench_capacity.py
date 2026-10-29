@@ -1,4 +1,4 @@
-"""La sonda di capacità deve escludere la pubblicazione dal tempo del worker."""
+"""Exclude publication time from worker capacity measurements."""
 import json
 import os
 from pathlib import Path

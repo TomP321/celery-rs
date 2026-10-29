@@ -1,4 +1,4 @@
-"""I percorsi di latenza riusano risorse limitate e restano cooperativi in attesa."""
+"""Bounded resource reuse and cooperative waiting on latency paths."""
 from types import SimpleNamespace
 
 from celery import Celery

@@ -90,7 +90,7 @@ class Hub(bootsteps.StartStopStep):
         # make clock use dummy lock
         w.app.clock.mutex = DummyLock()
         from celery.worker import _rs_consumer
-        # RsApplyResult non usa il lock di billiard: il pool serve solo ai figli.
+        # RsApplyResult does not need billiard's lock; the pool is only for children.
         if _rs_consumer.use_rs_pool(w):
             return
         # multiprocessing's ApplyResult uses this lock.
@@ -157,9 +157,7 @@ class Pool(bootsteps.StartStopStep):
         allow_restart = w.pool_restarts
         pool_cls = w.pool_cls
         extra = {}
-        # Pool di default con il consumer Rust: zygote + supervisore Rust al
-        # posto di billiard. Stesso waker del consumer, così il loop ha un solo
-        # fd da registrare nell'hub.
+        # Share the Rust consumer's Waker with the pool so the hub registers one descriptor.
         from celery.worker import _rs_consumer
         if _rs_consumer.use_rs_pool(w):
             from celery.concurrency.rs_prefork import RsTaskPool
@@ -217,10 +215,7 @@ class Beat(bootsteps.StartStopStep):
         pool_module = w.pool_cls if isinstance(w.pool_cls, str) else w.pool_cls.__module__
         if pool_module.endswith(('gevent', 'eventlet')):
             raise ImproperlyConfigured(ERR_B_GREEN)
-        # Il master di celery-rs ha già i thread del core Rust: un `fork`
-        # del beat incorporato lascerebbe nel figlio un runtime tokio non
-        # valido (PLAN: si forka solo prima di avviare i thread). Il beat
-        # gira quindi in un thread dello stesso processo.
+        # Run embedded beat in a thread: forking after Rust starts would inherit an invalid tokio runtime.
         b = w.beat = EmbeddedService(w.app,
                                      schedule_filename=w.schedule_filename,
                                      scheduler_cls=w.scheduler,

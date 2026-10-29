@@ -1,4 +1,4 @@
-"""Regressione: le pagine libere dei buffer RESP grandi tornano al sistema."""
+"""Check that freed large RESP buffers return their pages to the system."""
 import ctypes
 import subprocess
 import sys
@@ -7,7 +7,7 @@ import pytest
 
 
 @pytest.mark.skipif(sys.platform != 'linux' or not hasattr(ctypes.CDLL(None), 'malloc_trim'),
-                    reason='politica delle arene glibc su Linux')
+                    reason='glibc arena policy on Linux')
 def test_large_result_pipeline_does_not_retain_scratch_pages():
     code = r'''
 import json, os, uuid
@@ -30,7 +30,7 @@ try:
         assert pipe.execute() == [True, 0]
     final = pss()
     print(json.dumps({'baseline_kib': baseline, 'final_kib': final}), flush=True)
-    # Prima del fix restavano residenti 4–13 MiB di buffer già liberati.
+    # Freed buffers previously retained 4–13 MiB of resident pages.
     assert final - baseline < 3 * 1024, (baseline, final)
 finally:
     client.delete([key])
@@ -41,7 +41,7 @@ finally:
 
 
 @pytest.mark.skipif(sys.platform != 'linux' or not hasattr(ctypes.CDLL(None), 'malloc_trim'),
-                    reason='politica delle arene glibc su Linux')
+                    reason='glibc arena policy on Linux')
 def test_large_result_releases_python_encoding_pages():
     code = r'''
 import gc, json, os, uuid

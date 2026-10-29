@@ -1,14 +1,4 @@
-"""Result backend Redis: client Rust vs redis-py del riferimento.
-
-Eseguiti con ``.venv-rs`` (pacchetto celery-rs completo) contro Redis reale
-(``CELERY_RS_TEST_REDIS``, default ``127.0.0.1:6390``) e un worker del
-riferimento (``.venv-ref``, pool ``solo``).
-
-Coprono il gate della spec 04a: attivazione/disattivazione del client Rust,
-valori e sequenza di comandi identici a redis-py, pub/sub di ``AsyncResult.get``
-(timeout, propagate, riconnessione dopo ``CLIENT KILL``), ``ResultSet``,
-fork (``os.fork`` e billiard) e concorrenza.
-"""
+"""Compare Rust Redis backend values, commands, pubsub, fork and concurrency with redis-py."""
 from __future__ import annotations
 
 import base64
@@ -37,7 +27,7 @@ ROOT = Path(__file__).resolve().parents[2]
 REFERENCE_PYTHON = ROOT / '.venv-ref' / 'bin' / 'python'
 REDIS_URL = os.environ.get('CELERY_RS_REDIS_URL', os.environ.get('CELERY_RS_TEST_REDIS', 'redis://127.0.0.1:6390'))
 
-# Database dedicati: gli altri test/agenti usano 0/1 e non vanno disturbati.
+# Use dedicated databases to avoid interfering with other tests.
 def _with_db(url, db):
     base = url.split('?', 1)[0].rstrip('/')
     head, _, tail = base.rpartition('/')
@@ -201,7 +191,7 @@ def redis_for(url=BACKEND_URL):
 
 
 def bare_app(**conf):
-    """App senza task registrati (solo backend/config)."""
+    """Create an app without registered tasks for backend and configuration tests."""
     app = Celery('rs-backend-test', broker=BROKER_URL, backend=BACKEND_URL,
                  set_as_current=False)
     app.conf.update(
@@ -239,7 +229,7 @@ def make_app(**conf):
 
 @pytest.fixture(scope='session')
 def worker(tmp_path_factory):
-    """Worker del riferimento (``-P solo``) con l'app dei task."""
+    """Run a reference solo worker with the test app."""
     directory = tmp_path_factory.mktemp('backend-worker')
     (directory / 'worker_app.py').write_text(WORKER_APP)
     env = dict(os.environ)
@@ -275,12 +265,12 @@ def worker(tmp_path_factory):
         time.sleep(0.1)
     else:
         proc.terminate()
-        raise RuntimeError(f'worker non pronto:\n{"".join(lines[-40:])}')
+        raise RuntimeError(f'worker not ready:\n{"".join(lines[-40:])}')
     yield proc
     proc.terminate()
     try:
         proc.wait(timeout=20)
-    except subprocess.TimeoutExpired:  # pragma: no cover - emergenza
+    except subprocess.TimeoutExpired:  # pragma: no cover - emergency cleanup
         proc.kill()
 
 
@@ -324,13 +314,12 @@ def _decode_meta(raw):
     return meta
 
 
-# --------------------------------------------------------------------- monitor
 
 _MONITOR_RE = re.compile(r'\[(\d+) [^\]]*\] (.*)')
 
 
 class _Monitor:
-    """MONITOR su socket grezzo (stesso approccio di ``tools/compat/wire``)."""
+    """Read MONITOR over a raw socket, as compat wire does."""
 
     def __init__(self, db):
         self.db = db
@@ -385,7 +374,7 @@ class _Monitor:
         self._thread.join(timeout=2)
 
     def commands(self, marker):
-        """Comandi MULTI/EXEC e quelli che nominano *marker* (stesso db)."""
+        """Select MULTI/EXEC commands and commands naming *marker* in the same database."""
         if isinstance(marker, bytes):
             marker = marker.decode()
         text = marker
@@ -404,7 +393,7 @@ class _Monitor:
                 out.append((command, None))
                 continue
             if text in body or encoded.hex() in body:
-                # Chiave del task/gruppo: il resto (valori, score) non serve.
+                # Only the task or group key matters, not its values or scores.
                 rest = body[name.end():].lstrip()
                 key = re.match(r'"([^"]*)"', rest)
                 out.append((command, key.group(1) if key else text))
@@ -417,7 +406,6 @@ def monitor():
         yield capture
 
 
-# ------------------------------------------------------------------ attivazione
 
 def test_uses_rs_client_and_can_be_disabled(monkeypatch):
     backend = bare_app().backend
@@ -457,7 +445,6 @@ def test_sentinel_and_subclasses_stay_on_redis_py(app):
     assert custom._create_rs_client(**custom.connparams) is None
 
 
-# ------------------------------------------------- valori e traffico store/get
 
 def test_store_value_and_traffic_match_reference(app, ops_dir):
     task_id = str(uuid.uuid4())
@@ -487,7 +474,7 @@ def test_store_value_and_traffic_match_reference(app, ops_dir):
         ('EXEC', None),
     ]
 
-    # get e forget: stessi comandi e stesso valore.
+    # Compare commands and values for get and forget.
     with monitor() as capture:
         expected = _run_ops(REFERENCE_PYTHON, ops_dir, 'ref_store.py',
                             'get', task_id)
@@ -509,7 +496,6 @@ def test_set_with_ex_uses_set_ex_not_setex(app):
     client.delete(key)
 
 
-# --------------------------------------------------------------- chord .j/.t/.s
 
 def test_chord_part_values_and_traffic_match_reference(app, ops_dir):
     backend = app.backend
@@ -533,7 +519,7 @@ def test_chord_part_values_and_traffic_match_reference(app, ops_dir):
     assert rust['.s'] is not None and rust['.t'] is not None
     assert rust['.j']
     assert reference_commands == rust_commands
-    # .s: SET con scadenza; .t: INCRBY; .j: ZADD + ZCOUNT; poi GET .t/.s.
+    # .s: SET with expiry; .t: INCRBY; .j: ZADD and ZCOUNT, followed by GET .t/.s.
     commands = [command for command, _ in rust_commands]
     assert 'INCRBY' in commands
     assert 'ZADD' in commands and 'ZCOUNT' in commands
@@ -543,7 +529,6 @@ def test_chord_part_values_and_traffic_match_reference(app, ops_dir):
         redis_for().delete(backend.get_key_for_group(group_id, suffix))
 
 
-# ------------------------------------------------------------------- pub/sub
 
 def test_asyncresult_get_uses_pubsub(app):
     task_id = str(uuid.uuid4())
@@ -558,7 +543,7 @@ def test_asyncresult_get_uses_pubsub(app):
     assert 'SUBSCRIBE' in commands
     assert elapsed >= 1.0
 
-    # Risultato già pronto: get non resta appeso.
+    # An already available result must not block get.
     started = time.monotonic()
     assert result.get(timeout=5) == 'done'
     assert time.monotonic() - started < 2.0
@@ -610,10 +595,9 @@ def test_chord_end_to_end(app):
     assert result.get(timeout=40) == 12
 
 
-# --------------------------------------------------- riconnessione pub/sub
 
 def test_client_kill_during_get_reconnects(app):
-    # Riconnessione esplicita: uccide solo i client pub/sub del nostro db.
+    # Kill only pubsub clients in this database to test explicit reconnection.
     import threading
     second = app.tasks[TASK_SLEEPY].apply_async((2.0, 'after-kill'))
     outcome = {}
@@ -621,7 +605,7 @@ def test_client_kill_during_get_reconnects(app):
     def wait():
         try:
             outcome['value'] = second.get(timeout=30)
-        except Exception as exc:  # pragma: no cover - diagnostica
+        except Exception as exc:  # pragma: no cover - diagnostics
             outcome['error'] = exc
     thread = threading.Thread(target=wait)
     thread.start()
@@ -642,7 +626,6 @@ def test_client_kill_during_get_reconnects(app):
     assert outcome['value'] == 'after-kill'
 
 
-# ------------------------------------------------------------------- concorrenza
 
 def test_sixteen_threads_store_and_get(app):
     backend = app.backend
@@ -671,7 +654,6 @@ def test_sixteen_threads_store_and_get(app):
         backend.forget(task_id)
 
 
-# ------------------------------------------------------------------------ fork
 
 def _child_store(app, task_id, pipe):
     try:
@@ -680,7 +662,7 @@ def _child_store(app, task_id, pipe):
         raw = backend.get(backend.get_key_for_task(task_id))
         meta = _decode_meta(raw)
         os.write(pipe, b'OK' if meta['result'] == 'child' else b'BAD')
-    except BaseException as exc:  # pragma: no cover - diagnostica del figlio
+    except BaseException as exc:  # pragma: no cover - child diagnostics
         os.write(pipe, f'ERR {exc!r}'.encode()[:200])
     finally:
         os._exit(0)
@@ -690,7 +672,7 @@ def test_fork_os(app):
     task_id = str(uuid.uuid4())
     read_fd, write_fd = os.pipe()
     pid = os.fork()
-    if pid == 0:  # pragma: no cover - processo figlio
+    if pid == 0:  # pragma: no cover - child process
         os.close(read_fd)
         _child_store(app, task_id, write_fd)
     os.close(write_fd)
@@ -720,24 +702,22 @@ def _billiard_store(app, task_id):
         backend.get(backend.get_key_for_task(task_id)))['result'] == 'billiard'
 
 
-# --------------------------------------------------- lettura incrociata ref/rs
 
 def test_reference_worker_results_readable_by_both(app, ops_dir):
-    # Client/worker del riferimento: risultato scritto dal worker, letto da rs.
+    # Read the reference worker's result through Rust.
     task_id = str(uuid.uuid4())
     app.tasks[TASK_ADD].apply_async((2, 5), task_id=task_id).get(timeout=30)
     key = app.backend.get_key_for_task(task_id)
     raw = app.backend.get(key)
     assert _decode_meta(raw)['result'] == 7
 
-    # E il riferimento legge lo stesso valore.
+    # The reference must read the same value.
     reference = json.loads(_run_ops(
         REFERENCE_PYTHON, ops_dir, 'ref_store.py', 'meta', task_id))
     assert reference['result'] == 7
     assert reference['status'] == states.SUCCESS
 
 
-# ------------------------------------------------------------------- JSON
 
 def test_json_encode_decode_matches_kombu(app):
     import datetime

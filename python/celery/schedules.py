@@ -26,21 +26,15 @@ __all__ = (
 
 schedstate = namedtuple('schedstate', ('is_due', 'next'))
 
-#: Classe `ffwd` globale del modulo: `remaining_estimate` usa il percorso
-#: veloce solo se non ne è stata passata una diversa.
+# Only use the fast path with the original module-level ffwd class.
 _GLOBAL_FFWD = ffwd
 
-#: `timezone.utc` del riferimento è una property: tenerne il valore fisso
-#: evita un accesso a ogni chiamata nel percorso caldo.
+# Cache the process-wide UTC value to avoid property access on the hot path.
 _UTC = timezone.utc
 
 
 def _ffwd_from_args(args, ffwd=ffwd):
-    """Costruisce l'`ffwd` del riferimento dagli argomenti restituiti da Rust.
-
-    Gli stessi rami di `remaining_delta`: il ramo "_delta_to_next" usa sempre
-    la classe globale, gli altri quella eventualmente passata dal chiamante.
-    """
+    """Build the reference ``ffwd`` from Rust arguments."""
     year, month, weeks, weekday, day, hour, minute = args
     if year is not None:
         return _GLOBAL_FFWD(year=year, month=month, day=day, hour=hour,
@@ -54,10 +48,10 @@ def _ffwd_from_args(args, ffwd=ffwd):
 
 
 def _add_ffwd(start, args):
-    """`start + ffwd(...)` per gli argomenti prodotti da Rust."""
+    """Compute ``start + ffwd(...)`` from Rust arguments."""
     year, month, weeks, weekday, day, hour, minute = args
     if year is not None:
-        # Rust produce solo giorni validi: il clamp di `ffwd` è inutile.
+        # Rust already produces valid days, so ffwd's clamp is unnecessary.
         ret = start.replace(year=year, month=month, day=day, hour=hour,
                             minute=minute, second=0, microsecond=0)
     elif weekday is not None:
@@ -69,8 +63,7 @@ def _add_ffwd(start, args):
                             microsecond=0)
     else:
         ret = start.replace(minute=minute, second=0, microsecond=0)
-    # `ffwd.__radd__` somma sempre `timedelta(days=weeks * 7)`; l'addizione
-    # azzera `fold`, cosa che conta sulle ore ambigue del DST.
+    # Match ffwd's timedelta addition: resetting fold matters for ambiguous DST hours.
     if weeks or ret.fold:
         ret += timedelta(days=weeks * 7)
     return ret
@@ -511,13 +504,11 @@ class crontab(BaseSchedule):
                 month_of_year=self._orig_month_of_year,
             ))
         super().__init__(**kwargs)
-        #: `remaining_estimate` può usare il percorso veloce solo se la
-        #: sottoclasse non ridefinisce `remaining_delta`.
+        # Only use the fast path when remaining_delta retains its original implementation.
         self._fast_estimate = (
             type(self).remaining_delta is crontab.remaining_delta)
         self._rs_cached = None
-        # I set pubblici servono solo a chi li osserva: il tick usa il core.
-        # Un set passato dall'utente deve conservare identità e mutazioni.
+        # Keep public sets lazy, preserving user-supplied set identity and mutations.
         if type(self) is crontab and not any(isinstance(v, set) for v in
                 (minute, hour, day_of_week, day_of_month, month_of_year)):
             data = _cron_dict(self)
@@ -540,7 +531,7 @@ class crontab(BaseSchedule):
 
     @property
     def __dict__(self):
-        # vars() espone sempre gli stessi set mutabili del riferimento.
+        # vars() must expose the same mutable sets as the reference.
         return self._materialize_fields()
 
     @__dict__.setter
@@ -639,19 +630,19 @@ class crontab(BaseSchedule):
         Only called when ``day_of_month`` and/or ``month_of_year``
         cronspec is specified to further limit scheduled task execution.
 
-        Il calcolo è in Rust (`crates/celery-beat`); i fusi orari restano qui.
+        Rust computes the delta; timezone handling stays here.
         """
         return _ffwd_from_args(self._rs_spec().delta_to_next(
             last_run_at.year, last_run_at.month, last_run_at.day,
             next_hour, next_minute))
 
     def _rs_spec(self):
-        """CronSpec Rust per i campi correnti, ricostruito se i set cambiano."""
+        """Return the Rust CronSpec, rebuilding it when public sets change."""
         data = _cron_dict(self)
         cached = data.get('_rs_cached')
         if isinstance(cached, _celery_rs.CronSpec):
             return cached
-        # Dopo l'esposizione i set sono liberamente mutabili, anche in-place.
+        # Exposed sets may be mutated in place.
         return _celery_rs.CronSpec(
             list(self.minute), list(self.hour), list(self.day_of_week),
             list(self.day_of_month), list(self.month_of_year),
@@ -672,8 +663,7 @@ class crontab(BaseSchedule):
 
     def _remaining_delta_fast(self, last_run_at, tz=None):
         if tz is None:
-            # `CachedProperty` di kombu salva il valore in `__dict__['tz']`;
-            # può essere una stringa (es. app.timezone impostato dai test).
+            # Kombu caches tz in __dict__; tests may replace it with a string.
             cached_tz = _cron_dict(self).get('tz')
             schedule_tz: tzinfo = (
                 cached_tz if isinstance(cached_tz, tzinfo)
@@ -731,8 +721,7 @@ class crontab(BaseSchedule):
         # caching global ffwd
         if (ffwd is _GLOBAL_FFWD and self._fast_estimate and
                 'remaining_delta' not in _cron_dict(self)):
-            # Stesso calcolo di ``remaining(start, ffwd(...), now)`` senza
-            # costruire l'oggetto ffwd: è il percorso caldo di beat.
+            # Match remaining(start, ffwd(...), now) without allocating ffwd on beat's hot path.
             cached_tz = _cron_dict(self).get('tz')
             schedule_tz = (
                 cached_tz if isinstance(cached_tz, tzinfo)

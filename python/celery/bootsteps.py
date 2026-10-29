@@ -13,10 +13,7 @@ from .utils.graph import DependencyGraph, GraphFormatter
 from .utils.imports import instantiate, qualname
 from .utils.log import get_logger
 
-#: GreenletExit non si importa qui: eventlet/gevent sono fuori scope v1 e il
-#: client non deve pagare greenlet. La tupla si calcola quando serve, così con
-#: eventlet/gevent (greenlet già importato) il comportamento resta quello del
-#: riferimento.
+# Resolve GreenletExit lazily to avoid loading greenlet for clients.
 IGNORE_ERRORS = ()
 
 

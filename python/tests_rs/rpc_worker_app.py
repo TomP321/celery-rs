@@ -1,8 +1,4 @@
-"""App Celery usata dai test ``rpc://`` con il worker del riferimento.
-
-Il modulo viene importato dal worker ``.venv-ref`` (Celery originale) e dal
-client ``.venv-rs``; i nomi dei task sono quindi l'unico contratto fra i due.
-"""
+"""Shared app for RPC tests with a reference worker."""
 import os
 import time
 
@@ -50,7 +46,7 @@ def progress(steps, x, y):
 
 @app.task(name='rs_rpc.wait_file')
 def wait_file(path, x, y):
-    """Attende un file: il risultato non arriva prima che il client lo crei."""
+    """Wait for a file so the client controls when the result arrives."""
     deadline = time.monotonic() + 60
     while not os.path.exists(path) and time.monotonic() < deadline:
         time.sleep(0.05)

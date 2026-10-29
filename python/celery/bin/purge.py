@@ -59,8 +59,7 @@ def purge(ctx, force, queues, exclude_queues, **kwargs):
             except conn.channel_errors:
                 return 0
 
-        # `app.connection_for_write()` è lazy: con il producer Rust la
-        # connessione al broker resta nel core (niente redis-py/py-amqp).
+        # The broker connection stays in Rust; connection_for_write is only a lazy descriptor.
         from celery.app import _rs_producer
         fast_connection = _rs_producer.fast_connection(app)
         if fast_connection is not None:

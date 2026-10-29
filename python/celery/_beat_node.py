@@ -1,4 +1,4 @@
-"""Nodo di controllo, caricato solo quando beat abilita il pidbox."""
+"""Control node loaded when beat enables pidbox."""
 from kombu import pidbox
 
 

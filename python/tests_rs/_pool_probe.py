@@ -1,14 +1,4 @@
-"""Sonda di memoria/throughput per il pool (usata da ``test_worker_pool.py``).
-
-Eseguita in un processo separato: ``python _pool_probe.py rust|prefork``.
-Stampa un JSON con PSS a riposo/dopo 1000 job e job/s con task vuoti.
-
-Importa ~30 MB di moduli **prima** di avviare il pool, così le pagine sono
-condivise in copy-on-write da master, zygote (solo Rust) e figli, come in un
-worker reale con l'app già caricata. Il pool del riferimento è
-``concurrency.prefork.TaskPool`` con ``threads=True`` (billiard ``Pool``
-sincrono, senza event loop kombu).
-"""
+"""Pool PSS and throughput probe with modules preloaded for copy-on-write sharing."""
 
 import gc
 import importlib
@@ -22,7 +12,7 @@ JOBS = 1000
 
 
 def import_heavy_modules():
-    """Importa moduli pesanti (≈30 MB) e riporta il delta PSS del master."""
+    """Import large modules and report the master's PSS increase."""
     candidates = (('moto', 'mypy'), ('pytest', 'redis'), ('pygments',))
     before = pss(os.getpid())
     loaded = []
@@ -100,7 +90,7 @@ def main(mode):
             break
         wake()
         if time.monotonic() - started > 300:
-            raise SystemExit('timeout: job non completati')
+            raise SystemExit('timeout: jobs unfinished')
     elapsed = time.monotonic() - started
     time.sleep(0.3)
     loaded_pss = total_pss([os.getpid(), *extra, *children])

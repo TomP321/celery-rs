@@ -29,8 +29,7 @@ grp = try_import('grp')
 
 
 def __getattr__(name):
-    # `get_fdmax` è l'oggetto di billiard (stesso origin nell'API): si risolve
-    # al primo accesso perché billiard trascina multiprocessing/pickle.
+    # Resolve billiard's real object lazily to avoid multiprocessing and pickle imports.
     if name != 'get_fdmax':
         raise AttributeError(
             f'module {__name__!r} has no attribute {name!r}')
@@ -43,17 +42,16 @@ def __dir__():
     return sorted(set(globals()) | {'get_fdmax'})
 
 
-if False:  # solo per pyflakes: il nome vero arriva da __getattr__
+if False:  # For pyflakes; __getattr__ resolves the real name.
     from billiard.compat import get_fdmax
     _FOR_PYFLAKES = (get_fdmax,)
 
 
 def _get_fdmax(default=None):
-    # Copia locale di `billiard.compat.get_fdmax` per il percorso interno
-    # (nessun import di billiard: lo usa solo fd_by_path come fallback).
+    # Local fallback for fd_by_path avoids loading billiard.
     try:
         import resource
-    except ImportError:  # pragma: no cover - piattaforme senza resource
+    except ImportError:  # pragma: no cover - resource unavailable
         return default
     fdmax = resource.getrlimit(resource.RLIMIT_NOFILE)[1]
     if fdmax == resource.RLIM_INFINITY:
@@ -62,7 +60,7 @@ def _get_fdmax(default=None):
 
 
 def current_process():
-    # Wrapper: billiard si importa al primo uso e i test possono sostituirlo.
+    # Defer billiard import while allowing tests to replace the function.
     from billiard.process import current_process as _current_process
     return _current_process()
 

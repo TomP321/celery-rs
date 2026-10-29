@@ -15,9 +15,7 @@ from celery import VERSION_BANNER
 from celery.app.utils import find_app
 from celery.bin.base import CeleryCommand, CeleryOption, CLIContext, consume_preload_options
 
-#: Comandi caricati solo quando servono davvero (help, esecuzione o `compat
-#: api`). Le import qui sotto sarebbero tutte pagate da ogni invocazione,
-#: anche da `celery call`/`status`.
+# Load commands on demand so call and status avoid unrelated imports.
 _COMMANDS = {
     'amqp': ('celery.bin.amqp', 'amqp'),
     'beat': ('celery.bin.beat', 'beat'),
@@ -38,9 +36,7 @@ _COMMANDS = {
     'worker': ('celery.bin.worker', 'worker'),
 }
 
-#: Nomi pubblici del modulo (come nel riferimento, ``list_`` incluso) → comando.
-#: Risolti al primo accesso da ``__getattr__`` (PEP 562): ``from
-#: celery.bin.celery import worker`` restituisce il comando vero.
+# Resolve the reference's public command objects lazily, including list_.
 _ATTRIBUTES = {('list_' if name == 'list' else name): entry
                for name, entry in _COMMANDS.items()}
 
@@ -60,13 +56,7 @@ def __dir__():
 
 
 class _LazyCeleryGroup(DYMGroup):
-    """``DYMGroup`` che importa i sottocomandi su richiesta.
-
-    ``self.commands`` contiene solo i comandi già materializzati (``report`` e
-    i plugin); ``get_command`` importa il modulo del comando richiesto.
-    L'accesso diretto a ``commands`` (``compat api``, plugin, terze parti)
-    materializza tutto, così la superficie pubblica resta identica.
-    """
+    """Import subcommands on demand; materialize all commands on direct ``commands`` access."""
 
     def __init__(self, *args, **kwargs):
         self._commands = {}

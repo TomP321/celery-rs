@@ -1,15 +1,4 @@
-"""Worker control, mingle e gossip sul trasporto Rust (spec 08a).
-
-I worker girano in sottoprocessi (``.venv-rs`` per celery-rs, ``.venv-ref``
-per il riferimento); i client di controllo sono quelli del riferimento, così
-un comando che funziona qui funziona anche con Celery originale. Ogni scenario
-che ha un esito confrontabile viene eseguito anche su un worker del
-riferimento (mingle nelle due direzioni, gossip, election, heartbeat).
-
-Copre: tutti i comandi ``inspect``/``control``, destination/pattern, mingle
-ref↔rs, gossip con un worker ref che entra ed esce, riconnessione al broker,
-assenza dei moduli kombu/redis-py nel master, ``-P solo`` e ``-P prefork``.
-"""
+"""Compare worker control, mingle and gossip over Rust transport with reference workers."""
 from __future__ import annotations
 
 import json
@@ -40,9 +29,6 @@ from test_worker_prefork import pool_info, wait_until
 TIMEOUT = 30
 
 
-# ---------------------------------------------------------------------------
-# helper
-# ---------------------------------------------------------------------------
 
 def start(broker_name, *, venv=RS_VENV, rust=True, directory=None, **kwargs):
     kwargs.setdefault('full', True)
@@ -64,7 +50,7 @@ def wait_state(result, state, timeout=TIMEOUT):
         if result.state == state:
             return result
         time.sleep(0.05)
-    raise AssertionError(f'{result.id}: stato {result.state}, atteso {state}')
+    raise AssertionError(f'{result.id}: state {result.state}, expected {state}')
 
 
 def replies_keys(replies):
@@ -72,7 +58,7 @@ def replies_keys(replies):
 
 
 def control(worker, code):
-    """Esegue un comando di controllo dal client del riferimento."""
+    """Run a control command through the reference client."""
     return run_ref(code, worker)
 
 
@@ -106,9 +92,6 @@ def wait_ping(worker, timeout=TIMEOUT):
     return False
 
 
-# ---------------------------------------------------------------------------
-# fixture: un worker rs con control/mingle/gossip attivi per broker e pool
-# ---------------------------------------------------------------------------
 
 @pytest.fixture(scope='module')
 def solo_workers(tmp_path_factory):
@@ -140,10 +123,10 @@ def prefork_workers(tmp_path_factory):
 def worker(request, solo_workers, prefork_workers):
     pool, name = request.param
     if not broker_available(name):
-        pytest.skip(f'broker {name} non raggiungibile')
+        pytest.skip(f'broker {name} unreachable')
     store = solo_workers if pool == 'solo' else prefork_workers
     if name not in store:
-        pytest.skip(f'worker {pool}/{name} non avviato')
+        pytest.skip(f'worker {pool}/{name} not started')
     worker = store[name]
     worker.pool = pool
     return worker
@@ -168,7 +151,7 @@ def dedicated(tmp_path):
 def broker_workers(request, tmp_path_factory):
     name = request.param
     if not broker_available(name):
-        pytest.skip(f'broker {name} non raggiungibile')
+        pytest.skip(f'broker {name} unreachable')
     directory = tmp_path_factory.mktemp(f'control-{name}')
     rs_worker = start(name, directory=directory / 'rs')
     ref_worker = start(name, venv=REF_VENV, rust=False,
@@ -177,9 +160,6 @@ def broker_workers(request, tmp_path_factory):
     stop_all((rs_worker, ref_worker))
 
 
-# ---------------------------------------------------------------------------
-# inspect / control
-# ---------------------------------------------------------------------------
 
 def test_inspect_commands(worker):
     for command in ('ping', 'clock', 'registered', 'active_queues', 'stats',
@@ -189,9 +169,8 @@ def test_inspect_commands(worker):
             f'{command}: {result.stdout[-2000:]}\n{result.stderr[-2000:]}')
         assert worker.nodename in result.stdout, (command, result.stdout[-2000:])
 
-    # query_task su un task in esecuzione (client del riferimento).
-    # Con `-P solo` il task blocca il processo: il pidbox non può rispondere,
-    # esattamente come nel worker di riferimento.
+    # Query a running task with the reference client.
+    # As in the reference, a solo task blocks the process and prevents pidbox replies.
     if worker.pool != 'prefork':
         return
     app = rs_app(worker)
@@ -214,16 +193,15 @@ emit({{node: {{task: value[0] for task, value in (reply or {{}}).items()}}
 def test_control_commands(worker, dedicated):
     app = rs_app(worker)
     try:
-        # rate_limit: il comando arriva al pannello del worker e risponde.
+        # Check that rate_limit reaches the worker panel and replies.
         assert worker.control('rate_limit', 'rs_worker.rate', '10/s').returncode == 0
 
-        # time_limit.
         result = worker.control('time_limit', 'rs_worker.add', '2', '5')
         assert result.returncode == 0, result.stderr
     finally:
         app.close()
 
-    # add_consumer / cancel_consumer su un worker dedicato (isolamento code).
+    # Use a dedicated worker for add_consumer and cancel_consumer queue isolation.
     queue = unique('control-extra')
     result = control(worker, f'''
 replies = app.control.add_consumer({queue!r}, destination=[{worker.nodename!r}])
@@ -237,7 +215,7 @@ emit({{'ok': True}})
 ''')
     assert wait_until(lambda: queue not in worker.inspect('active_queues').stdout)
 
-    # heartbeat: il dispatcher emette worker-heartbeat.
+    # The dispatcher must emit worker-heartbeat.
     from test_worker_consumer import start_event_receiver, stop_event_receiver
     receiver = start_event_receiver(worker, node_id=unique('hb-receiver'))
     try:
@@ -262,7 +240,7 @@ def test_revoke_and_terminate(worker):
 
 
 def test_election_matches_reference(dedicated):
-    """``election`` passa da gossip: richiesta e ack viaggiano sugli eventi."""
+    """Check election requests and acknowledgements sent through gossip events."""
     outcomes = {}
     from test_worker_consumer import start_event_receiver, stop_event_receiver
     for label, venv, rust in (('rs', RS_VENV, True), ('ref', REF_VENV, False)):
@@ -301,15 +279,14 @@ def test_pool_commands_prefork(dedicated):
 
     control(worker, f"app.control.autoscale(4, 1, destination=[{worker.nodename!r}]); "
                     "emit({'ok': True})")
-    # Il pool Rust registra il nuovo limite; i processi crescono alla bisogna.
+    # The Rust pool records the limit and adds processes on demand.
     assert wait_until(lambda: pool_info(worker).get('implementation', '').endswith('RsTaskPool'))
     assert worker.inspect('stats').returncode == 0
 
 
 def test_shutdown_command(dedicated):
     worker = dedicated('redis')
-    # `shutdown` solleva WorkerShutdown dentro il pannello: come nel
-    # riferimento il client può non ricevere la risposta, ma il worker esce.
+    # shutdown raises WorkerShutdown in the panel; the worker may exit before its reply reaches the client.
     worker.control('shutdown')
     deadline = time.monotonic() + TIMEOUT
     while time.monotonic() < deadline and worker.process.poll() is None:
@@ -334,15 +311,12 @@ emit({{'only': sorted(only), 'pattern': sorted(pattern), 'missing': sorted(missi
     assert replies['missing'] == [], replies
 
 
-# ---------------------------------------------------------------------------
-# mingle: ref -> rs e rs -> ref
-# ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize('direction', ['rs-to-ref', 'ref-to-rs'])
 def test_mingle_syncs_revoked_between_ref_and_rs(tmp_path, direction):
     broker = 'redis'
     if not broker_available(broker):
-        pytest.skip('redis non raggiungibile')
+        pytest.skip('Redis unreachable')
     rs_worker = ref_worker = None
     try:
         if direction == 'rs-to-ref':
@@ -366,8 +340,7 @@ def test_mingle_syncs_revoked_between_ref_and_rs(tmp_path, direction):
                               db=ref_worker.db)
             target, revoker = rs_worker, ref_worker
 
-        # Il task è instradato solo sulla coda del nodo che ha appena fatto
-        # mingle: la revoca deve arrivargli dall'altro worker.
+        # Route only to the node that just mingled; it must learn the revocation from its peer.
         result = submit(target, 'rs_worker.add', (1, 2), task_id=task_id,
                         queue=target.queue)
         wait_state(result, 'REVOKED')
@@ -375,13 +348,10 @@ def test_mingle_syncs_revoked_between_ref_and_rs(tmp_path, direction):
         stop_all([worker for worker in (rs_worker, ref_worker) if worker])
 
 
-# ---------------------------------------------------------------------------
-# gossip: un worker ref entra ed esce
-# ---------------------------------------------------------------------------
 
 def test_gossip_sees_reference_worker_join_and_leave(tmp_path):
     if not broker_available('redis'):
-        pytest.skip('redis non raggiungibile')
+        pytest.skip('Redis unreachable')
     log = tmp_path / 'gossip.log'
     observer = start('redis', directory=tmp_path / 'observer',
                      env_extra={'CELERY_RS_TEST_GOSSIP_LOG': str(log)})
@@ -399,15 +369,12 @@ def test_gossip_sees_reference_worker_join_and_leave(tmp_path):
             lambda: any(f'{kind} ' in log.read_text()
                         for kind in ('node_leave', 'node_lost')),
             timeout=TIMEOUT), log.read_text()
-        # Il gossip continua a funzionare: il worker risponde ancora.
+        # Check that gossip remains usable.
         assert wait_ping(observer)
     finally:
         stop_all([worker for worker in (observer, guest) if worker])
 
 
-# ---------------------------------------------------------------------------
-# riconnessione: il pidbox torna a rispondere
-# ---------------------------------------------------------------------------
 
 def test_pidbox_responds_after_broker_reconnect(dedicated):
     worker = dedicated('redis')
@@ -417,21 +384,13 @@ def test_pidbox_responds_after_broker_reconnect(dedicated):
         killed = kill_redis_consumer(worker.db)
     else:
         killed = rabbit_kill_consumer(worker.queue)
-    assert killed, 'nessuna connessione del consumer da chiudere'
+    assert killed, 'no consumer connection to close'
 
     assert wait_ping(worker, timeout=40), worker.log()[-4000:]
 
 
-# ---------------------------------------------------------------------------
-# moduli del master
-# ---------------------------------------------------------------------------
 
-#: Moduli che il master non deve caricare per parlare col broker. `kombu.connection`
-#: e `amqp` restano importati da `kombu.common`/`kombu.exceptions` (il worker
-#: importa `ignore_errors`/`QoS` da kombu come il riferimento): la parte pesante
-#: (client del broker, trasporto kombu, pidbox) non c'è più.
-#: ``kombu.pidbox`` non è più evitabile: la decisione 08b vuole un vero
-#: ``kombu.pidbox.Mailbox`` anche in ``app.control`` (niente segnaposto).
+# Real kombu objects require amqp, kombu.connection and pidbox; broker clients and transports remain avoidable.
 FORBIDDEN_MASTER_MODULES = {
     'redis',
     'kombu.transport.redis',
@@ -444,7 +403,7 @@ FORBIDDEN_MASTER_MODULES = {
 @pytest.mark.parametrize('pool', ['solo', 'prefork'])
 def test_master_does_not_import_broker_modules(tmp_path, pool):
     if not broker_available('redis'):
-        pytest.skip('redis non raggiungibile')
+        pytest.skip('Redis unreachable')
     state = tmp_path / 'modules.json'
     worker = start('redis', pool=pool, concurrency=2,
                    directory=tmp_path / 'worker',

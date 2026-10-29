@@ -12,9 +12,7 @@ from .text import simple_format
 if TYPE_CHECKING:
     from kombu.entity import Queue
 
-#: Nome dell'exchange delle worker direct queues (l'oggetto `kombu.Exchange`
-#: si crea al primo uso: importare `kombu.entity` caricherebbe anche
-#: `kombu.connection` nel master del worker).
+# Create the exchange lazily to avoid importing kombu.connection in the master.
 WORKER_DIRECT_EXCHANGE_NAME = 'C.dq2'
 
 #: Format for worker direct queue names.
@@ -40,7 +38,7 @@ __all__ = (
 
 
 def __getattr__(name):
-    """``WORKER_DIRECT_EXCHANGE`` creato al primo accesso (PEP 562)."""
+    """Create ``WORKER_DIRECT_EXCHANGE`` on first access (PEP 562)."""
     if name == 'WORKER_DIRECT_EXCHANGE':
         from kombu.entity import Exchange
         return Exchange(WORKER_DIRECT_EXCHANGE_NAME)

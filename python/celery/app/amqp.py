@@ -19,12 +19,12 @@ from . import routes as _routes
 
 try:
     from _celery_rs import saferepr as _rs_saferepr
-except ImportError:  # pragma: no cover - senza estensione nativa
+except ImportError:  # pragma: no cover - native extension unavailable
     _rs_saferepr = None
 
 
 def _task_repr(obj, maxsize, maxlevels):
-    """`saferepr` nativo quando c'è, altrimenti quello Python (stessa resa)."""
+    """Use native ``saferepr`` when available, with the same Python fallback output."""
     if _rs_saferepr is None:
         return saferepr(obj, maxsize, maxlevels=maxlevels)
     return _rs_saferepr(obj, maxsize, maxlevels)
@@ -340,7 +340,7 @@ class AMQP:
     def TaskConsumer(self, channel, queues=None, accept=None, **kw):
         if accept is None:
             accept = self.app.conf.accept_content
-        # Worker `-P solo`: sottoscrizione, prefetch e ack dal core Rust.
+        # Solo workers use Rust for subscriptions, prefetch and acknowledgements.
         from celery.worker._rs_consumer import RsConnection, RsTaskConsumer
 
         if isinstance(channel, RsConnection):
@@ -531,8 +531,7 @@ class AMQP:
         sent_receivers = signals.task_sent.receivers   # XXX compat (remove 6.0)
 
         def default_evd():
-            # Solo `task_send_sent_event` usa il dispatcher: crearlo sempre
-            # importa `celery.events` (e kombu.mixins) a ogni publish.
+            # Only task_send_sent_event needs the dispatcher; otherwise avoid loading celery.events for each publish.
             return self._event_dispatcher
 
         default_exchange = self.default_exchange
@@ -679,8 +678,7 @@ class AMQP:
             from . import _rs_producer
             connection = _rs_producer.fast_connection(self.app)
             if connection is not None:
-                # `app.pool` registra l'after-fork dell'app: il percorso veloce
-                # non lo crea (importerebbe il trasporto), quindi lo fa qui.
+                # Register the app's fork callback here because the fast path never creates app.pool.
                 self.app._ensure_after_fork()
                 self._producer_pool = _rs_producer.FastProducerPool(
                     connection, limit=_rs_producer.pool_limit(self.app))

@@ -1,4 +1,4 @@
-"""Descrittori del figlio e recupero delle pagine libere all'avvio (10c)."""
+"""Child descriptors and free-page reclamation at startup."""
 import json
 import os
 from pathlib import Path
@@ -71,8 +71,7 @@ finally:
 
 
 def test_worker_reclaims_startup_pages_without_changing_task_state(tmp_path):
-    # La sonda attraversa il loop vero, anche nelle riconnessioni; l'override
-    # registra il trim e delega sempre alla funzione nativa.
+    # Probe the real loop, including reconnects; the override records trims and delegates to the native function.
     module = tmp_path / 'trim_app.py'
     module.write_text('''
 import gc, json, os, signal

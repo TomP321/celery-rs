@@ -18,12 +18,7 @@ debug, error, info = logger.debug, logger.error, logger.info
 
 
 class _RsNode:
-    """``kombu.pidbox.Node`` senza importare kombu: decide e risponde come lui.
-
-    La logica di ``handle_message``/``dispatch``/``handle`` è quella del
-    riferimento; cambia solo ``reply``, che pubblica dal producer Rust invece
-    di aprire un canale kombu.
-    """
+    """Pidbox node that replies through the Rust producer."""
 
     hostname = None
     mailbox = None
@@ -98,7 +93,7 @@ class _RsNode:
         if publish is not None:
             publish(data, exchange, routing_key, ticket, self.mailbox.clock)
             return
-        self.mailbox._publish_reply(  # pragma: no cover - percorso kombu
+        self.mailbox._publish_reply(  # pragma: no cover - kombu path
             data, exchange, routing_key, ticket,
             channel=self.channel, serializer=self.mailbox.serializer)
 

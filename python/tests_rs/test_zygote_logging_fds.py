@@ -1,4 +1,4 @@
-"""I log del figlio non devono finire su fd riciclati per il broker."""
+"""Prevent child logs from reaching descriptors reused for broker sockets."""
 import json
 from pathlib import Path
 import subprocess

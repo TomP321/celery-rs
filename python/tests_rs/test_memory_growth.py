@@ -1,4 +1,4 @@
-"""La diagnostica resta opzionale e separa memoria Python e nativa."""
+"""Optional diagnostics separating Python and native memory."""
 import importlib.util
 from pathlib import Path
 import pickle
@@ -18,7 +18,7 @@ def test_soak_interpreter_follows_impl(monkeypatch, tmp_path):
 
     def spawn(command, **kwargs):
         commands.append(command)
-        raise RuntimeError('arresto prima di creare processi')
+        raise RuntimeError('stop before creating processes')
 
     monkeypatch.setattr(module, 'OUT', tmp_path)
     monkeypatch.setattr(module.subprocess, 'Popen', spawn)

@@ -1,8 +1,4 @@
-"""Producer Rust: percorso veloce, retry, fork e concorrenza.
-
-Eseguiti con ``.venv-rs`` (pacchetto celery-rs completo) su Redis
-``127.0.0.1:6390``; il broker è configurabile con ``CELERY_RS_TEST_REDIS``.
-"""
+"""Rust producer tests for publishing, retry, fork and concurrency against Redis."""
 from __future__ import annotations
 
 import os
@@ -24,7 +20,7 @@ AMQP_URL = os.environ.get('CELERY_RS_AMQP_URL', os.environ.get('CELERY_RS_TEST_A
 
 
 def with_db(url, db):
-    """Stesso broker su un altro database Redis."""
+    """Use the same broker with a different Redis database."""
     base = url.split('?', 1)[0].rstrip('/')
     head, _, tail = base.rpartition('/')
     if tail.isdigit():
@@ -45,7 +41,7 @@ def redis_client(url=REDIS_URL):
 
 
 def make_app(queue=None, **conf):
-    """App con una coda dedicata e senza result backend sul percorso caldo."""
+    """Create an app with a dedicated queue and no result backend on the hot path."""
     queue = queue or unique('producer')
     app = Celery('rs-producer', broker=REDIS_URL, backend=BACKEND_URL,
                  set_as_current=False)
@@ -68,7 +64,7 @@ def make_app(queue=None, **conf):
 
 
 def queue_size(queue):
-    """Messaggi in coda, come li conta il trasporto virtuale di kombu."""
+    """Count queued messages as kombu's virtual transport does."""
     conn = KombuConnection(REDIS_URL)
     try:
         channel = conn.default_channel
@@ -82,14 +78,14 @@ def broker():
     client = redis_client()
     try:
         client.ping()
-    except Exception as exc:  # pragma: no cover - infra non disponibile
-        pytest.skip(f'Redis non raggiungibile su {REDIS_URL}: {exc}')
+    except Exception as exc:  # pragma: no cover - infrastructure unavailable
+        pytest.skip(f'Redis unreachable su {REDIS_URL}: {exc}')
     return client
 
 
 @pytest.fixture(autouse=True)
 def clean_stats():
-    """I contatori sono globali al processo: i test usano solo differenze."""
+    """Compare counter deltas because counters are process-global."""
     yield
 
 
@@ -113,14 +109,14 @@ def test_producer_exposes_kombu_connection_without_opening_it():
     with app.producer_or_acquire() as producer:
         assert isinstance(producer, RsProducer)
         assert isinstance(producer.connection, KombuConnection)
-        # Nessun canale kombu finché non lo si chiede esplicitamente.
+        # Do not open a kombu channel until requested.
         assert producer._channel is producer.connection
         assert producer.connection.connected is False
     app.close()
 
 
 def test_wire_scenarios_publish_through_rust(monkeypatch):
-    """Gli scenari di `compat wire` usano davvero il percorso Rust."""
+    """Check that compat wire scenarios use the Rust path."""
     import sys
     from pathlib import Path
 
@@ -131,8 +127,8 @@ def test_wire_scenarios_publish_through_rust(monkeypatch):
     finally:
         sys.path.pop(0)
 
-    def boom(*args, **kwargs):  # pragma: no cover - fallisce solo se chiamata
-        raise AssertionError('publish passato da kombu invece che da Rust')
+    def boom(*args, **kwargs):  # pragma: no cover - must not be called
+        raise AssertionError('publish went through kombu instead of Rust')
 
     monkeypatch.setattr(KombuProducer, 'publish', boom)
 
@@ -151,7 +147,7 @@ def test_wire_scenarios_publish_through_rust(monkeypatch):
 
 
 def test_retry_matches_kombu_on_unreachable_broker(monkeypatch):
-    """Stessa eccezione e stesso numero di tentativi del riferimento."""
+    """Compare exceptions and retry counts with the reference."""
     import kombu.utils.functional as functional
 
     sleeps = []
@@ -192,7 +188,7 @@ def test_after_fork_child_publishes_and_parent_keeps_working():
     try:
         add.apply_async((1, 1), task_id=str(uuid.uuid4()))
         pid = os.fork()
-        if pid == 0:  # pragma: no cover - processo figlio
+        if pid == 0:  # pragma: no cover - child process
             code = 0
             try:
                 add.apply_async((2, 2), task_id=str(uuid.uuid4()))
@@ -229,7 +225,7 @@ def test_prefork_pool_child_publishes():
     billiard = pytest.importorskip('billiard')
     app, add, queue = make_app()
     try:
-        # Il padre crea una connessione Rust prima del fork.
+        # Create a Rust connection in the parent before fork.
         add.apply_async((1, 1), task_id=str(uuid.uuid4()))
         with billiard.Pool(processes=1) as pool:
             pool.apply(_child_publish, (REDIS_URL, queue))
@@ -249,7 +245,7 @@ def test_concurrent_publish_from_sixteen_threads():
             for value in range(25):
                 add.apply_async((index, value),
                                 task_id=str(uuid.uuid4()))
-        except BaseException as exc:  # pragma: no cover - solo su errore
+        except BaseException as exc:  # pragma: no cover - error path
             errors.append(exc)
 
     threads = [threading.Thread(target=work, args=(index,)) for index in range(16)]
@@ -278,7 +274,7 @@ def test_env_disables_fast_producer(monkeypatch):
 
 
 def test_task_repr_maxlevels_unlimited():
-    """`task_repr_maxlevels` può essere None o 0 (nessun limite), come nel riferimento."""
+    """Accept None or zero for unlimited ``task_repr_maxlevels``, as the reference does."""
     for maxlevels in (None, 0):
         app, _, _ = make_app(task_repr_maxlevels=maxlevels)
         try:
@@ -301,9 +297,6 @@ def test_use_fast_producer_rejects_unsupported_connections():
     assert use_fast_producer(KombuConnection(AMQP_URL))
 
 
-# ---------------------------------------------------------------------------
-# 1. memoria: il percorso veloce non importa redis-py / py-amqp
-# ---------------------------------------------------------------------------
 
 IMPORT_PROBE = '''
 import json, sys
@@ -322,7 +315,7 @@ CLIENT_MODULES = ('redis', 'kombu.transport.redis', 'kombu.transport.pyamqp',
 
 @pytest.mark.parametrize('broker', [REDIS_URL, AMQP_URL], ids=['redis', 'amqp'])
 def test_fast_path_does_not_import_client_libraries(broker, tmp_path):
-    """Nessun import di redis-py/py-amqp sul percorso Rust (sottoprocesso pulito)."""
+    """Check Rust transport imports in a fresh subprocess."""
     import json
     import subprocess
     import sys
@@ -334,8 +327,7 @@ def test_fast_path_does_not_import_client_libraries(broker, tmp_path):
     )
     loaded = set(json.loads(result.stdout.strip().splitlines()[-1]))
     assert not (loaded & set(CLIENT_MODULES)), loaded
-    # `amqp` (py-amqp) è già importato da `kombu.exceptions` quando si importa
-    # `celery`, sia nel riferimento sia in celery-rs: non è un import nostro.
+    # Both packages import amqp through kombu.exceptions; it is not introduced by the Rust path.
     assert 'amqp' in loaded
 
 
@@ -344,7 +336,7 @@ def test_broker_url_always_states_heartbeat_for_amqp():
     try:
         connection = _rs_producer.fast_connection(app)
         url = _rs_producer._broker_url(connection)
-        # None → 0 esplicito, come py-amqp; lapin poi negozia col server.
+        # Match py-amqp: map None to explicit zero before lapin negotiates with the server.
         assert 'heartbeat=0' in url
     finally:
         app.close()
@@ -352,9 +344,6 @@ def test_broker_url_always_states_heartbeat_for_amqp():
     assert 'heartbeat=2' in _rs_producer._broker_url(conn)
 
 
-# ---------------------------------------------------------------------------
-# 2. prestazioni: la chiave della connessione nativa è calcolata una volta
-# ---------------------------------------------------------------------------
 
 def test_native_key_is_computed_once_per_producer(monkeypatch):
     app, add, queue = make_app()
@@ -379,12 +368,9 @@ def test_native_key_is_computed_once_per_producer(monkeypatch):
         app.close()
 
 
-# ---------------------------------------------------------------------------
-# 3. retry: gli errori di canale non recuperabili non vengono ritentati
-# ---------------------------------------------------------------------------
 
 def declare_exchange_with_kombu(name, kind, url=AMQP_URL):
-    """Dichiarazione con la libreria di riferimento (py-amqp)."""
+    """Declare with the reference py-amqp library."""
     from kombu import Exchange
 
     conn = KombuConnection(url)
@@ -422,10 +408,10 @@ def test_precondition_failed_matches_kombu_and_is_not_retried():
             return exc
         finally:
             conn.release()
-        raise AssertionError('il riferimento non ha sollevato')
+        raise AssertionError('reference did not raise')
 
     ref_exc = reference_error()
-    # Messaggio identico: stesso exchange, stessa vhost.
+    # Use the same exchange and vhost for identical messages.
     delete_exchange_with_kombu(exchange)
     topic_app = Celery('rev-topic', broker=AMQP_URL, backend=None,
                        set_as_current=False)
@@ -438,7 +424,7 @@ def test_precondition_failed_matches_kombu_and_is_not_retried():
             task_default_exchange_type='direct',
             task_default_queue=unique('revqd'),
         )
-        # Prima dichiarazione con il nostro percorso (direct).
+        # Declare a direct exchange through Rust first.
         direct_app.send_task('x', args=(1,), task_id=str(uuid.uuid4()))
 
         topic_app.conf.update(
@@ -457,7 +443,7 @@ def test_precondition_failed_matches_kombu_and_is_not_retried():
         with pytest.raises(type(ref_exc)) as ours:
             topic_app.send_task('x', args=(1,), task_id=str(uuid.uuid4()))
         elapsed = time.monotonic() - started
-        assert _rs_producer.stats()['retries'] == before  # nessun retry
+        assert _rs_producer.stats()['retries'] == before  # No retry.
         assert elapsed < 0.5
         assert str(ours.value) == str(ref_exc)
         assert ours.value.args == ref_exc.args
@@ -467,13 +453,10 @@ def test_precondition_failed_matches_kombu_and_is_not_retried():
         delete_exchange_with_kombu(exchange)
 
 
-# ---------------------------------------------------------------------------
-# 4. messaggi di errore identici al riferimento
-# ---------------------------------------------------------------------------
 
 def reference_connection_error(url, transport_options=None, connect_timeout=5):
     options = dict(transport_options or {})
-    # Come il publish senza retry: una sola connessione, un solo tentativo.
+    # Match publish without retry: one connection and one attempt.
     options.setdefault('max_retries', 0)
     conn = KombuConnection(url, transport_options=options,
                            connect_timeout=connect_timeout)
@@ -484,7 +467,7 @@ def reference_connection_error(url, transport_options=None, connect_timeout=5):
         return str(exc)
     finally:
         conn.release()
-    raise AssertionError('il riferimento non ha sollevato')
+    raise AssertionError('reference did not raise')
 
 
 def rust_connection_error(url, transport_options=None, connect_timeout=5):
@@ -516,9 +499,6 @@ def test_connection_error_messages_match_kombu(label, url, options, timeout):
     assert ours == reference, label
 
 
-# ---------------------------------------------------------------------------
-# 5. heartbeat AMQP: connessione viva dopo un periodo di riposo
-# ---------------------------------------------------------------------------
 
 RABBIT_API = os.environ.get('CELERY_RS_RABBIT_API', 'http://127.0.0.1:15673/api')
 
@@ -550,7 +530,7 @@ def rabbit_wait_connection(name, timeout=10):
         if found:
             return found[0]
         time.sleep(0.2)
-    raise AssertionError(f'connessione {name!r} non visibile nel management API')
+    raise AssertionError(f'connection {name!r} not visible in management API')
 
 
 def test_heartbeat_keeps_amqp_connection_alive_while_idle():
@@ -566,10 +546,9 @@ def test_heartbeat_keeps_amqp_connection_alive_while_idle():
         assert before['timeout'] == 2
         connected_at = before['connected_at']
 
-        time.sleep(10)  # 5 intervalli senza pubblicare
+        time.sleep(10)  # Five intervals without publishing.
 
-        # Senza retry: se la connessione fosse stata chiusa da RabbitMQ
-        # fallirebbe subito con "no heartbeat received".
+        # Without retry, a RabbitMQ heartbeat disconnect would fail immediately.
         producer.publish({'a': 1}, routing_key=name)
         after = rabbit_wait_connection(name)
         assert after['connected_at'] == connected_at
@@ -585,13 +564,9 @@ def test_heartbeat_keeps_amqp_connection_alive_while_idle():
             conn.release()
 
 
-# ---------------------------------------------------------------------------
-# 6. connessione morta: scartata anche senza retry
-# ---------------------------------------------------------------------------
 
 def test_dead_redis_connection_is_discarded_without_retry():
-    # Un database dedicato: la connessione Rust è nuova (chiave URL diversa),
-    # quindi il diff di CLIENT LIST identifica solo i suoi socket.
+    # A dedicated database gives Rust a new URL cache key, isolating its sockets in CLIENT LIST.
     url = with_db(REDIS_URL, 14)
     queue = unique('killq')
     app = Celery('kill', broker=url, backend=None, set_as_current=False)
@@ -657,7 +632,7 @@ def test_dead_amqp_connection_is_discarded_without_retry():
             else:
                 break
         assert errors <= 1
-        publish()  # deve riconnettere
+        publish()  # Must reconnect.
     finally:
         app.close()
         conn = KombuConnection(AMQP_URL)

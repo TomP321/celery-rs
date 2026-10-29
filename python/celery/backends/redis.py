@@ -37,7 +37,7 @@ __all__ = ('RedisBackend', 'SentinelBackend')
 
 
 class LazyErrors:
-    """Tupla di errori di connessione risolta al primo errore."""
+    """Connection error tuple resolved on the first error."""
 
     __slots__ = ('_factory',)
 
@@ -50,7 +50,7 @@ class LazyErrors:
     def __eq__(self, other):
         try:
             return self.resolve() == other
-        except Exception:  # pragma: no cover - risoluzione impossibile
+        except Exception:  # pragma: no cover - resolution failure
             return NotImplemented
 
     def __ne__(self, other):
@@ -62,12 +62,7 @@ def retry_over_time(fun, catch, args=None, kwargs=None, errback=None,
                      max_retries=None, interval_start=2, interval_step=2,
                      interval_max=30, callback=None, timeout=None,
                      sleep=time.sleep, now=time.time):
-    """``kombu.utils.functional.retry_over_time`` con ``catch`` pigro.
-
-    Identica semantica (stessi intervalli, stesso errback), ma ``catch`` può
-    essere un :class:`LazyErrors`: la tupla vera si risolve solo quando
-    un'eccezione viene davvero alzata.
-    """
+    """Retry as ``kombu.utils.functional.retry_over_time`` with lazy ``catch``."""
     kwargs = {} if not kwargs else kwargs
     args = [] if not args else args
     interval_range = (
@@ -107,13 +102,7 @@ logger = get_logger(__name__)
 
 
 def _lazy_module(name):
-    """Modulo segnaposto che importa ``name`` al primo attributo usato.
-
-    Serve a non caricare redis-py (e quindi ``redis.connection``/
-    ``redis.sentinel``) quando il backend usa il client Rust. Il tipo si chiama
-    ``module`` come un modulo vero: la superficie pubblica di questo modulo
-    (``compat api``) continua a vedere un modulo.
-    """
+    """Import a module on its first attribute access."""
     def __getattr__(self, attr):
         if attr.startswith('__') and attr.endswith('__'):
             raise AttributeError(attr)
@@ -127,7 +116,7 @@ _SSL_CLASS_LOCK = threading.RLock()
 
 def _ssl_after_fork():
     global _SSL_CLASS_LOCK
-    # Il thread che possedeva il lock potrebbe non esistere nel figlio.
+    # The thread owning the inherited lock may no longer exist.
     _SSL_CLASS_LOCK = threading.RLock()
 
 
@@ -142,7 +131,7 @@ def _sentinel_ssl_connection_class():
 
 def _load_sentinel_ssl_connection_class():
     if 'SentinelManagedSSLConnection' not in globals():
-        # Definizione nel namespace reale, senza classi segnaposto né nomi riscritti.
+        # Define in the real namespace to preserve object identity.
         exec(compile(_SENTINEL_SSL_CLASS, __file__, 'exec'), globals())
     return globals()['SentinelManagedSSLConnection']
 
@@ -162,7 +151,7 @@ class SentinelManagedSSLConnection(SentinelManagedConnection, SSLConnection):
 
 
 class _RedisSSLClass:
-    """Risolve la classe reale soltanto se viene richiesta una connessione TLS."""
+    """Resolve the real class only when a TLS connection is requested."""
 
     def __init__(self, sentinel=False):
         self.sentinel = sentinel
@@ -205,7 +194,7 @@ def _get_redis_error_classes():
 
 
 def _is_ssl_class(cls):
-    """Controlla le classi reali senza caricare redis-py per backend non TLS."""
+    """Check real classes without loading redis-py for non-TLS backends."""
     module = sys.modules.get('redis')
     return module is not None and issubclass(cls, module.SSLConnection)
 
@@ -303,8 +292,7 @@ class ResultConsumer(BaseResultConsumer):
 
     @property
     def _connection_errors(self):
-        # Risolte solo quando serve davvero (nessun import di redis-py
-        # all'avvio con il client Rust).
+        # Defer redis-py imports while the Rust client is active.
         override = self.__dict__.get('_connection_errors_override')
         if override is not None:
             return override
@@ -464,10 +452,7 @@ class ResultConsumer(BaseResultConsumer):
         # parser or buffer; it only waits on the raw socket.
         # Capped: poll() is not woken when a reconnect closes this socket.
         wait = 1.0 if timeout is None else min(timeout, 1.0)
-        # Lo shim Rust non espone un socket Python: attende sul proprio
-        # stream tokio con la stessa semantica (un messaggio letto viene
-        # bufferizzato per il successivo _drain_one). Il ramo redis-py resta
-        # identico.
+        # Wait on the Rust stream, buffering any read message for _drain_one; no Python socket exists.
         if getattr(pubsub, '_celery_rs_shim', False) is True:
             return pubsub.wait_readable(wait)
         if not pubsub.subscribed:
@@ -565,7 +550,7 @@ class RedisBackend(BaseKeyValueStoreBackend, AsyncBackendMixin):
 
     ResultConsumer = ResultConsumer
 
-    #: :pypi:`redis` client module (lazy: il client Rust non lo carica).
+    # Redis client module, loaded only on demand.
     redis = redis
     connection_class_ssl = (redis.SSLConnection if 'redis' in sys.modules
                             else _RedisSSLClass())
@@ -703,9 +688,7 @@ class RedisBackend(BaseKeyValueStoreBackend, AsyncBackendMixin):
         # Add driver identification for redis-py
         self._add_driver_info()
 
-        # Le classi di errore di redis-py (usate da `ensure`, dal result
-        # consumer e da `error_safe_to_retry`) vengono risolte solo al primo
-        # uso: finché si usa il client Rust non serve importare redis-py.
+        # Resolve redis-py error classes only when needed by error handling.
         self._extra_connection_errors = ()
         transport_options = self.app.conf.get(
             'result_backend_transport_options', {})
@@ -753,7 +736,7 @@ class RedisBackend(BaseKeyValueStoreBackend, AsyncBackendMixin):
         )
 
     def _error_classes(self):
-        """``(connection_errors, channel_errors)`` risolte al primo uso."""
+        """Resolve ``(connection_errors, channel_errors)`` on first use."""
         classes = self.__dict__.get('_error_classes_cache')
         if classes is None:
             classes = _get_redis_error_classes()
@@ -764,8 +747,7 @@ class RedisBackend(BaseKeyValueStoreBackend, AsyncBackendMixin):
         return classes
 
     def __getattr__(self, name):
-        # Attributi lazy: se impostati (o se la classe li definisce) non si
-        # arriva qui. `dir()` non li elenca, come nel riferimento.
+        # Lazy attributes reach here only when unset; keep them out of dir() as in the reference.
         if name == 'connection_errors':
             return self._error_classes()[0]
         if name == 'channel_errors':
@@ -848,7 +830,7 @@ class RedisBackend(BaseKeyValueStoreBackend, AsyncBackendMixin):
         return connparams
 
     def _will_use_rs(self):
-        """True se questo backend userà il client Rust (niente redis-py)."""
+        """Return whether this backend will use the Rust client."""
         if type(self) is not RedisBackend:
             return False
         from . import _rs_redis
@@ -863,8 +845,7 @@ class RedisBackend(BaseKeyValueStoreBackend, AsyncBackendMixin):
         from celery import __version__
 
         if self._will_use_rs():
-            # Il client Rust ignora questi parametri: non serve importare
-            # redis-py solo per leggerne la versione.
+            # Rust ignores these parameters; avoid importing redis-py just to read its version.
             self.connparams['lib_name'] = f'redis-py(celery_v{__version__})'
             self.connparams['lib_version'] = 'unknown'
             return
@@ -913,8 +894,7 @@ class RedisBackend(BaseKeyValueStoreBackend, AsyncBackendMixin):
     def ensure(self, fun, args, **policy):
         retry_policy = dict(self.retry_policy, **policy)
         max_retries = retry_policy.get('max_retries')
-        # `connection_errors` importa `kombu.transport.redis` (e redis-py): sul
-        # percorso felice, dove il client è quello Rust, non serve.
+        # Resolving connection_errors imports redis-py; avoid it on the successful Rust path.
         return retry_over_time(
             fun, LazyErrors(lambda: self.connection_errors), args, {},
             partial(self.on_connection_error, max_retries),
@@ -1119,12 +1099,7 @@ class RedisBackend(BaseKeyValueStoreBackend, AsyncBackendMixin):
         )
 
     def _create_rs_client(self, **params):
-        """Client Rust quando il backend è esattamente ``RedisBackend``.
-
-        ``SentinelBackend`` (e le sottoclassi) e i test che sostituiscono
-        ``Backend.redis`` restano su redis-py: lì il pool non è quello
-        standard e il comportamento deve restare identico.
-        """
+        """Use Rust for the standard ``RedisBackend``; preserve custom and Sentinel clients."""
         if type(self) is not RedisBackend:
             return None
         from . import _rs_redis
@@ -1133,7 +1108,7 @@ class RedisBackend(BaseKeyValueStoreBackend, AsyncBackendMixin):
         try:
             return _rs_redis.RsRedis(**params)
         except (TypeError, ValueError):
-            # Configurazione che il core non sa costruire: decide redis-py.
+            # Delegate unsupported configuration to redis-py.
             return None
 
     def _get_client(self):

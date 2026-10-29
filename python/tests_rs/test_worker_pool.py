@@ -1,11 +1,4 @@
-"""Pool di processi Rust (spec 05b): zygote + figli Python.
-
-Eseguito con ``.venv-rs`` contro Redis reale. Il pool viene pilotato
-direttamente con ``Request`` del riferimento (messaggi costruiti con
-``AMQP.as_task_v2``) e un backend Redis vero; gli stessi scenari girano anche
-con ``celery.concurrency.prefork.TaskPool`` per confrontare risultati,
-callback ed eccezioni con billiard.
-"""
+"""Rust pool and billiard behavior compared through Requests and a Redis backend."""
 
 from __future__ import annotations
 
@@ -32,12 +25,12 @@ from celery.worker.request import Request
 
 
 def unwrap(exc):
-    """Le eccezioni del pool arrivano avvolte in ``ExceptionWithTraceback``."""
+    """Unwrap pool exceptions from ``ExceptionWithTraceback``."""
     return getattr(exc, 'exc', exc)
 
 ROOT = Path(__file__).resolve().parents[2]
 REDIS_URL = os.environ.get('CELERY_RS_REDIS_URL', os.environ.get('CELERY_RS_TEST_REDIS', 'redis://127.0.0.1:6390'))
-# Database dedicato: non interferire con gli altri test (0/1/8/9).
+# Use a dedicated database to avoid other tests' databases.
 BACKEND_URL = REDIS_URL.rsplit('/', 1)[0] + '/11' if REDIS_URL.rsplit('/', 1)[-1].isdigit() \
     else REDIS_URL.rstrip('/') + '/11'
 HOSTNAME = 'w1@pool-test'
@@ -85,11 +78,10 @@ def lost_but_reject():
     return 'never'
 
 
-# -- helper ---------------------------------------------------------------
 
 
 def make_request(task, args=(), kwargs=None, **options):
-    """``Request`` del riferimento da un messaggio ``as_task_v2``."""
+    """Build a reference Request from an ``as_task_v2`` message."""
     task_id = options.pop('task_id', None) or uuid.uuid4().hex
     time_limit = options.pop('time_limit', None)
     soft_time_limit = options.pop('soft_time_limit', None)
@@ -118,7 +110,7 @@ def make_request(task, args=(), kwargs=None, **options):
 
 
 class Driver:
-    """Avvia il pool indicato e guida i callback come il loop del master."""
+    """Start the pool and drive callbacks as the master loop does."""
 
     def __init__(self, kind, concurrency=4, **options):
         self.kind = kind
@@ -162,7 +154,7 @@ class Driver:
                 return
             if time.monotonic() > deadline:
                 raise AssertionError(
-                    'job non completati: {}'.format(
+                    'jobs unfinished: {}'.format(
                         [result.ready() for _, result, _, _ in self.jobs]))
             self.tick()
 
@@ -185,12 +177,7 @@ class Driver:
         return meta['result']
 
     def wait_status(self, request, timeout=15):
-        """Attende che il callback del pool abbia scritto il risultato.
-
-        Per i fallimenti decisi dal master (hard timeout, worker perso) il
-        `_set` di billiard sveglia il risultato prima di eseguire
-        l'error_callback, quindi il backend può essere ancora PENDING.
-        """
+        """Wait for the callback to store the result after billiard wakes the result object."""
         deadline = time.monotonic() + timeout
         status = self.meta(request)['status']
         while status == 'PENDING' and time.monotonic() < deadline:
@@ -211,9 +198,7 @@ class Driver:
         return sorted(pid for pid in self.pool.info['processes'] if pid)
 
     def stop(self):
-        # billiard non ferma il TimeoutHandler in `Pool.join()` (solo in
-        # `terminate()`): con soft/hard time limit resterebbe un thread vivo
-        # per ogni pool, e i fork successivi dello zygote sarebbero rischiosi.
+        # Pool.join leaves billiard's TimeoutHandler alive; stop it before later zygote forks.
         inner = getattr(self.pool, '_pool', None)
         timeout_handler = getattr(inner, '_timeout_handler', None)
         try:
@@ -222,9 +207,7 @@ class Driver:
             if timeout_handler is not None:
                 timeout_handler.terminate()
                 timeout_handler.stop(5)
-            # Pool billiard già chiuso e atteso: il finalizzatore `_terminate_pool`
-            # rimasto registrato riscriverebbe sulla outqueue all'uscita
-            # dell'interprete e può fermarsi sul lock della coda (blocco a fine test).
+            # Remove the joined pool's finalizer to prevent an outqueue lock hang at interpreter shutdown.
             finalizer = getattr(inner, '_terminate', None)
             if finalizer is not None:
                 finalizer.cancel()
@@ -244,14 +227,13 @@ def test_concurrent_requests_results_and_callbacks(kind):
             index + index + 1 for index in range(8)]
         assert all(driver.value(request) == 'done'
                    for request, _, _, _ in failures)
-        # Callback `on_accepted`: pid e time_accepted come da billiard.
+        # Compare on_accepted pid and time_accepted with billiard.
         for request, result, ack, _ in jobs + failures:
             assert request.worker_pid is not None
             assert request.time_start is not None
             assert result.accepted()
             assert result.worker_pids() == [request.worker_pid]
-        # Con 8 job da 0.15s e -c 4 il pool deve eseguirli in parallelo
-        # (in serie sarebbero 1.2s).
+        # Eight 0.15-second jobs must run concurrently; serial execution would take 1.2 seconds.
         assert elapsed < 1.0
 
 
@@ -279,7 +261,7 @@ def test_soft_time_limit(kind):
         assert isinstance(error, SoftTimeLimitExceeded)
         assert driver.state(request) == 'FAILURE'
         assert result.ready()
-        # Il soft timeout non deve uccidere il figlio.
+        # A soft timeout must not kill the child.
         time.sleep(0.2)
         assert driver.pids() == before
 
@@ -294,7 +276,7 @@ def test_hard_time_limit_replaces_child(kind):
         assert isinstance(error, TimeLimitExceeded)
         assert driver.state(request) == 'FAILURE'
         assert driver.wait_until(lambda: driver.pids() != before, 10)
-        # Il pool resta utilizzabile dopo il rimpiazzo.
+        # The pool must remain usable after replacement.
         request2, result2, _, _ = driver.submit(add, (2, 2))
         driver.wait()
         assert driver.value(request2) == 4
@@ -338,7 +320,7 @@ def test_maxtasksperchild(kind):
         jobs = [driver.submit(whoami) for _ in range(6)]
         driver.wait()
         pids = [driver.value(request) for request, _, _, _ in jobs]
-        # Ogni figlio esegue al massimo 2 job e viene rimpiazzato.
+        # Replace each child after at most two jobs.
         assert all(pids.count(pid) <= 2 for pid in set(pids))
         assert len(set(pids)) >= 3
 
@@ -479,7 +461,7 @@ def test_worker_process_signals(kind, tmp_path):
 
 
 def test_pss_and_throughput_vs_prefork():
-    """PSS (master+zygote+figli) e job/s, riportati e confrontati."""
+    """Report and compare total pool PSS and jobs per second."""
     probe = Path(__file__).with_name('_pool_probe.py')
     results = {}
     for kind in ('rust', 'prefork'):
@@ -495,8 +477,7 @@ def test_pss_and_throughput_vs_prefork():
     assert rust['jobs'] == prefork['jobs'] == 1000
     assert rust['jobs_per_s'] > 100
     assert prefork['jobs_per_s'] > 100
-    # La memoria resta nello stesso ordine di grandezza (lo zygote è un
-    # processo in più nel conteggio PSS: i numeri sono riportati, non un gate).
+    # Report PSS rather than gating it: the Rust total includes an extra zygote process.
     assert rust['pss_idle_kb'] < prefork['pss_idle_kb'] * 2
     assert rust['pss_loaded_kb'] < prefork['pss_loaded_kb'] * 2
 
@@ -535,7 +516,7 @@ def backend_error_imports():
 
 
 def test_redis_error_imports_are_shared_by_pool_children():
-    # Un'interruzione del broker non deve importare redis/kombu in ogni figlio.
+    # Broker outages must not import redis or kombu in every child.
     with Driver('rust', concurrency=2) as driver:
         request, _, _, _ = driver.submit(backend_error_imports)
         driver.wait()

@@ -262,9 +262,7 @@ class Scheduler:
                              app.conf.beat_max_loop_interval or
                              self.max_interval)
         self.Producer = Producer or app.amqp.Producer
-        #: Il percorso Rust vale solo se il producer non è stato ridefinito:
-        #: una sottoclasse che espone `Producer` (django-celery-beat, redbeat)
-        #: resta su kombu anche quando punta alla stessa classe dell'app.
+        # Custom scheduler producers must retain kombu, even when they match the app's class.
         self._default_producer = (
             Producer is None and getattr(type(self), 'Producer', None) is None
         )
@@ -499,7 +497,7 @@ class Scheduler:
                 try:
                     from .app import _rs_producer
                     if _rs_producer.is_fast_connection(connection):
-                        # Il socket è nel core Rust, non nel descrittore kombu.
+                        # The socket belongs to Rust, not the kombu descriptor.
                         _rs_producer.release_connection(connection)
                     ignore_errors(connection, connection.release)
                 except Exception:
@@ -551,8 +549,7 @@ class Scheduler:
         connection = self.connection
         from .app import _rs_producer
         if _rs_producer.is_fast_connection(connection):
-            # Stessa politica di `ensure_connection`, ma la connessione la
-            # apre il core Rust (niente import di redis-py/py-amqp).
+            # Match ensure_connection retry policy without importing broker clients.
             return _rs_producer.ensure_connection(
                 connection, _error_handler,
                 self.app.conf.broker_connection_max_retries,
@@ -572,9 +569,7 @@ class Scheduler:
     def connection(self):
         from .app import _rs_producer
         if self.Producer is not self.app.amqp.Producer:
-            # Un Producer personalizzato (kombu) ha bisogno di una vera
-            # `kombu.Connection`: `maybe_channel` non riconosce il descrittore
-            # Rust e lo userebbe come canale.
+            # Custom kombu producers need a real Connection; they would treat the Rust descriptor as a channel.
             return self.app.connection_for_write()
         connection = _rs_producer.fast_connection(self.app)
         return connection if connection is not None \
@@ -697,8 +692,7 @@ class PersistentScheduler(Scheduler):
 
     def sync(self):
         if self._store is not None:
-            # Shelf.sync svuota la cache writeback: manteniamo le stesse
-            # voci usate dall'heap, senza deserializzarne una seconda copia.
+            # Shelf.sync clears its writeback cache; retain heap entries to avoid deserializing duplicates.
             entries = (self._store.cache.get('entries')
                        if isinstance(self._store, shelve.Shelf) else None)
             self._store.sync()

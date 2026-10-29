@@ -58,9 +58,7 @@ import threading
 from typing import TYPE_CHECKING
 
 
-#: Nomi pubblici che il riferimento importa da billiard/click/kombu: restano
-#: gli stessi oggetti, risolti al primo accesso (importare billiard e click
-#: nel processo client costa multiprocessing, subprocess e zipfile).
+# Resolve the original public objects lazily to avoid client imports of billiard and click dependencies.
 _LAZY_EXPORTS = {
     'OperationalError': ('kombu.exceptions', 'OperationalError'),
     'SoftTimeLimitExceeded': ('billiard.exceptions', 'SoftTimeLimitExceeded'),
@@ -75,7 +73,7 @@ _COMMAND_EXCEPTION_LOCK = threading.RLock()
 
 def _command_after_fork():
     global _COMMAND_EXCEPTION_LOCK
-    # Il thread che possedeva il lock potrebbe non esistere nel figlio.
+    # The thread owning the inherited lock may no longer exist.
     _COMMAND_EXCEPTION_LOCK = threading.RLock()
 
 
@@ -84,8 +82,7 @@ if hasattr(os, 'register_at_fork'):
 
 
 def _celery_command_exception():
-    # Eseguita nel namespace del modulo: nome e pickle restano quelli veri,
-    # senza importare click finché non viene richiesta l'eccezione della CLI.
+    # Define in the real namespace to preserve names and pickling without loading click early.
     with _COMMAND_EXCEPTION_LOCK:
         if 'CeleryCommandException' not in globals():
             exec(compile(_COMMAND_EXCEPTION, __file__, 'exec'), globals())
@@ -104,7 +101,7 @@ class CeleryCommandException(ClickException):
 """
 
 
-if TYPE_CHECKING:  # nomi risolti da __getattr__, per pyflakes
+if TYPE_CHECKING:  # Names resolved by __getattr__, for pyflakes.
     from billiard.exceptions import (SoftTimeLimitExceeded,  # noqa: F401
                                      Terminated, TimeLimitExceeded,
                                      WorkerLostError)

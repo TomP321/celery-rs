@@ -1,4 +1,4 @@
-"""Ereditarietà dei descrittori Python e stabilità dello zygote (10d)."""
+"""Python descriptor inheritance and zygote stability."""
 import json
 import os
 from pathlib import Path
@@ -125,7 +125,7 @@ import _celery_rs
 url = (os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390') + '/0'
        if sys.argv[1] == 'redis' else
        os.environ.get('CELERY_RS_AMQP_URL', 'amqp://guest:guest@127.0.0.1:5673//'))
-# Le risorse Python nascono sia prima sia dopo il runtime Rust.
+# Create Python resources both before and after the Rust runtime.
 stream = open('/dev/null')
 left, right = socket.socketpair()
 poller = select.epoll()
@@ -153,7 +153,7 @@ def inspect_fds():
         os.fstat(fd)
     left.sendall(b'x')
     assert right.recv(1) == b'x'
-    # Il nuovo runtime del figlio non deve essere chiuso da finalizer ereditati.
+    # Inherited finalizers must not close the child's new runtime.
     assert app.backend.client.get('zygote-native-missing-' + str(os.getppid())) is None
     return os.getpid()
 pool.start()
@@ -167,7 +167,7 @@ try:
             pool.wait(.01)
         pids.append(job.get())
     assert len(set(pids)) == 8
-    # La pulizia del figlio non deve deregistrare socket nell'epoll del padre.
+    # Child cleanup must not deregister sockets in the parent's epoll.
     connection.delete_queue('zygote-native-' + str(os.getpid()))
     assert app.backend.client.get('zygote-native-missing-' + str(os.getpid())) is None
     print(json.dumps(pids))
@@ -203,7 +203,7 @@ if pid == 0:
         __import__('traceback').print_exc()
         os._exit(1)
 os.close(read_fd)
-# Duplica sul numero esatto: nel figlio quel numero appartiene ancora a Python.
+# Reuse the exact descriptor number; the child still owns its Python resource there.
 stream.close()
 new_socket = socket.socket()
 if new_socket.fileno() != user_fd:

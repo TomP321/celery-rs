@@ -1,18 +1,4 @@
-"""Producer kombu-compatibile che pubblica con il core Rust.
-
-Sostituisce il percorso caldo ``apply_async`` → ``send_task`` → ``publish``:
-la serializzazione (``_celery_rs.json_dumps``), la compressione
-(``_celery_rs.compress``) e la pubblicazione (``_celery_rs.Connection``)
-avvengono in Rust, con lo stesso messaggio prodotto da kombu.
-
-Il producer espone la stessa interfaccia di :class:`kombu.Producer` usata da
-Celery: ``connection`` resta un normale :class:`kombu.Connection` (nessun
-socket e nessun import del trasporto finché non serve) e ``channel`` crea un
-canale kombu solo se qualcuno lo richiede (per esempio il backend ``rpc://``).
-
-Il percorso veloce è attivo per Redis/AMQP senza opzioni non supportate (vedi
-:func:`use_fast_producer`); ``CELERY_RS_PRODUCER=0`` lo disattiva.
-"""
+"""Kombu-compatible producer with Rust serialization, compression and transport."""
 from __future__ import annotations
 
 import os
@@ -37,18 +23,18 @@ from kombu.utils.url import as_url, parse_url
 
 from celery.utils.queue_arguments import to_rabbitmq_queue_arguments
 
-try:  # il pacchetto completo lo installa sempre; il riferimento no.
+try:  # The full package installs the extension; the reference may not.
     import _celery_rs
-except ImportError:  # pragma: no cover - solo senza estensione nativa
+except ImportError:  # pragma: no cover - native extension unavailable
     _celery_rs = None
 
 __all__ = ('RsProducer', 'FastProducerPool', 'FastConnection',
            'use_fast_producer', 'fast_connection', 'after_fork', 'stats')
 
-#: Variabile d'ambiente per tornare al producer di kombu.
+# Environment switch to restore the kombu producer.
 ENV_DISABLE = 'CELERY_RS_PRODUCER'
 
-#: Trasporti (schema URL → ``driver_type``) coperti dal core Rust.
+# URL schemes and driver types supported by Rust.
 _SCHEMES = {
     'redis': 'redis',
     'rediss': 'redis',
@@ -57,9 +43,7 @@ _SCHEMES = {
     'pyamqp': 'amqp',
 }
 
-#: Valori di default di ``kombu.transport.TRANSPORT_ALIASES``: se l'utente ha
-#: registrato un trasporto custom per lo stesso schema, il percorso Rust non
-#: è equivalente. Sono stringhe: confrontarle non importa nulla.
+# Custom transport aliases invalidate the Rust path; compare string aliases without importing transports.
 _DEFAULT_ALIASES = {
     'redis': 'kombu.transport.redis:Transport',
     'rediss': 'kombu.transport.redis:Transport',
@@ -70,8 +54,7 @@ _DEFAULT_ALIASES = {
 
 _SECURE_SCHEMES = frozenset({'rediss', 'amqps'})
 
-#: Opzioni di trasporto che il binding Rust sa applicare. Qualunque altra
-#: opzione lascia il producer su kombu: meglio lenti che diversi.
+# Unsupported transport options retain kombu to preserve behavior.
 _SUPPORTED_OPTIONS = {
     'redis': frozenset({
         'visibility_timeout', 'sep', 'priority_steps', 'queue_order_strategy',
@@ -83,15 +66,13 @@ _SUPPORTED_OPTIONS = {
     'amqp': frozenset({'connection_name', 'confirm_publish', 'qos_global'}),
 }
 
-#: Errori del binding Rust che valgono un nuovo tentativo: solo quelli di
-#: connessione. Gli errori di canale (es. PRECONDITION_FAILED) sono definitivi,
-#: come in kombu con py-amqp.
+# Retry connection errors only; channel errors such as PRECONDITION_FAILED are permanent, as in py-amqp.
 _RETRY_ERRORS = (ConnectionError, OSError)
 
-#: default del JSON di kombu: legge ``kombu.utils.json._encoders`` a ogni uso.
+# Kombu's JSON default reads its encoder registry on every call.
 _JSON_DEFAULT = JSONEncoder().default
 
-#: Contatori interni (verificati dai test: il publish passa davvero da Rust).
+# Counters let tests verify that publishing uses Rust.
 _STATS = {
     'connections': 0,
     'publishes': 0,
@@ -102,7 +83,7 @@ _STATS = {
 
 
 def stats():
-    """Copia dei contatori interni del percorso Rust."""
+    """Copy internal Rust producer counters."""
     return dict(_STATS)
 
 
@@ -114,15 +95,13 @@ def _enabled():
 
 
 def _scheme_is_fast(scheme):
-    """Schema supportato e ancora mappato al trasporto di default di kombu."""
+    """Check that the scheme still maps to kombu's default transport."""
     if not isinstance(scheme, str):
         return False
     scheme = scheme.lower()
     if scheme not in _DEFAULT_ALIASES:
         return False
-    # Nessun import: il valore di default è una stringa. Se `kombu.transport`
-    # non è ancora stato importato nessun alias custom può essere registrato;
-    # altrimenti si confronta la tabella (il pacchetto è già in memoria).
+    # Custom aliases require kombu.transport to be loaded; otherwise the default string alias suffices.
     import sys
     transport = sys.modules.get('kombu.transport')
     if transport is None:
@@ -131,12 +110,12 @@ def _scheme_is_fast(scheme):
 
 
 def driver_type_of(connection):
-    """``transport.driver_type`` senza istanziare il trasporto."""
+    """Read ``transport.driver_type`` without creating the transport."""
     return _SCHEMES[(connection.transport_cls or '').lower()]
 
 
 def connection_driver_type(connection):
-    """``transport.driver_type``, senza importare il trasporto per FastConnection."""
+    """Read ``transport.driver_type`` without importing the transport for FastConnection."""
     if isinstance(connection, FastConnection):
         return connection.driver_type
     return connection.transport.driver_type
@@ -149,26 +128,26 @@ def _options_are_fast(driver, options):
 def _ssl_is_fast(scheme, ssl):
     if not ssl:
         return True
-    # TLS supportato solo con lo schema già sicuro e senza opzioni custom.
+    # TLS requires a secure scheme with no custom options.
     if scheme not in _SECURE_SCHEMES:
         return False
     return not (isinstance(ssl, dict) and ssl)
 
 
 def use_fast_producer(connection):
-    """True se *connection* può essere sostituita dal producer Rust."""
+    """Return whether the connection supports the Rust producer."""
     if not _enabled() or _celery_rs is None or connection is None:
         return False
     scheme = getattr(connection, 'transport_cls', None)
     if not _scheme_is_fast(scheme):
         return False
-    # Failover su più URL: il producer Rust ne gestisce una sola.
+    # Rust supports one URL, not multi-URL failover.
     if getattr(connection, 'alt', None):
         return False
     if not _ssl_is_fast(scheme.lower(), getattr(connection, 'ssl', None)):
         return False
     if getattr(connection, 'login_method', None):
-        # Il trasporto Rust usa solo PLAIN.
+        # Rust transport supports only PLAIN authentication.
         return False
     driver = _SCHEMES[scheme.lower()]
     options = getattr(connection, 'transport_options', None) or {}
@@ -176,31 +155,16 @@ def use_fast_producer(connection):
 
 
 class FastConnection(KombuConnection):
-    """``kombu.Connection`` costruita senza importare la classe del trasporto.
-
-    ``kombu.Connection(url)`` importa il modulo del trasporto solo per leggere
-    ``can_parse_url``: con i componenti già separati (host, porta, vhost)
-    otteniamo la stessa connessione lazy senza pagare redis-py o py-amqp.
-
-    ``send_task`` usa ``_reraise_as_library_errors`` anche quando pubblica dal
-    percorso Rust: qui la mappatura non richiede il trasporto (basta
-    ``OperationalError``, come fa kombu).
-    """
+    """Build a kombu connection from parsed components without importing its transport."""
 
     @property
     def driver_type(self):
-        """``transport.driver_type`` senza importare il trasporto."""
+        """Read ``transport.driver_type`` without importing the transport."""
         return _SCHEMES[(self.transport_cls or '').lower()]
 
     @property
     def connection_errors(self):
-        """Gli errori che il percorso Rust può sollevare, senza trasporto kombu.
-
-        Il riferimento ottiene la tupla da ``Transport.connection_errors``
-        (che importa redis-py/py-amqp); per ``ignore_errors`` e per il loop
-        bastano le classi comuni, e ``OperationalError`` resta quella del
-        riferimento.
-        """
+        """Return Rust connection errors without loading a kombu transport."""
         return (ConnectionError, OSError, kombu_exceptions.OperationalError)
 
     @property
@@ -208,7 +172,7 @@ class FastConnection(KombuConnection):
         return (kombu_exceptions.OperationalError,)
 
     def as_uri(self, include_password=False, mask='**', getfields=None):
-        """Come ``Connection.as_uri`` senza `self.transport` (nessun import)."""
+        """Format the connection URI without accessing ``self.transport``."""
         return as_url(
             self.transport_cls or '', self.hostname or 'localhost', self.port,
             self.userid, self.password, self.virtual_host,
@@ -216,13 +180,7 @@ class FastConnection(KombuConnection):
         )
 
     def release(self):
-        """Chiude senza istanziare il trasporto kombu.
-
-        `kombu.Connection._close` legge `self._transport`, che se assente
-        verrebbe creato (importando redis-py/py-amqp) solo per essere chiuso.
-        Sul percorso Rust il socket vive nella connessione nativa: qui si
-        azzerano solo i riferimenti lazy quando non c'è nulla da chiudere.
-        """
+        """Close lazy references without creating a kombu transport just to close it."""
         if (self._transport is None and self._connection is None
                 and self._default_channel is None):
             self.declared_entities.clear()
@@ -247,7 +205,7 @@ class FastConnection(KombuConnection):
 
 
 def _connection_params(app, url):
-    """Gli stessi argomenti che ``Celery._connection`` passa a kombu."""
+    """Build the arguments that ``Celery._connection`` passes to kombu."""
     conf = app.conf
     return {
         'hostname': url,
@@ -266,16 +224,11 @@ def _connection_params(app, url):
 
 
 def fast_connection(app, url=None):
-    """Come ``app.connection_for_write()`` ma senza importare il trasporto.
-
-    Restituisce ``None`` (e il chiamante usa kombu) se lo schema non è
-    supportato, se c'è failover su più URL o se le opzioni non sono mappabili.
-    """
+    """Build a write connection without importing its transport; return ``None`` if unsupported."""
     if not _enabled() or _celery_rs is None:
         return None
     if not _connection_not_overridden(app):
-        # Test/utenti che sostituiscono `app.connection_for_write` (mock,
-        # connessione custom): il percorso veloce non la userebbe.
+        # Respect custom or mocked app.connection_for_write implementations.
         return None
     url = url or app.conf.broker_write_url
     if not isinstance(url, str) or not url or ';' in url:
@@ -287,14 +240,13 @@ def fast_connection(app, url=None):
     if not _scheme_is_fast(scheme):
         return None
     try:
-        # Ricostruisce il merge URL + configurazione fatto da kombu, senza la
-        # stringa URL (che farebbe importare il trasporto per `can_parse_url`).
+        # Merge URL and configuration fields without making kombu import the transport for can_parse_url.
         params = dict(_connection_params(app, url))
         parsed = parse_url(url)
         params.update(dictfilter(parsed), hostname=parsed['hostname'])
         connection = FastConnection(**params)
     except Exception:
-        # URL o configurazione non riconoscibili: decide il percorso kombu.
+        # Delegate unrecognized URLs or configuration to kombu.
         return None
     if not use_fast_producer(connection):
         return None
@@ -302,12 +254,12 @@ def fast_connection(app, url=None):
 
 
 def is_fast_connection(connection):
-    """True se *connection* è una :class:`FastConnection` (percorso Rust)."""
+    """Return whether the connection is a :class:`FastConnection`."""
     return isinstance(connection, FastConnection)
 
 
 def _connection_not_overridden(app):
-    """False se l'app ha sostituito ``connection_for_write`` (mock, custom)."""
+    """Return whether the app retains its original ``connection_for_write``."""
     if 'connection_for_write' in getattr(app, '__dict__', {}):
         return False
     from celery.app.base import Celery
@@ -316,13 +268,7 @@ def _connection_not_overridden(app):
 
 def ensure_connection(connection, errback=None, max_retries=None,
                       interval_start=2, interval_step=2, interval_max=30):
-    """``kombu.Connection.ensure_connection`` senza aprire un trasporto kombu.
-
-    Stessa sequenza di tentativi e di intervalli di kombu (2, 4, ... fino a
-    ``interval_max``), con ``errback(exc, interval)`` a ogni fallimento che
-    non ha ancora esaurito ``max_retries``. La connessione Rust viene creata
-    al primo tentativo riuscito e riusata dai producer dello stesso processo.
-    """
+    """Ensure a Rust connection with kombu retry intervals, limits and errbacks."""
     retries = 0
     while True:
         try:
@@ -335,7 +281,7 @@ def ensure_connection(connection, errback=None, max_retries=None,
             if errback is not None:
                 errback(exc, interval)
             if interval:
-                # Come `retry_over_time`, che dorme in passi da un secondo.
+                # Match retry_over_time's one-second sleep steps.
                 for _ in range(int(interval)):
                     time.sleep(1.0)
                 time.sleep(abs(int(interval) - interval))
@@ -344,14 +290,14 @@ def ensure_connection(connection, errback=None, max_retries=None,
 
 
 def release_connection(connection):
-    """Chiude la connessione Rust associata a *connection* (best effort)."""
+    """Close the Rust connection associated with *connection*, ignoring errors."""
     entry = _entries.get(_native_key(connection))
     if entry is not None:
         _discard_entry(connection, entry)
 
 
 def pool_limit(app):
-    """Limite effettivo del pool, come ``app.pool.limit`` ma senza crearlo."""
+    """Read the effective pool limit without creating ``app.pool``."""
     return set_limit(app.conf.broker_pool_limit)
 
 
@@ -364,11 +310,7 @@ def _merge_query(url, extra):
 
 
 def _broker_url(connection):
-    """URL con credenziali e parametri, ricostruito dai campi della Connection.
-
-    Come ``Connection.as_uri()``, ma senza toccare ``connection.transport``
-    (che importerebbe la libreria client).
-    """
+    """Rebuild a connection URL without accessing ``connection.transport``."""
     scheme = (connection.transport_cls or '').lower()
     host = connection.hostname or 'localhost'
     userid = connection.userid
@@ -384,21 +326,19 @@ def _broker_url(connection):
         parts.append('@')
     host_text = str(host or '')
     if ':' in host_text and not host_text.startswith('['):
-        # IPv6: `Connection.hostname` perde le parentesi, l'URL le richiede.
+        # IPv6 hostnames lose brackets in Connection but require them in URLs.
         parts.append(f'[{host_text}]')
     else:
         parts.append(quote(host_text, safe=''))
     if connection.port:
         parts.append(f':{connection.port}')
-    # `as_url` antepone sempre '/' e salta le parti vuote: vhost '/' → '//'.
+    # Match as_url's leading slash and skipped empty parts: vhost '/' becomes '//'.
     parts.extend(['/', str(connection.virtual_host or '')])
     url = ''.join(part for part in parts if part)
 
     if scheme in ('amqp', 'amqps', 'pyamqp'):
         extra = {
-            # py-amqp negozia heartbeat 0 quando non specificato; lapin userebbe
-            # 60 e, con il producer a riposo, RabbitMQ chiuderebbe la
-            # connessione dopo 2 intervalli.
+            # Match py-amqp's default heartbeat of zero; lapin's default would disconnect idle producers.
             'heartbeat': int(getattr(connection, 'heartbeat', None) or 0),
         }
         timeout = getattr(connection, 'connect_timeout', None)
@@ -417,7 +357,7 @@ def _native_key(connection):
 
 
 class _NativeEntry:
-    """Una connessione Rust per processo e per URL, più la cache delle dichiarazioni."""
+    """Rust connection and declaration cache shared per process and URL."""
 
     __slots__ = ('connection', 'declared')
 
@@ -426,38 +366,29 @@ class _NativeEntry:
         self.declared = set()
 
 
-#: (url, opzioni) → _NativeEntry. Svuotata dopo fork: i socket del padre non
-#: si usano nel figlio.
+# Cache per URL and options; clear after fork because inherited sockets are unusable.
 _entries = {}
 
-#: Connessioni ereditate dal padre. Nel figlio non si chiudono (il runtime
-#: tokio che le possiede non esiste più): si tengono vive per non far partire
-#: i distruttori su uno stato incoerente.
+# Keep inherited connections alive so destructors cannot access the parent's absent tokio runtime.
 _orphaned = []
 
 
 def _native_entry(connection, key=None):
-    """Connessione Rust condivisa per (URL, opzioni), creata al primo uso.
-
-    Niente lock: `dict.setdefault` è atomico sotto GIL, e un lock rimasto
-    acquisito da un thread scomparso renderebbe il figlio di `fork()` muto.
-    Se due thread creano insieme, uno chiude la copia perdente.
-    """
+    """Create a connection per URL and options, using atomic ``dict.setdefault`` under the GIL."""
     if key is None:
         key = _native_key(connection)
     entry = _entries.get(key)
     if entry is not None:
         return entry
     options = dict(getattr(connection, 'transport_options', None) or {})
-    # Il retry è gestito qui come `kombu.Connection.ensure`: la connessione
-    # non deve ritentare per conto suo.
+    # Retry is managed here as in kombu.Connection.ensure; disable native retries.
     fresh = _NativeEntry(_celery_rs.Connection(
         key[0], options, retry_policy={'enabled': False}))
     entry = _entries.setdefault(key, fresh)
     if entry is not fresh:
         try:
             fresh.connection.close()
-        except Exception:  # copia perdente della corsa: chiusura best effort
+        except Exception:  # Close the losing connection if another thread populated the cache first.
             pass
         return entry
     _STATS['connections'] += 1
@@ -465,13 +396,13 @@ def _native_entry(connection, key=None):
 
 
 def _discard_entry(connection, entry):
-    """Toglie *entry* dalla cache e chiude la connessione (best effort)."""
+    """Remove *entry* from the cache and close its connection, ignoring errors."""
     key = _native_key(connection)
     if _entries.get(key) is entry:
         _entries.pop(key, None)
     try:
         entry.connection.close()
-    except Exception:  # la connessione è già persa: la chiusura è best effort
+    except Exception:  # The connection is already lost; ignore close errors.
         pass
 
 
@@ -479,21 +410,19 @@ _fork_pid = os.getpid()
 
 
 def after_fork():
-    """Nel figlio scarta connessioni e runtime Rust ereditati dal padre."""
+    """Discard inherited Rust connections and runtime in the child."""
     global _fork_pid
     pid = os.getpid()
     if _fork_pid == pid:
         return
     _fork_pid = pid
-    # Nel figlio resta un solo thread: niente lock (potrebbe essere rimasto
-    # acquisito da un thread scomparso con il fork).
+    # Only one thread survives fork; avoid locks possibly held by vanished threads.
     if _entries:
         _orphaned.extend(_entries.values())
         _entries.clear()
     _STATS['forks'] += 1
     if _celery_rs is not None:
-        # Il runtime tokio del padre non è utilizzabile nel figlio: il modulo
-        # nativo lo ricrea al primo uso.
+        # Reset the inherited runtime; the native module recreates it on first use.
         _celery_rs.after_fork()
 
 
@@ -502,7 +431,7 @@ if hasattr(os, 'register_at_fork'):
 
 
 def _prepare_body(body, serializer, content_type, content_encoding):
-    """Come ``kombu.Producer._prepare``, con JSON e compressione in Rust."""
+    """Prepare messages as kombu does, with Rust JSON encoding and compression."""
     if not content_type:
         if serializer is None:
             if isinstance(body, bytes):
@@ -530,25 +459,19 @@ def _compress_body(body, compression, headers):
     try:
         body, headers['compression'] = _celery_rs.compress(body, compression)
     except KeyError:
-        # Metodo registrato dall'utente in kombu.compression: non è nel core.
+        # Custom kombu compression methods are not part of Rust.
         from kombu.compression import compress as kombu_compress
         body, headers['compression'] = kombu_compress(body, compression)
     return body
 
 
 class RsProducer(KombuProducer):
-    """Sostituto di :class:`kombu.Producer` che pubblica dal core Rust.
-
-    Mantiene ``connection``/``channel``/``exchange`` come il producer originale;
-    solo ``publish`` (e le dichiarazioni) passano dal trasporto Rust.
-    """
+    """Provide the kombu producer interface with Rust publishing and declarations."""
 
     def __init__(self, channel=None, exchange=None, routing_key=None,
                  serializer=None, auto_declare=None, compression=None,
                  on_return=None):
-        # Non si chiama `kombu.Producer.__init__`: legherebbe l'exchange a una
-        # ChannelPromise e aprirebbe un canale kombu al primo uso. Qui il canale
-        # si crea solo se qualcuno accede a `.channel`.
+        # Skip kombu.Producer.__init__, which would bind a ChannelPromise and open kombu on first exchange use.
         self._channel = channel
         self.__connection__ = channel if is_connection(channel) else None
         self.exchange = exchange if exchange is not None else Exchange('')
@@ -556,8 +479,7 @@ class RsProducer(KombuProducer):
         self.serializer = serializer or None
         self.compression = compression or None
         self.on_return = on_return or None
-        # (url, opzioni) e entry Rust: calcolate una volta per connessione,
-        # non a ogni messaggio. `revive` le invalida.
+        # Cache URL, options and native entry per connection; revive invalidates them.
         self._rs_key = None
         self._rs_entry = None
         if auto_declare is not None:
@@ -565,7 +487,7 @@ class RsProducer(KombuProducer):
 
     @property
     def connection(self):
-        """Il ``kombu.Connection`` lazy associato al producer."""
+        """Return the producer's lazy kombu connection."""
         if self.__connection__ is not None:
             return self.__connection__
         channel = self._channel
@@ -575,7 +497,7 @@ class RsProducer(KombuProducer):
 
     @property
     def channel(self):
-        """Canale kombu, creato solo su richiesta (es. backend ``rpc://``)."""
+        """Create a kombu channel on demand."""
         channel = self._channel
         if channel is None:
             return None
@@ -588,7 +510,7 @@ class RsProducer(KombuProducer):
         self._channel = value
 
     def revive(self, channel=None):
-        """Aggiorna il canale (kombu lo chiama dopo una riconnessione)."""
+        """Update the channel after reconnection."""
         self._rs_key = None
         self._rs_entry = None
         if channel is None:
@@ -620,8 +542,8 @@ class RsProducer(KombuProducer):
     def _native(self):
         connection = self.connection
         if connection is None:
-            # Errore permanente, non di trasporto: non va ritentato.
-            raise OperationalError('producer senza connessione')
+            # Permanent errors must not be retried.
+            raise OperationalError('producer has no connection')
         return connection, self._entry()
 
     def _delivery_details(self, exchange, delivery_mode=None):
@@ -633,7 +555,6 @@ class RsProducer(KombuProducer):
             delivery_mode or self.exchange.delivery_mode,
         )
 
-    # ---------------------------------------------------------------- dichiarazioni
 
     def _declare_exchange(self, entry, exchange):
         name = exchange.name
@@ -680,7 +601,7 @@ class RsProducer(KombuProducer):
         _STATS['declarations'] += 1
 
     def _declare_binding(self, entry, extra, queue):
-        """Binding aggiuntivo coda → exchange (``Queue.bindings``)."""
+        """Declare an additional queue-to-exchange binding from ``Queue.bindings``."""
         exchange = extra.exchange
         if exchange is None:
             return
@@ -697,13 +618,13 @@ class RsProducer(KombuProducer):
         elif isinstance(entity, Exchange):
             self._declare_exchange(entry, entity)
         elif isinstance(entity, binding_t):
-            # binding exchange→exchange: il trasporto Rust non lo supporta.
+            # Rust does not support exchange-to-exchange bindings.
             raise NotImplementedError(
-                'binding tra exchange non supportato dal producer Rust')
+                'exchange-to-exchange binding unsupported by Rust producer')
         else:
-            # Meglio un errore esplicito che una dichiarazione dimenticata.
+            # Fail explicitly rather than silently omitting a declaration.
             raise TypeError(
-                f'entità non dichiarabile dal producer Rust: {type(entity)!r}')
+                f'entity cannot be declared by Rust producer: {type(entity)!r}')
 
     def _maybe_declare(self, entry, entity):
         ident = None
@@ -717,13 +638,13 @@ class RsProducer(KombuProducer):
         return True
 
     def declare(self):
-        """Dichiara l'exchange di default (se ha un nome)."""
+        """Declare the default exchange if named."""
         if self.exchange and self.exchange.name:
             _, entry = self._native()
             self._declare_exchange(entry, self.exchange)
 
     def maybe_declare(self, entity, retry=False, **retry_policy):
-        """Dichiara *entity* con la cache di connessione, come ``kombu.common.maybe_declare``."""
+        """Declare *entity* using the connection cache, as ``kombu.common.maybe_declare`` does."""
         if not entity:
             return None
         if retry:
@@ -733,14 +654,9 @@ class RsProducer(KombuProducer):
             )
         return self._call(lambda: self._maybe_declare(self._native()[1], entity))
 
-    # --------------------------------------------------------------------- publish
 
     def _call(self, fun):
-        """Esegue *fun* e, su errore di connessione, scarta la connessione Rust.
-
-        Vale anche senza retry: la connessione rotta non deve restare in cache
-        (il publish successivo riconnette), come fa `obj.revive` in kombu.
-        """
+        """Run *fun*, discarding a broken Rust connection even when retries are disabled."""
         try:
             return fun()
         except _RETRY_ERRORS:
@@ -748,7 +664,7 @@ class RsProducer(KombuProducer):
             raise
 
     def _ensure(self, fun, retry_policy):
-        """Stessa semantica di ``kombu.Connection.ensure`` (retry lineare)."""
+        """Retry with ``kombu.Connection.ensure`` semantics."""
         policy = dict(retry_policy or {})
         errback = policy.pop('errback', None)
         max_retries = policy.pop('max_retries', None)
@@ -757,8 +673,7 @@ class RsProducer(KombuProducer):
         interval_max = policy.pop('interval_max', 1)
         retries = 0
         while True:
-            # `ensure` chiama l'errback solo per errori dopo una connessione
-            # riuscita: un broker irraggiungibile non lo invoca.
+            # Match ensure: call errback only for errors after a successful connection.
             had_connection = self._has_native_connection()
             try:
                 return self._call(fun)
@@ -785,7 +700,7 @@ class RsProducer(KombuProducer):
         return key in _entries
 
     def _drop_native(self):
-        """Scarta la connessione Rust corrente: il prossimo tentativo riconnette."""
+        """Discard the current Rust connection so the next attempt reconnects."""
         connection = self.connection
         if connection is None:
             return
@@ -825,10 +740,9 @@ class RsProducer(KombuProducer):
         _STATS['publishes'] += 1
 
     def _publish_kombu(self, *args, **kwargs):
-        """Fallback per le opzioni che il trasporto Rust non gestisce."""
+        """Fall back to kombu for unsupported Rust transport options."""
         properties = dict(kwargs.pop('properties'))
-        # `delivery_mode` arriva come argomento esplicito, `expiration` è già
-        # dentro le properties (stringa di millisecondi).
+        # delivery_mode is explicit; expiration is already a millisecond string in properties.
         properties.pop('delivery_mode', None)
         kwargs.pop('expiration', None)
         producer = KombuProducer(
@@ -848,7 +762,7 @@ class RsProducer(KombuProducer):
                 headers=None, compression=None, exchange=None, retry=False,
                 retry_policy=None, declare=None, expiration=None, timeout=None,
                 confirm_timeout=None, **properties):
-        """Come :meth:`kombu.Producer.publish`, con serializzazione e I/O in Rust."""
+        """Publish with Rust serialization and I/O using kombu semantics."""
         declare = [] if declare is None else declare
         headers = {} if headers is None else headers
         retry_policy = {} if retry_policy is None else retry_policy
@@ -902,18 +816,13 @@ class RsProducer(KombuProducer):
         self.release()
 
     def release(self):
-        """Nessuna risorsa da rilasciare: la connessione è condivisa per processo."""
+        """Keep the connection shared by the process; no resources need releasing here."""
 
     close = release
 
 
 class FastConnectionPool(ConnectionPool):
-    """``ConnectionPool`` che crea :class:`PooledConnection` senza trasporto.
-
-    ``ConnectionPool.new`` chiama ``connection._info()``, che legge
-    ``connection.transport.default_connection_params`` e importerebbe redis-py
-    o py-amqp; i parametri sono già tutti sulla :class:`FastConnection`.
-    """
+    """Create pooled connections from FastConnection parameters without loading the transport."""
 
     def new(self):
         conn = self.connection
@@ -940,23 +849,19 @@ def _pooled_params(conn):
 
 
 class FastProducerPool(ProducerPool):
-    """``kombu.pools.ProducerPool`` che crea :class:`RsProducer` senza socket kombu."""
+    """Create ``RsProducer`` instances without kombu sockets."""
 
     Producer = RsProducer
 
     def __init__(self, connection, limit=None, driver_type=None):
-        # Il pool di connessioni è quello vero di kombu: ``producer.connection``
-        # è una ``PooledConnection`` come nel riferimento, ma creata senza
-        # importare il trasporto.
+        # Preserve kombu PooledConnection identity without importing its transport.
         super().__init__(
             FastConnectionPool(connection, limit=limit), limit=limit)
-        # Evita l'accesso a `connection.transport.driver_type` in send_task
-        # (importerebbe la libreria client) per la decisione su ETA.
+        # Avoid loading broker clients through transport.driver_type when choosing ETA behavior.
         self.driver_type = driver_type or driver_type_of(connection)
 
     def create_producer(self):
-        # La connessione acquisita è solo un descrittore (URL, opzioni);
-        # l'I/O passa dalla connessione Rust condivisa.
+        # The acquired connection is a descriptor; I/O uses the shared Rust connection.
         connection = self._acquire_connection()
         try:
             return self.Producer(connection)

@@ -1,4 +1,4 @@
-"""RAM dopo il carico e inizializzazione prefork senza parser CFFI."""
+"""Child memory after load and prefork initialization without CFFI parsing."""
 import json
 import os
 from pathlib import Path

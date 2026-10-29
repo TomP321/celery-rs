@@ -1,13 +1,4 @@
-"""``kombu.Message`` costruito da una consegna del trasporto Rust.
-
-Modulo comune a ``rpc://`` (``celery.backends._rs_rpc``) e al consumer del
-worker (``celery.worker._rs_consumer``): il formato della consegna è lo stesso
-— ``(body, headers, properties, delivery_info, delivery_tag)`` — e ack/reject
-passano da ``connection.ack``/``connection.reject`` del binding Rust.
-
-Il comportamento è quello che aveva ``celery.backends._rs_rpc.RsMessage``: qui
-è solo spostato, così i due percorsi condividono la stessa implementazione.
-"""
+"""Kombu messages shared by the Rust worker and RPC consumers."""
 from __future__ import annotations
 
 from kombu.exceptions import DecodeError
@@ -19,20 +10,16 @@ from kombu.serialization import (
 )
 from kombu.utils.json import object_hook as json_object_hook
 
-try:  # il pacchetto completo lo installa sempre; il riferimento no.
+try:  # The full package installs the extension; the reference may not.
     import _celery_rs
-except ImportError:  # pragma: no cover - solo senza estensione nativa
+except ImportError:  # pragma: no cover - native extension unavailable
     _celery_rs = None
 
 __all__ = ('RsChannel', 'RsMessage')
 
 
 class RsChannel:
-    """Canale minimo per ``kombu.Message.ack``/``reject``.
-
-    ``delivery_tag`` è il tag del trasporto Rust (per AMQP codifica anche il
-    canale), quindi ack e reject non richiedono una connessione kombu.
-    """
+    """Acknowledge Rust deliveries without a kombu connection."""
 
     __slots__ = ('connection', 'no_ack_consumers')
 
@@ -48,11 +35,7 @@ class RsChannel:
 
 
 class RsMessage(KombuMessage):
-    """``kombu.Message`` costruito da una consegna del trasporto Rust.
-
-    ``consumer`` è il consumer che possiede ``_rs_connection`` (come nel
-    backend ``rpc://``); in alternativa si passa ``connection`` direttamente.
-    """
+    """Build a kombu message from a Rust delivery."""
 
     def __init__(self, consumer, raw, accept=None, no_ack=False,
                  connection=None):
@@ -73,8 +56,7 @@ class RsMessage(KombuMessage):
 
     def _decode(self):
         content_type = self.content_type or 'application/data'
-        # Stesse regole di ``kombu.serialization.loads``: ContentDisallowed
-        # prima di qualunque decodifica.
+        # Match kombu: reject disallowed content before decoding.
         if self.accept is not None:
             if (content_type not in TRUSTED_CONTENT
                     and content_type not in self.accept):

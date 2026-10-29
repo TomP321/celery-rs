@@ -54,8 +54,7 @@ __all__ = ('Celery',)
 
 _OMITTED = object()
 
-#: `timezone.utc` è una property di `celery.utils.time._Zone`: il suo valore
-#: resta lo stesso per tutta la vita del processo (cache di `ZoneInfo`).
+# Cache timezone.utc for the process lifetime, matching ZoneInfo's cache.
 _UTC_ZONE = timezone.utc
 
 logger = get_logger(__name__)
@@ -1120,7 +1119,7 @@ class Celery:
         if eta or countdown:
             from . import _rs_producer
             pool = self.producer_pool
-            # Il pool Rust sa già il driver: evita di importare il trasporto.
+            # The Rust pool already knows the driver; avoid importing the transport.
             if isinstance(pool, _rs_producer.FastProducerPool):
                 driver_type = pool.driver_type
             else:
@@ -1397,7 +1396,7 @@ class Celery:
         now_in_utc = to_utc(datetime.now(datetime_timezone.utc))
         zone = self.timezone
         if zone is _UTC_ZONE:
-            # `to_utc` restituisce già UTC: `astimezone` non cambierebbe nulla.
+            # to_utc already returns UTC; astimezone would change nothing.
             return now_in_utc
         return now_in_utc.astimezone(zone)
 
@@ -1488,7 +1487,7 @@ class Celery:
             self.__dict__['amqp']._producer_pool = None
         except (AttributeError, KeyError):
             pass
-        # Connessioni e runtime Rust del padre non valgono nel figlio.
+        # Inherited Rust connections and runtime are unusable in the child.
         from . import _rs_producer
         _rs_producer.after_fork()
         self.on_after_fork.send(sender=self)

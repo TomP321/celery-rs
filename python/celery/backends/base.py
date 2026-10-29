@@ -34,14 +34,12 @@ from celery.utils.serialization import (create_exception_cls, ensure_serializabl
                                         get_pickled_exception, raise_with_context)
 from celery.utils.time import get_exponential_backoff_interval
 
-try:  # il pacchetto completo lo installa sempre; il riferimento no.
+try:  # The full package installs the extension; the reference may not.
     import _celery_rs
-except ImportError:  # pragma: no cover - solo senza estensione nativa
+except ImportError:  # pragma: no cover - native extension unavailable
     _celery_rs = None
 
-#: ``default`` di kombu per il JSON: legge ``kombu.utils.json._encoders`` a
-#: ogni uso (come nel producer), quindi il caching della sola bound method è
-#: equivalente alla chiamata di ``dumps``.
+# The bound JSON default method reads kombu's encoder registry on every call, so caching it is safe.
 _JSON_DEFAULT = None
 
 
@@ -76,12 +74,7 @@ logger = get_logger(__name__)
 
 
 def _compression():
-    """Modulo ``kombu.compression`` al primo uso.
-
-    Importarlo carica subito brotli e zstd (due moduli compilati): il backend
-    Rust comprime nel core, quindi servono solo se l'utente chiede davvero una
-    compressione dei risultati.
-    """
+    """Import ``kombu.compression`` on demand to avoid loading brotli and zstd."""
     from kombu import compression
     return compression
 
@@ -693,8 +686,7 @@ class Backend:
         return payload
 
     def _encode(self, data):
-        # JSON è il caso comune: stesso output di kombu, senza passare per il
-        # registro dei serializer. Gli altri serializer restano a kombu.
+        # Bypass the serializer registry for compatible JSON; delegate other serializers to kombu.
         if (_celery_rs is not None and self.serializer == 'json'
                 and self.content_type == 'application/json'):
             payload = _celery_rs.json_dumps(data, _json_default())
@@ -718,9 +710,7 @@ class Backend:
         # and so that a reader that never had it turned on can still read a
         # result written by a worker that did.
         payload = decompress_payload(payload)
-        # ``accept`` è già stato preparato dal costruttore; il JSON ha lo stesso
-        # decoder di kombu e nessun object_hook (quello dei backend è solo per
-        # i serializer esterni).
+        # accept is already prepared; JSON uses kombu's decoder without the external-serializer object_hook.
         if (_celery_rs is not None and self.serializer == 'json'
                 and self.content_type == 'application/json'
                 and (self.accept is None or 'application/json' in self.accept)):

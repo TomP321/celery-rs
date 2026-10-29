@@ -85,7 +85,6 @@ class EventDispatcher:
         conninfo = self.connection or self.app.connection_for_write()
         self.exchange = get_exchange(conninfo,
                                      name=self.app.conf.event_exchange)
-        # `FastConnection` espone il driver senza importare il trasporto.
         from celery.app._rs_producer import connection_driver_type
 
         if connection_driver_type(conninfo) in self.DISABLED_TRANSPORTS:
@@ -106,8 +105,7 @@ class EventDispatcher:
         if self.channel is None:
             from celery.app import _rs_producer
 
-            # Con una connessione veloce gli eventi escono dal producer Rust
-            # (stesso messaggio di kombu, nessun socket py-amqp).
+            # Publish events through Rust without opening py-amqp sockets.
             if _rs_producer.use_fast_producer(target):
                 return _rs_producer.RsProducer(
                     target, exchange=self.exchange,

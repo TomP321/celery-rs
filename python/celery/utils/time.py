@@ -22,8 +22,7 @@ from .text import pluralize
 
 
 def __getattr__(name):
-    # Nomi che il riferimento importa da dateutil/tzlocal: restano gli stessi
-    # oggetti, risolti al primo accesso (il client non deve pagarli).
+    # Resolve the original dateutil and tzlocal objects lazily to avoid client import costs.
     if name == 'get_localzone':
         from tzlocal import get_localzone as value
     elif name == 'dateutil_tz':
@@ -209,7 +208,7 @@ class _Zone:
 
 timezone = _Zone()
 
-#: `_Zone.utc` è una cached_property: il valore è lo stesso per tutto il processo.
+# _Zone.utc is process-wide despite being a cached property.
 _UTC_ZONE = timezone.utc
 
 
@@ -492,8 +491,7 @@ def localize(dt: datetime, tz: tzinfo) -> datetime:
 
 def to_utc(dt: datetime) -> datetime:
     """Convert naive :class:`~datetime.datetime` to UTC."""
-    # UTC non è mai ambiguo né immaginario: `make_aware` farebbe solo
-    # `replace(tzinfo=...)` dopo il controllo (inutile) di dateutil.
+    # UTC is never ambiguous or imaginary; avoid dateutil's redundant checks.
     return dt.replace(tzinfo=_UTC_ZONE)
 
 

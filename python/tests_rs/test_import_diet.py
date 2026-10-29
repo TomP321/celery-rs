@@ -1,11 +1,4 @@
-"""Dieta degli import (spec 08b): cosa carica davvero ogni processo.
-
-I test girano in sottoprocessi con interprete pulito, sia con il pacchetto
-celery-rs (``.venv-rs``) sia con il riferimento (``.venv-ref``), e confrontano
-l'elenco dei moduli proibiti nel processo client. Le parti "pigre" verificano
-che i nomi pubblici restino gli stessi oggetti di kombu e che i percorsi di
-fallback (serializer, ``CELERY_RS_*=0``) continuino a funzionare.
-"""
+"""Compare imports and lazy object identity with the reference in fresh subprocesses."""
 from __future__ import annotations
 
 import json
@@ -29,9 +22,8 @@ REDIS_URL = os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390') + '/
 AMQP_URL = os.environ.get('CELERY_RS_AMQP_URL', 'amqp://guest:guest@127.0.0.1:5673//')
 BACKEND_URL = os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390') + '/8'
 
-#: Gli oggetti veri di kombu impongono amqp/billiard e il registry completo
-#: dei serializer; i client dei broker e le dipendenze di CLI, greenlet e
-#: fusi orari restano evitabili nel percorso Rust JSON senza date esplicite.
+# Real kombu objects require amqp, billiard and serializers.
+# Broker clients, CLI and timezone imports remain avoidable.
 CLIENT_FORBIDDEN = (
     'redis', 'kombu.transport.redis', 'kombu.transport.pyamqp',
     'kombu.transport.virtual', 'opentelemetry', 'click', 'greenlet',
@@ -113,7 +105,7 @@ def start_ref_worker(directory, broker):
     deadline = time.time() + 40
     while time.time() < deadline:
         if worker.poll() is not None:
-            raise AssertionError('worker del riferimento terminato')
+            raise AssertionError('reference worker exited')
         check = subprocess.run(
             [str(REF_PYTHON), '-m', 'celery', '-A', 'client_app', 'inspect',
              'ping', '-t', '1'],
@@ -122,7 +114,7 @@ def start_ref_worker(directory, broker):
             return worker
         time.sleep(0.5)
     worker.terminate()
-    raise AssertionError('worker del riferimento non pronto')
+    raise AssertionError('reference worker not ready')
 
 
 def stop_worker(worker):
@@ -138,10 +130,10 @@ def stop_worker(worker):
 
 @pytest.mark.parametrize('broker', [REDIS_URL, AMQP_URL], ids=['redis', 'amqp'])
 def test_client_import_diet(probe_dir, broker):
-    """Import, app+task, delay, get e canvas non caricano i moduli proibiti."""
+    """Check imports through app creation, publishing, results and canvas operations."""
     queue = f'diet-{uuid.uuid4().hex}'
     app_text = APP.format(broker=broker, backend=BACKEND_URL)
-    # La coda è unica per non rubare messaggi ad altri agenti.
+    # Use a unique queue to avoid consuming other tests' messages.
     app_text = app_text.replace("app.conf.broker_connection_retry_on_startup = True",
                                 "app.conf.broker_connection_retry_on_startup = True\n"
                                 f"app.conf.task_default_queue = {queue!r}")
@@ -157,7 +149,7 @@ def test_client_import_diet(probe_dir, broker):
 
 
 def test_client_does_not_import_worker_or_broker_client(probe_dir):
-    """L'app non carica `celery.worker` né redis-py/py-amqp con il percorso Rust."""
+    """Check that Rust app creation avoids worker and broker client imports."""
     code = (
         'import json, sys\n'
         'from celery import Celery\n'
@@ -175,9 +167,6 @@ def test_client_does_not_import_worker_or_broker_client(probe_dir):
     assert json.loads(raw.strip().splitlines()[-1]) == []
 
 
-# ---------------------------------------------------------------------------
-# nomi pigri: stessi oggetti del riferimento
-# ---------------------------------------------------------------------------
 
 def test_lazy_names_are_the_kombu_objects():
     import kombu.log
@@ -210,7 +199,7 @@ def test_lazy_names_are_the_kombu_objects():
 
 
 def test_module_dir_matches_public_names():
-    """``dir()`` (nomi pubblici) resta quello del riferimento."""
+    """Compare public ``dir()`` names with the reference."""
     public = lambda mod: {n for n in dir(mod) if not n.startswith('_')}  # noqa: E731
     import celery.utils
     assert {'cached_property', 'gen_unique_id', 'memoize', 'uuid',
@@ -228,17 +217,13 @@ def test_mlazy_pickle_roundtrip():
     restored = pickle.loads(pickle.dumps(holder))
     assert type(restored) is type(holder)
     assert restored() == 42
-    # `mlazy` estende davvero la lazy di kombu (stessa classe, non un nome
-    # riscritto); il nome pubblico `lazy` resta l'oggetto di kombu.
+    # mlazy must extend kombu's real lazy class; the public lazy name must retain object identity.
     import kombu.utils.functional
     assert issubclass(mlazy, kombu.utils.functional.lazy)
     assert mlazy.__mro__[1] is kombu.utils.functional.lazy
     assert lazy is kombu.utils.functional.lazy
 
 
-# ---------------------------------------------------------------------------
-# fallback: serialer espliciti e CELERY_RS_*=0
-# ---------------------------------------------------------------------------
 
 FALLBACK_PROBE = r'''
 import json, sys
@@ -300,9 +285,6 @@ def test_backend_disabled_returns_to_redis_py(probe_dir):
     assert raw.strip().splitlines()[-1] == 'True'
 
 
-# ---------------------------------------------------------------------------
-# worker: il master non importa redis-py
-# ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize('pool', ['solo', 'prefork'])
 def test_worker_master_does_not_import_redis_py(probe_dir, pool):
@@ -320,7 +302,7 @@ def test_worker_master_does_not_import_redis_py(probe_dir, pool):
         deadline = time.time() + 40
         while time.time() < deadline and not state.exists():
             if worker.poll() is not None:
-                raise AssertionError('worker terminato prima di scrivere lo stato')
+                raise AssertionError('worker exited before writing state')
             time.sleep(0.2)
         payload = json.loads(state.read_text())
         loaded = payload['loaded']

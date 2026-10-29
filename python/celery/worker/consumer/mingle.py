@@ -30,11 +30,10 @@ class Mingle(bootsteps.StartStopStep):
             c, without_mingle=without_mingle, **kwargs)
 
     def _compatible(self, c):
-        """True se il worker può fare mingle; senza aprire kombu sul percorso Rust."""
+        """Check mingle support without opening kombu connections on Rust."""
         from celery.worker import _rs_consumer
         if _rs_consumer.use_rs_worker(c):
-            # `driver_type` senza istanziare il trasporto: `conninfo` può essere
-            # una `FastConnection` (nessun import di redis-py/py-amqp).
+            # Read driver_type without creating a transport for FastConnection.
             from celery.app._rs_producer import driver_type_of
             return driver_type_of(c.conninfo) in self.compatible_transports
         return self.compatible_transport(c.app)
@@ -60,9 +59,7 @@ class Mingle(bootsteps.StartStopStep):
 
     def send_hello(self, c):
         from celery.worker import _rs_consumer
-        # Con il consumer Rust il client di controllo 07 parla col broker dal
-        # trasporto Rust: passare la connessione kombu (anche sintetica)
-        # ricadrebbe sul mailbox di kombu.
+        # Passing even a synthetic kombu connection would force control commands back through kombu's mailbox.
         connection = None if _rs_consumer.is_rs_connection(
             getattr(c, 'connection', None)) else c.connection
         inspect = c.app.control.inspect(timeout=1.0, connection=connection)

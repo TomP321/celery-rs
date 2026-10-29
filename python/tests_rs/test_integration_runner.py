@@ -1,4 +1,4 @@
-"""Il confronto conserva gli errori e distingue gli esiti JUnit."""
+"""Compare errors while distinguishing JUnit outcomes."""
 import importlib.util
 from pathlib import Path
 

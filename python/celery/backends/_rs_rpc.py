@@ -1,15 +1,4 @@
-"""Result consumer ``rpc://`` sul trasporto Rust.
-
-Il backend ``rpc://`` pubblica i risultati con il producer dell'app e li
-consuma da una coda di risposta dedicata.  Questa implementazione sostituisce
-il ``kombu.Consumer`` con ``_celery_rs.Connection``: niente py-amqp nel
-processo client, ``basic.get`` per ``get_task_meta`` e riconnessione con la
-stessa semantica del riferimento.
-
-La logica di stato (``BaseResultConsumer``) resta quella di
-``celery.backends.asynchronous``: qui si forniscono solo trasporto e messaggi
-compatibili con ``kombu.Message``.
-"""
+"""RPC result consumer backed by the Rust transport."""
 from __future__ import annotations
 
 import logging
@@ -26,22 +15,21 @@ from celery.app import _rs_producer
 
 from .rpc import ResultConsumer
 
-try:  # il pacchetto completo lo installa sempre; il riferimento no.
+try:  # The full package installs the extension; the reference may not.
     import _celery_rs
-except ImportError:  # pragma: no cover - solo senza estensione nativa
+except ImportError:  # pragma: no cover - native extension unavailable
     _celery_rs = None
 
 __all__ = ('RsMessage', 'RsResultConsumer', 'promote_to_rust',
            'use_rust_result_consumer')
 
-#: Variabile d'ambiente per tornare al consumer di kombu.
+# Environment switch to restore kombu consumption.
 ENV_DISABLE = 'CELERY_RS_BACKEND'
 
-#: Stesso logger del riferimento: i messaggi di riconnessione sono identici.
+# Use the reference logger for identical reconnect messages.
 logger = logging.getLogger('celery.backends.rpc')
 
-#: Connessioni ereditate dal padre: nel figlio non si chiudono (il runtime
-#: tokio del padre non esiste più) e si tengono vive per evitare i distruttori.
+# Keep inherited connections alive to avoid destructors accessing the parent's absent tokio runtime.
 _orphaned_connections = []
 
 
@@ -53,24 +41,19 @@ def _enabled():
 
 
 def _app_connection_is_default(app):
-    """True se ``app.connection`` non è stato sostituito (es. da un mock)."""
+    """Return whether ``app.connection`` retains its original implementation."""
     from celery.app.base import Celery
 
     try:
         if 'connection' in vars(app):
             return False
         return getattr(type(app), 'connection', None) is Celery.connection
-    except TypeError:  # pragma: no cover - app esotica
+    except TypeError:  # pragma: no cover - custom app
         return False
 
 
 def use_rust_result_consumer(consumer):
-    """True se *consumer* può usare il trasporto Rust.
-
-    Solo AMQP: ``rpc://`` su broker Redis resta sul consumer di kombu in
-    questa fase.  I test upstream che sostituiscono ``Consumer`` o
-    ``app.connection`` continuano sul ramo originale.
-    """
+    """Return whether the consumer supports Rust transport (AMQP only)."""
     if not _enabled() or _celery_rs is None:
         return False
     if consumer.Consumer is not kombu.Consumer:
@@ -84,11 +67,7 @@ def use_rust_result_consumer(consumer):
 
 
 def promote_to_rust(consumer):
-    """Promuove il ``ResultConsumer`` di base a :class:`RsResultConsumer`.
-
-    Restituisce sempre lo stesso oggetto: la classe cambia solo quando il
-    percorso veloce è disponibile, così i mock dei test restano intatti.
-    """
+    """Promote a supported result consumer in place, preserving object identity."""
     if type(consumer) is not ResultConsumer:
         return consumer
     if not use_rust_result_consumer(consumer):
@@ -98,11 +77,7 @@ def promote_to_rust(consumer):
 
 
 class _RsConsumerSet:
-    """Sostituto di ``kombu.Consumer`` per code e sottoscrizioni.
-
-    Le code sono quelle kombu (``Queue``): il nome è l'unica cosa che serve al
-    trasporto Rust, che aggiorna il consumatore con ``ConsumerControl``.
-    """
+    """Provide kombu queue subscriptions through Rust ``ConsumerControl``."""
 
     __slots__ = ('queues',)
 
@@ -121,25 +96,23 @@ class _RsConsumerSet:
         self.queues = [q for q in self.queues if q.name != queue_name]
 
     def consume(self):
-        """La sottoscrizione avviene al prossimo ``drain`` del trasporto."""
+        """Defer subscription until the next transport drain."""
 
     def cancel(self):
         self.queues = []
 
 
 class RsResultConsumer(ResultConsumer):
-    """``rpc.ResultConsumer`` con I/O sul trasporto Rust."""
+    """RPC result consumer with Rust transport I/O."""
 
-    #: Il binding Rust traduce gli errori di connessione in ``ConnectionError``
-    #: (sottoclasse di ``OSError``); ``socket.timeout`` resta escluso da
-    #: ``reconnect_on_error``.
+    # Rust maps connection failures to ConnectionError; reconnect_on_error must still exclude socket.timeout.
     _connection_errors = (ConnectionError, OSError)
 
     _rs_connection = None
     _rs_declared = None
     _rs_config = None
     _rs_fork_registered = False
-    #: Riconnessioni riuscite (usato dai test e per la diagnostica).
+    # Successful reconnections for tests and diagnostics.
     _rs_reconnects = 0
 
     def start(self, initial_task_id, no_ack=True, **kwargs):
@@ -163,7 +136,7 @@ class RsResultConsumer(ResultConsumer):
             no_ack=self._no_ack)
         if not deliveries:
             if timeout is not None:
-                # Stessa eccezione di ``Connection.drain_events`` di kombu.
+                # Match kombu's Connection.drain_events exception.
                 raise socket.timeout()
             return None
         for raw in deliveries:
@@ -199,7 +172,7 @@ class RsResultConsumer(ResultConsumer):
             self._rs_connection = None
             self._rs_declared = set()
 
-        # Nuova connessione e ri-sottoscrizione delle stesse code.
+        # Resubscribe to the same queues on the new connection.
         self._rs_connect()
         for queue in old_queues:
             self._declare(queue)
@@ -221,17 +194,13 @@ class RsResultConsumer(ResultConsumer):
                 connection.close()
 
     def on_after_fork(self):
-        # La connessione e il runtime Rust del padre non sono usabili nel
-        # figlio: si ricreano al primo uso (`_celery_rs.after_fork` ha già
-        # scartato il runtime condiviso).
+        # Recreate inherited connections lazily after _celery_rs.after_fork resets the runtime.
         self._consumer = None
         if self._rs_connection is not None:
             _orphaned_connections.append(self._rs_connection)
             self._rs_connection = None
         self._rs_declared = set()
-        # `thread_oid`/`oid` sono generati con il pid ma restano cachati nel
-        # figlio: senza azzerarli padre e figlio consumerebbero la stessa coda
-        # e un risultato potrebbe finire al consumer sbagliato.
+        # Clear cached pid-based ids so parent and child do not compete for the same reply queue.
         self.backend.__dict__.pop('oid', None)
         local = getattr(self.app, '_local', None)
         if local is not None:
@@ -263,7 +232,6 @@ class RsResultConsumer(ResultConsumer):
         else:
             raise self.backend.BacklogLimitExceeded(task_id)
 
-    # ------------------------------------------------------------------ interni
 
     def _queue_names(self):
         if self._consumer is None:
@@ -281,8 +249,8 @@ class RsResultConsumer(ResultConsumer):
                 connection = _rs_producer.fast_connection(self.app)
                 if connection is None:
                     raise RuntimeError(
-                        'RPC result consumer: connessione al broker non '
-                        'supportata dal trasporto Rust')
+                        'RPC result consumer: broker connection not '
+                        'supported by Rust transport')
                 self._rs_config = (
                     _rs_producer._broker_url(connection),
                     dict(getattr(connection, 'transport_options', None) or {}),

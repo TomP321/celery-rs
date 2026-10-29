@@ -1,12 +1,4 @@
-"""Worker ``-P solo`` con il consumer Rust su Redis e RabbitMQ.
-
-I worker girano in un sottoprocesso (``.venv-rs`` per celery-rs, ``.venv-ref``
-per il riferimento) e i client nei due venv; il processo pytest è ``.venv-rs``.
-Copre: task semplici e con payload grandi, retry, countdown/eta/expires,
-acks_late e requeue, priorità, rate limit, revoke, code multiple e
-add/cancel_consumer a caldo, inspect, eventi ``-E``, prefetch, perdita del
-broker con riconnessione, shutdown warm/cold, ``CELERY_RS_WORKER=0``.
-"""
+"""Compare Rust and reference solo workers on Redis and RabbitMQ."""
 from __future__ import annotations
 
 import base64
@@ -54,7 +46,7 @@ BROKERS = {
     },
 }
 
-#: Contatori per isolare i worker dedicati (DB Redis dedicati e nomi unici).
+# Use counters, dedicated Redis databases and unique names to isolate workers.
 _db_counter = [9]
 
 
@@ -63,7 +55,7 @@ def unique(prefix):
 
 
 def next_redis_db():
-    # Redis di test ha 16 DB (0-15): 7 è il broker condiviso, 8/9 il backend.
+    # Redis has databases 0-15; 7 is the shared broker and 8/9 are backends.
     _db_counter[0] += 1
     if _db_counter[0] > 15:
         _db_counter[0] = 10
@@ -100,12 +92,9 @@ def broker_available(name):
 def require_brokers():
     missing = [name for name in BROKERS if not broker_available(name)]
     if missing:
-        pytest.skip(f'broker non raggiungibili: {missing}')
+        pytest.skip(f'brokers unreachable: {missing}')
 
 
-# ---------------------------------------------------------------------------
-# broker helpers
-# ---------------------------------------------------------------------------
 
 def redis_client(db=0):
     return redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=db,
@@ -122,7 +111,7 @@ def redis_queue_len(db, queue):
 
 
 def kill_redis_consumer(db):
-    """Chiude la connessione del consumer Rust (comando BRPOP) nel DB dato."""
+    """Close the Rust consumer's BRPOP connection in the selected database."""
     client = redis_client(db)
     killed = 0
     for line in client.execute_command('CLIENT', 'LIST').split('\n'):
@@ -152,7 +141,7 @@ def rabbit_queue(name):
 
 
 def rabbit_queue_ready(name):
-    """Messaggi pronti letti da rabbitmqctl (l'API management aggiorna a 5s)."""
+    """Read ready message counts from rabbitmqctl to avoid the management API's five-second lag."""
     try:
         result = subprocess.run(
             ['docker', 'exec', ('celery-rs-rabbitmq-1' if os.environ.get('CELERY_RS_LANE', '0') == '0' else f"celery-rs-lane-{os.environ['CELERY_RS_LANE']}-rabbitmq-1"), 'rabbitmqctl',
@@ -216,9 +205,6 @@ def rabbit_connection_product(name):
     return None
 
 
-# ---------------------------------------------------------------------------
-# client del riferimento (sottoprocesso in .venv-ref)
-# ---------------------------------------------------------------------------
 
 REF_PRELUDE = '''
 import datetime, json, os, time
@@ -256,7 +242,7 @@ def run_ref(code, worker, timeout=120):
         [str(REF_PYTHON), '-c', REF_PRELUDE + code], cwd=TESTS_DIR,
         env=env, capture_output=True, text=True, timeout=timeout)
     assert result.returncode == 0, (
-        f'client ref fallito ({result.returncode}):\n'
+        f'reference client failed ({result.returncode}):\n'
         f'{result.stdout[-4000:]}\n{result.stderr[-8000:]}')
     lines = [line for line in result.stdout.splitlines() if line.strip()]
     return json.loads(lines[-1])
@@ -327,9 +313,6 @@ def stop_event_receiver(process, timeout=10):
     return events, stderr
 
 
-# ---------------------------------------------------------------------------
-# worker
-# ---------------------------------------------------------------------------
 
 class Worker:
     def __init__(self, venv, broker_name, broker, backend, queue, nodename,
@@ -347,7 +330,6 @@ class Worker:
         self.env = env
         self.rust = rust
 
-    # ------------------------------------------------------------ diagnostica
 
     def log(self):
         try:
@@ -410,7 +392,6 @@ class Worker:
             cwd=TESTS_DIR, env=self.env, capture_output=True, text=True)
         return result
 
-    # ------------------------------------------------------------ vita
 
     def ready(self, timeout=60):
         deadline = time.monotonic() + timeout
@@ -425,7 +406,7 @@ class Worker:
                 return self
             time.sleep(0.3)
         self.stop()
-        raise RuntimeError(f'worker non pronto:\n{self.log()[-4000:]}')
+        raise RuntimeError(f'worker not ready:\n{self.log()[-4000:]}')
 
     def stop(self, sig=signal.SIGTERM, timeout=30):
         if self.process.poll() is None:
@@ -494,7 +475,7 @@ def start_worker(broker_name, *, queues=None, venv=RS_VENV, rust=True,
 
 
 def start_shared_worker(broker_name, directory):
-    """Worker con gossip/mingle attivi e ``-E``: percorso completo del master."""
+    """Run a worker with gossip, mingle and events enabled."""
     return start_worker(
         broker_name, directory=directory, args=('-E',),
         acks_on_failure=False, multiplier=1, full=True)
@@ -518,7 +499,7 @@ def workers(request, tmp_path_factory):
 def worker(request, workers):
     name = request.param
     if name not in workers:
-        pytest.skip(f'broker {name} non raggiungibile')
+        pytest.skip(f'broker {name} unreachable')
     return workers[name]
 
 
@@ -538,9 +519,6 @@ def dedicated(tmp_path):
         worker.cleanup()
 
 
-# ---------------------------------------------------------------------------
-# client rs (nel processo pytest)
-# ---------------------------------------------------------------------------
 
 def rs_app(worker):
     app = Celery('rs-client', broker=worker.broker, backend=worker.backend,
@@ -564,9 +542,6 @@ def submit(worker, name, args=(), kwargs=None, **options):
         app.close()
 
 
-# ---------------------------------------------------------------------------
-# test
-# ---------------------------------------------------------------------------
 
 def test_worker_uses_rust_consumer(worker):
     result = run_ref('''
@@ -585,7 +560,7 @@ emit({'value': r.get(timeout=15)})
     assert 'prefetch_count' in inspect.stdout
 
     if worker.broker_name == 'amqp':
-        # La connessione che consuma i task è di lapin (core Rust), non py-amqp.
+        # Task consumption uses lapin, not py-amqp.
         name = wait_rabbit_consumer(worker.queue)
         assert name is not None
         assert rabbit_connection_product(name) == 'lapin'
@@ -701,8 +676,7 @@ try:
     outcome = 'success'
 except Exception as exc:
     outcome = type(exc).__name__
-# La coda deve restare vuota: con acks_late e
-# task_acks_on_failure_or_timeout=False il fallimento scarta il messaggio.
+# With acks_late and task_acks_on_failure_or_timeout=False, failure discards the message.
 time.sleep(1.0)
 emit({{'outcome': outcome, 'attempt': os.path.exists(path)}})
 """, worker, timeout=60)
@@ -759,8 +733,7 @@ import uuid
 marker = {str(marker)!r}
 busy = submit('rs_worker.marker', (marker, 'busy', 2.0))
 target_id = str(uuid.uuid4())
-# Revoca registrata prima che il messaggio esista: qualunque ordine di
-# consegna del broker lo scarta.
+# Revoke before publishing so any broker delivery order discards the message.
 app.control.revoke(target_id, reply=True, timeout=5)
 target = submit('rs_worker.marker', (marker, 'target', 0), task_id=target_id)
 busy.get(timeout=30)
@@ -834,8 +807,7 @@ def test_multiple_queues_and_hot_add_cancel(dedicated):
     queue_b = unique('rs-queues-b')
     extra = unique('rs-queues-extra')
     worker = dedicated('redis', queues=queue_a)
-    # il worker deve ascoltare due code: riavvio con -Q multipla non è
-    # possibile a caldo, quindi si aggiunge la seconda con add_consumer.
+    # Add the second queue dynamically because changing -Q would require restarting the worker.
     added = worker.control('add_consumer', queue_b)
     assert added.returncode == 0
     deadline = time.monotonic() + 15
@@ -872,7 +844,7 @@ def test_multiple_queues_and_hot_add_cancel(dedicated):
                 break
             time.sleep(0.2)
         assert extra not in worker.inspect('active_queues').stdout
-        # La coda non è più consumata: il task resta nel broker.
+        # The task must remain in the broker after consumption is cancelled.
         pending = app.send_task('rs_worker.add', args=(3, 3), queue=extra)
         time.sleep(1.5)
         assert app.AsyncResult(pending.id).state == 'PENDING'
@@ -895,8 +867,7 @@ def test_prefetch_multiplier_is_effective(dedicated):
                 for _ in range(10)]
             assert worker.wait_started('rs_worker.wait_file', timeout=20)
             time.sleep(1.0)
-            # prefetch = concurrency(2) * worker_prefetch_multiplier(2) = 4:
-            # il broker tiene le altre 6.
+            # Prefetch is 2 * 2 = 4; the broker retains the other six messages.
             deadline = time.monotonic() + 10
             while True:
                 if broker_name == 'redis':
@@ -944,7 +915,7 @@ def test_broker_kill_reconnects_without_losing_tasks(dedicated):
                 assert kill_redis_consumer(worker.db) >= 1
             else:
                 assert rabbit_kill_consumer(queue) >= 1
-            # Il worker deve riconnettere e continuare: nessun task perso.
+            # Reconnect and continue without losing tasks.
             results = [app.send_task('rs_worker.add', args=(index, index))
                        for index in range(4)]
             assert [result.get(timeout=30) for result in results] == [
@@ -973,7 +944,7 @@ def _shutdown_outcome(dedicated, broker_name, sig, soft_timeout=0,
         deadline = time.monotonic() + 15
         while not marker.exists() and time.monotonic() < deadline:
             time.sleep(0.02)
-        assert marker.exists(), 'il task non è partito'
+        assert marker.exists(), 'task did not start'
         started = time.monotonic()
         code = worker.stop(sig=sig, timeout=40)
         elapsed = time.monotonic() - started
@@ -993,7 +964,7 @@ def test_warm_shutdown_with_running_task(dedicated):
     rs = _shutdown_outcome(dedicated, 'redis', signal.SIGTERM)
     ref = _shutdown_outcome(dedicated, 'redis', signal.SIGTERM,
                             venv=REF_VENV, rust=False)
-    # Stessi esiti per il messaggio non confermato (requeue) e per il codice.
+    # Compare both exit codes and requeueing of unacknowledged messages.
     assert rs['ready'] == ref['ready'], (rs, ref)
     assert rs['code'] == ref['code'], (rs, ref)
 
@@ -1028,7 +999,7 @@ def test_env_disables_rust_worker(dedicated):
 
 
 def test_same_scenario_ref_vs_rs_worker(tmp_path):
-    """Stesso scenario su worker ref e rs: stessi risultati e stessi eventi."""
+    """Compare results and events for the same scenario on Rust and reference workers."""
     outcomes = {}
     for label, venv in (('ref', REF_VENV), ('rs', RS_VENV)):
         queue = unique(f'rs-diff-{label}')

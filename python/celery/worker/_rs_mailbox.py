@@ -1,14 +1,4 @@
-"""Consumer del mailbox del worker (pidbox/gossip) sul trasporto Rust.
-
-Sostituisce la connessione kombu che il master apriva solo per il remote
-control e per gli eventi degli altri worker: exchange, coda, binding e consumo
-``no_ack`` passano dal trasporto Rust, i messaggi arrivano al loop dal
-``Waker`` condiviso e gli handler Python restano quelli del riferimento.
-
-Le dichiarazioni (nomi, tipi fanout/topic, ``x-expires``/``x-message-ttl``)
-sono costruite in Rust da :mod:`celery_worker::mailbox`: stessi byte sul
-broker del worker di riferimento.
-"""
+"""Rust mailbox consumers with Celery pidbox and gossip handlers."""
 from __future__ import annotations
 
 import logging
@@ -19,24 +9,24 @@ from kombu.utils.json import JSONEncoder
 
 from celery._rs_message import RsMessage
 
-try:  # il pacchetto completo lo installa sempre; il riferimento no.
+try:  # The full package installs the extension; the reference may not.
     import _celery_rs
-except ImportError:  # pragma: no cover - solo senza estensione nativa
+except ImportError:  # pragma: no cover - native extension unavailable
     _celery_rs = None
 
 __all__ = ('RsMailboxConsumer', 'pidbox_consumer', 'events_consumer')
 
 logger = logging.getLogger('celery.worker.consumer')
 
-#: default del JSON di kombu: legge `kombu.utils.json._encoders` a ogni uso.
+# Kombu's JSON default reads its encoder registry on every call.
 _JSON_DEFAULT = JSONEncoder().default
 
-#: Limite di consegne lette a ogni giro del loop (lo stesso del consumer).
+# Bound deliveries per loop iteration as the task consumer does.
 DRAIN_BATCH = 1000
 
 
 def _serialize(data, serializer):
-    """``kombu.Producer._prepare`` con JSON nel core Rust."""
+    """Prepare messages as kombu does, with Rust JSON encoding."""
     if serializer in (None, 'json'):
         return _celery_rs.json_dumps(data, _JSON_DEFAULT), 'application/json', 'utf-8'
     from kombu.serialization import dumps
@@ -47,13 +37,7 @@ def _serialize(data, serializer):
 
 
 class RsMailboxConsumer:
-    """Consumatore ``no_ack`` di una coda di servizio (pidbox o eventi).
-
-    ``on_message(body, message)`` riceve il body già decodificato (per il
-    pidbox) o il ``RsMessage`` con ``payload`` pigro (gossip); ``message`` è
-    sempre un :class:`celery._rs_message.RsMessage`, con header e
-    ``delivery_info`` come quelli di kombu.
-    """
+    """Consume a service queue without acknowledgements, passing ``RsMessage`` objects to handlers."""
 
     __slots__ = (
         '_connection', '_worker', 'queue', '_callback', 'accept',
@@ -72,7 +56,6 @@ class RsMailboxConsumer:
         self._closed = False
         self._declared = declared
 
-    # ------------------------------------------------------------ ciclo di vita
 
     def start(self):
         if self._closed or self._started:
@@ -87,7 +70,7 @@ class RsMailboxConsumer:
         return self
 
     def consume(self):
-        """``Consumer.consume``: il consumer Rust parte alla creazione."""
+        """Start consumption at creation time."""
         return self.start()
 
     def cancel(self):
@@ -95,8 +78,8 @@ class RsMailboxConsumer:
         if worker is not None:
             try:
                 worker.cancel()
-            except Exception:  # connessione già persa: best effort
-                logger.debug('cancel del mailbox fallito', exc_info=True)
+            except Exception:  # The connection is already lost; ignore close errors.
+                logger.debug('mailbox cancellation failed', exc_info=True)
         self._started = False
 
     def close(self):
@@ -108,23 +91,21 @@ class RsMailboxConsumer:
         if worker is not None:
             try:
                 worker.close()
-            except Exception:  # best effort in chiusura
-                logger.debug('chiusura del mailbox fallita', exc_info=True)
+            except Exception:  # Ignore close errors.
+                logger.debug('mailbox close failed', exc_info=True)
         self._started = False
 
     release = close
 
     @property
     def channel(self):
-        # `ConsumerStep._close` chiude i canali dei consumer: qui è il
-        # consumer stesso a possedere la connessione Rust dedicata.
+        # ConsumerStep._close closes channels; this consumer owns its dedicated Rust connection.
         return self
 
     @property
     def consuming(self):
         return self._started
 
-    # ------------------------------------------------------------ messaggi
 
     def pending(self):
         worker = self._worker
@@ -135,13 +116,13 @@ class RsMailboxConsumer:
         return worker.take_error() if worker is not None else None
 
     def drain(self, max_batch=DRAIN_BATCH):
-        """Consegna gli handler le consegne già pronte (nessuna attesa)."""
+        """Dispatch ready deliveries to handlers without waiting."""
         worker = self._worker
         if worker is None:
             return 0
         raws = worker.drain(max_batch)
         if raws:
-            logger.debug('mailbox %s: %d consegne', self.queue, len(raws))
+            logger.debug('mailbox %s: %d deliveries', self.queue, len(raws))
         count = 0
         for raw in raws:
             message = RsMessage(None, raw, accept=self.accept, no_ack=True,
@@ -161,14 +142,13 @@ class RsMailboxConsumer:
         else:
             logger.error('Cannot decode message: %r', exc, exc_info=True)
 
-    # ------------------------------------------------------------ risposta pidbox
 
     def publish_reply(self, data, exchange, routing_key, ticket, clock,
                       serializer=None):
-        """``Mailbox._publish_reply`` sul producer Rust."""
+        """Publish a mailbox reply through the Rust producer."""
         worker = self._worker
         if worker is None:
-            raise ConnectionError('mailbox chiuso')
+            raise ConnectionError('mailbox closed')
         body, content_type, content_encoding = _serialize(data, serializer)
         headers = {'ticket': ticket, 'clock': clock.forward()}
         worker.declare_exchange(exchange, 'direct', durable=False,
@@ -180,7 +160,7 @@ class RsMailboxConsumer:
             headers=headers,
             content_type=content_type,
             content_encoding=content_encoding,
-            # `Exchange(..., delivery_mode='transient')` del riferimento.
+            # Match the reference exchange's transient delivery mode.
             delivery_mode=1,
             priority=0,
         )
@@ -188,7 +168,7 @@ class RsMailboxConsumer:
 
 def pidbox_consumer(connection, node, callback, accept=None,
                     on_decode_error=None, expires=None, message_ttl=None):
-    """Consumer della coda ``{hostname}.{namespace}.pidbox`` del nodo."""
+    """Consume the node's ``{hostname}.{namespace}.pidbox`` queue."""
     mailbox = node.mailbox
     namespace = mailbox.namespace
     hostname = node.hostname
@@ -205,7 +185,7 @@ def pidbox_consumer(connection, node, callback, accept=None,
 def events_consumer(connection, prefix, node_id, exchange, exchange_type,
                     routing_key, callback, accept=None, expires=None,
                     message_ttl=None, queue_exclusive=True, queue_durable=False):
-    """Consumer ``worker.#`` della coda eventi del nodo."""
+    """Consume ``worker.#`` events from the node's event queue."""
     queue = f'{prefix}.{node_id}'
 
     def declared(worker):

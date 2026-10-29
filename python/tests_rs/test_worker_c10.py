@@ -1,4 +1,4 @@
-"""Differenziale GC e memoria limitata dopo 30000 job a concurrency 10."""
+"""Compare GC and bounded memory after 30000 jobs at concurrency 10."""
 import json
 import os
 import subprocess
@@ -23,8 +23,7 @@ def test_c10_gc_matches_reference_and_memory_stabilizes(gc_options):
         outcomes[implementation] = json.loads(result.stdout.splitlines()[-1])
     assert outcomes['rs']['gc'] == outcomes['ref']['gc']
     for pid, before in outcomes['rs']['before_kb'].items():
-        # La soglia tollera arene e rumore PSS; una perdita per job supera
-        # rapidamente 2 MiB per figlio nei 30000 job successivi al warm-up.
+        # Allow arena and PSS noise; a per-job leak would exceed 2 MiB per child over 30000 jobs after warm-up.
         assert outcomes['rs']['after_kb'][pid] - before < 2048, outcomes
 
 

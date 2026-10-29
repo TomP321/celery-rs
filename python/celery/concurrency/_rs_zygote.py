@@ -1,17 +1,4 @@
-"""Zygote del pool Rust.
-
-Il master forka questo processo **prima** di avviare i thread Rust del pool
-(ma può avere già il runtime del producer: gli ``after_fork`` del pacchetto
-scartano i runtime/socket ereditati). Lo zygote:
-
-1. chiude solo i descrittori del runtime Rust ereditati dal padre;
-2. importa i moduli pesanti (app, task, ``celery.concurrency.prefork``) e fa
-   ``gc.freeze()``: le pagine diventano condivise in copy-on-write da tutti i
-   figli;
-3. resta in attesa sul socket di controllo e per ogni richiesta crea un
-   ``socketpair``, fa ``fork()``, lascia al figlio l'estremità ricevuta e
-   riporta il pid al supervisore Rust. Non esegue mai un task.
-"""
+"""Single-threaded zygote that forks Python children for the Rust pool."""
 
 import array
 import gc
@@ -22,10 +9,9 @@ import traceback
 
 __all__ = ('create',)
 
-#: `[tipo][a][b]`: tipo 1 = crea figlio (`a`=maxtasks, `b`=max_memory_kb),
-#: tipo 2 = esci, tipo 3 = raccogli il figlio `a` (pid).
+# [type][a][b]: 1 creates a child (maxtasks, max_memory_kb), 2 exits, 3 reaps pid a.
 _CONTROL = struct.Struct('>BII')
-#: `[stato][pid][lunghezza errore]` + errore.
+# [status][pid][error length] followed by the error.
 _REPLY = struct.Struct('>BiI')
 _REPLY_LEN = struct.Struct('>I')
 
@@ -35,23 +21,19 @@ CONTROL_REAP = 3
 
 
 def create(app, hostname):
-    """Forka lo zygote e restituisce ``(socket di controllo, pid)``.
-
-    Va chiamata dal master prima di avviare thread propri del pool.
-    """
+    """Fork the zygote before starting pool threads; return its control socket and pid."""
     from _celery_rs import _runtime_fds
 
-    # I cicli temporanei del bootstrap non devono diventare immortali o congelati.
+    # Collect temporary bootstrap cycles before immortalizing or freezing them.
     gc.collect()
     runtime_fds = _snapshot_runtime_fds(_runtime_fds())
     parent, child = socket.socketpair(socket.AF_UNIX, socket.SOCK_STREAM)
-    # I callback after_fork e gli import possono avviare il GC prima che
-    # l'heap ereditato sia congelato; i finalizer dei thread non sono sicuri.
+    # Disable GC until inherited objects are frozen; fork callbacks can trigger unsafe thread finalizers.
     gc_enabled = gc.isenabled()
     gc.disable()
     try:
         _immortalize_heap()
-        # Anche il master deve evitare di riscrivere gli header GC condivisi.
+        # The master must also avoid rewriting shared GC headers.
         gc.freeze()
         pid = os.fork()
     except BaseException:
@@ -110,8 +92,7 @@ def _snapshot_runtime_fds(fds):
                         target = int(fields[1])
                         expected = (int(fields[fields.index('sdev:') + 1], 16),
                                     int(fields[fields.index('ino:') + 1], 16))
-                        # epoll è condiviso col padre: una connessione aperta
-                        # dopo il fork può avere un numero uguale a un fd Python.
+                        # epoll is shared; new parent connections may reuse Python descriptor numbers.
                         if _fd_identity(target) == expected:
                             result[target] = expected
         except FileNotFoundError:
@@ -120,12 +101,11 @@ def _snapshot_runtime_fds(fds):
 
 
 def _close_inherited_fds(keep, runtime_fds=None):
-    """Chiude solo gli fd Rust, senza acquisire mutex ereditati.
+    """Close Rust descriptors without inherited locks or changes to shared epoll state.
 
-    La foto prima del fork conserva anche le connessioni che il padre chiude
-    subito dopo; fdinfo nel figlio include quelle aperte prima del fork ma
-    dopo la foto. Le identità impediscono chiusure di numeri già riciclati.
-    Non si modifica epoll, condiviso col padre.
+    Match descriptor identities to avoid closing recycled Python descriptors.
+    The pre-fork snapshot and child fdinfo also cover connections closed or
+    opened by the parent around the snapshot.
     """
     runtime_fds = runtime_fds or {}
     inherited = {fd: identity for fd, identity in runtime_fds.items()
@@ -140,7 +120,7 @@ def _close_inherited_fds(keep, runtime_fds=None):
 
 
 def _recv_control(control):
-    """Legge un comando di controllo e gli eventuali fd ``SCM_RIGHTS``."""
+    """Read a control command and any ``SCM_RIGHTS`` descriptors."""
     data = b''
     fds = []
     needed = _CONTROL.size
@@ -167,22 +147,20 @@ def _reply(control, status, pid=0, message=b''):
 
 
 def _warm_cffi():
-    # Billiard usa cdef per prctl in ogni initializer: il solo import non
-    # crea il parser globale di pycparser, che va condiviso prima del fork.
+    # Preload billiard's cdef parser before fork so its pages remain shared.
     try:
         from cffi import FFI
-    except ImportError:  # pragma: no cover - billiard può usare ctypes
+    except ImportError:  # pragma: no cover - billiard may use ctypes
         return
     ffi = FFI()
     ffi.cdef('int prctl (int __option, ...);')
 
 
 def _warm_backend_errors(app):
-    # Il primo errore di rete importa redis-py e kombu (~15 MB): questi
-    # oggetti devono nascere condivisi, prima del freeze e del fork dei figli.
+    # Preload network error dependencies before freeze so children share their pages.
     import sys
     backend = app.backend
-    # RPC e memory non usano Redis: non trattenerne il modulo nello zygote.
+    # RPC and memory backends do not need Redis modules in the zygote.
     redis = sys.modules.get('celery.backends.redis')
     if redis is not None and isinstance(backend, redis.RedisBackend):
         backend.connection_errors
@@ -191,19 +169,17 @@ def _warm_backend_errors(app):
 
 def _main(control, app, hostname):
     control.setblocking(True)
-    # Importa presto: dopo `gc.freeze()` queste pagine restano condivise.
+    # Import before freeze to keep these pages shared.
     from celery.concurrency import _rs_child
     __import__('celery.concurrency.prefork')
 
     try:
         app.loader.import_default_modules()
     except Exception:
-        # Il master ha già importato l'app; se il loader non è disponibile
-        # (test/uso diretto) si prosegue con il registry esistente.
+        # The master loaded the app; direct pool use may have only the existing registry.
         traceback.print_exc()
 
-    # Moduli che ogni figlio usa al primo task: importarli qui (e non nel
-    # figlio) li rende condivisi in copy-on-write con lo zygote.
+    # Preload first-task modules so children share their pages with the zygote.
     for module in (
             'celery.app.task', 'celery.canvas', 'celery.result',
             'celery.backends', 'celery.backends.base',
@@ -211,25 +187,22 @@ def _main(control, app, hostname):
             'billiard.util'):
         try:
             __import__(module)
-        except Exception:  # pragma: no cover - dipendenze opzionali
+        except Exception:  # pragma: no cover - optional dependencies
             traceback.print_exc()
 
     try:
         _warm_backend_errors(app)
     except Exception:
-        # Solo un'ottimizzazione: se fallisce (es. dipendenze del backend
-        # mancanti) l'errore resta quello del riferimento, al primo uso.
+        # Preloading is optional; missing dependencies must still fail at first use as in the reference.
         traceback.print_exc()
     try:
-        # Logging e tracer uguali in ogni figlio: costruiti qui restano condivisi.
+        # Prepare common logging and tracers here to share their pages.
         from celery.concurrency.prefork import prepare_process_initializer
         prepare_process_initializer(app, hostname)
     except Exception:
-        # I figli rifanno tutto nel proprio initializer, come nel riferimento.
+        # Children repeat initialization as in the reference.
         traceback.print_exc()
-    # `gc.freeze()` (non `collect`): nel figlio di un master multi-thread i
-    # finalizer di oggetti ereditati possono toccare stato non valido dopo il
-    # fork; congelare le pagine basta per la condivisione copy-on-write.
+    # Freeze without collecting: inherited finalizers may touch invalid state after a multithreaded fork.
     _immortalize_heap()
     gc.freeze()
     _rs_child._release_task_memory(force=True)
@@ -246,7 +219,7 @@ def _main(control, app, hostname):
         if kind == CONTROL_REAP:
             for fd in fds:
                 os.close(fd)
-            pid = int(maxtasks)  # il campo maxtasks porta il pid da raccogliere
+            pid = int(maxtasks)  # The maxtasks field carries the pid to reap.
             try:
                 _, status = os.waitpid(pid, 0)
             except (ChildProcessError, OSError):
@@ -263,12 +236,12 @@ def _main(control, app, hostname):
         if kind != CONTROL_SPAWN:
             for fd in fds:
                 os.close(fd)
-            _reply(control, 1, 0, b'comando di controllo sconosciuto')
+            _reply(control, 1, 0, b'unknown control command')
             continue
         if len(fds) != 1:
             for fd in fds:
                 os.close(fd)
-            _reply(control, 1, 0, b'atteso un descrittore per il figlio')
+            _reply(control, 1, 0, b'expected a descriptor for the child')
             continue
         child_fd = fds[0]
         try:
@@ -278,21 +251,20 @@ def _main(control, app, hostname):
             _reply(control, 1, 0, str(exc).encode('utf-8', 'replace'))
             continue
         if pid == 0:
-            # Figlio del pool: chiude il controllo, tiene solo il suo fd.
+            # The pool child retains only its own descriptor.
             try:
                 control.close()
             except OSError:
                 pass
             try:
-                # Gli fd Python restano ereditabili; quelli Rust sono già
-                # chiusi nello zygote. Nessuna riscansione sporca il CoW.
+                # Python descriptors remain inherited; rescanning would dirty copy-on-write pages.
                 code = _rs_child.child_main(
                     child_fd, app, hostname, maxtasks, max_memory)
             except BaseException:
                 traceback.print_exc()
                 code = 1
             os._exit(code & 0xFF)
-        # Zygote: il fd è del figlio, la nostra copia va chiusa.
+        # Close the zygote's copy of the child's descriptor.
         try:
             os.close(child_fd)
         except OSError:

@@ -1,4 +1,4 @@
-"""GC prima del fork e rilascio dei buffer nel loop reale del figlio."""
+"""GC before fork and buffer release in the child loop."""
 import json
 import os
 import subprocess

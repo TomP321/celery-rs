@@ -1,4 +1,4 @@
-"""Diagnostica esplicita dei figli; nessun import nel percorso normale."""
+"""Opt-in child diagnostics."""
 import ctypes
 import gc
 import json
@@ -75,7 +75,7 @@ class MemoryProbe:
                           for d in diff])
         self.modules = set(sys.modules)
         if os.environ.get('CELERY_RS_MEMORY_PROBE_RECLAIM') == '1':
-            # Esperimento distruttivo delle sole statistiche: mai attivo in produzione.
+            # Destructive statistics experiment; never enabled in production.
             def current():
                 return Path('/proc/self/smaps_rollup').read_text()
             record['before_gc'] = current()

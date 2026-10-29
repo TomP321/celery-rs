@@ -1,4 +1,4 @@
-"""Compatibilità degli oggetti pubblici e memoria di beat (spec 08f)."""
+"""Beat public object compatibility and memory usage."""
 import json
 import os
 from pathlib import Path
@@ -63,7 +63,7 @@ def test_compact_cron_exposure_and_mutation():
     cron.remaining_estimate(app.now())
     import _celery_rs
     assert isinstance(cron._rs_cached, _celery_rs.CronSpec)
-    # La vista pubblica deve essere il dizionario vero, scrivibile.
+    # The public view must be the real, writable dictionary.
     data = vars(cron)
     data['minute'] = {7}
     cron._rs_spec()
@@ -98,7 +98,7 @@ def test_persistent_sync_reuses_entries(tmp_path):
         scheduler.sync()
     finally:
         scheduler.close()
-    # Lo stesso file mantiene i valori persistiti anche con il riferimento.
+    # The reference must retain values persisted in the same file.
     code = '''
     import shelve, json, sys
     with shelve.open(sys.argv[1]) as store:

@@ -1,19 +1,7 @@
-"""Pool prefork Rust: zygote + figli Python supervisionati dal core Rust.
+"""Rust prefork pool with Python children forked by a zygote.
 
-Sostituisce billiard/``AsynPool``: la stessa semantica di
-``celery.concurrency.prefork.TaskPool``, con il supervisore in Rust
-(``crates/celery-worker/src/pool``) e i figli forkati dallo zygote.
-
-``apply_async`` restituisce un oggetto con l'interfaccia di
-``billiard.pool.ApplyResult`` usata da Celery. I callback vengono invocati nel
-thread del loop del master quando chiama :meth:`RsTaskPool.process_events`
-(non bloccante), tipicamente dopo un risveglio del ``Waker`` passato al
-costruttore (``waker=``). Per pilotare il pool nei test::
-
-    while pool.alive_work():
-        pool.wait(0.1)
-
-dove :meth:`RsTaskPool.wait` è ``waker.wait`` + ``process_events``.
+Callbacks run in the master loop through ``process_events``, after the shared
+Waker signals readiness. Tests can drive the pool with ``wait``.
 """
 
 import itertools
@@ -36,22 +24,21 @@ from . import _rs_zygote
 
 try:
     import _celery_rs
-except ImportError as exc:  # pragma: no cover - solo senza estensione nativa
+except ImportError as exc:  # pragma: no cover - native extension unavailable
     raise ImportError(
-        'celery.concurrency.rs_prefork richiede il modulo nativo _celery_rs'
+        'celery.concurrency.rs_prefork requires the native module _celery_rs'
     ) from exc
 
 __all__ = ('RsTaskPool', 'RsApplyResult')
 
 logger = get_logger(__name__)
 
-#: Come il contatore globale di billiard: l'id del job compare nei messaggi
-#: WorkerLostError ("Job: N").
+# Match billiard's global counter: job ids appear in WorkerLostError messages.
 _job_counter = itertools.count(1)
 
 
 class RsApplyResult:
-    """Interfaccia di ``billiard.pool.ApplyResult`` usata da Celery."""
+    """Provide the ``billiard.pool.ApplyResult`` interface used by Celery."""
 
     _worker_lost = None
     _write_to = None
@@ -161,7 +148,7 @@ class RsApplyResult:
             self._success, self._value = obj
             self._event.set()
             if self._accepted:
-                # Se il risultato arriva prima dell'ack, l'ack farà la pulizia.
+                # If the result precedes the acknowledgement, the acknowledgement will clean up.
                 self._cache.pop(self._job, None)
             if self._callback and self._success:
                 self.safe_apply_callback(self._callback, self._value)
@@ -187,11 +174,11 @@ class RsApplyResult:
                 except self._callbacks_propagate:
                     raise
                 except Exception:
-                    pass  # come AsynPool: NACK non supportato, si ignora
+                    pass  # Match AsynPool: ignore unsupported NACKs.
 
 
 def _exception_info(exc):
-    """``ExceptionInfo`` con la stessa forma di billiard per ``exc``."""
+    """Wrap ``exc`` in a billiard-compatible ``ExceptionInfo``."""
     try:
         raise exc
     except BaseException:
@@ -199,7 +186,7 @@ def _exception_info(exc):
 
 
 class RsTaskPool(BasePool):
-    """Pool prefork con supervisore Rust (vedi spec 05b)."""
+    """Prefork pool supervised by Rust."""
 
     signal_safe = True
     is_green = False
@@ -220,20 +207,16 @@ class RsTaskPool(BasePool):
         self._zygote_pid = 0
         self._pool_created = False
         self._zygote_lost = False
-        #: Putlock condiviso con `Worker._process_task_sem`: billiard lo
-        #: rilascia quando un job è pronto; senza, dopo `-c` task il master
-        #: smetterebbe di consegnare lavoro al pool.
+        # Share billiard's putlock with Worker._process_task_sem to keep dispatching after concurrency jobs.
         self._putlock = self.options.get('semaphore')
-        #: Exit code con cui il worker deve uscire se il pool non è più
-        #: utilizzabile (zygote perso). ``None`` finché il pool è sano.
+        # Worker exit code after zygote loss; None while the pool is healthy.
         self._fatal_exitcode = None
 
-    # -- lifecycle ---------------------------------------------------------
 
     def on_start(self):
         app = self.app
         if app is None:
-            raise RuntimeError('RsTaskPool richiede app=')
+            raise RuntimeError('RsTaskPool requires app=')
         limit = self.limit or 1
         self._control_sock, self._zygote_pid = _rs_zygote.create(
             app, self._hostname())
@@ -245,13 +228,13 @@ class RsTaskPool(BasePool):
                 self.waker,
             )
         except BaseException:
-            # Lo zygote esiste ma nessun supervisore lo chiuderà.
+            # No supervisor exists to close the zygote yet.
             self._finish_zygote()
             raise
         self._pool_created = True
 
     def on_stop(self):
-        """Chiusura ordinata: completa i job e chiude i figli."""
+        """Finish pending jobs and shut down the children."""
         pool = self._pool
         if pool is not None:
             pool.close()
@@ -263,7 +246,7 @@ class RsTaskPool(BasePool):
         self._clear_putlock()
 
     def on_terminate(self):
-        """Terminazione immediata (SIGTERM, poi SIGKILL)."""
+        """Terminate children with SIGTERM, then SIGKILL."""
         pool = self._pool
         if pool is not None:
             pool.terminate()
@@ -271,8 +254,8 @@ class RsTaskPool(BasePool):
             while not pool.stopped() and time.monotonic() < deadline:
                 self.wait(0.05)
             self.process_events()
-            if not pool.stopped():  # pragma: no cover - difensivo
-                logger.error('pool Rust non terminato entro il timeout')
+            if not pool.stopped():  # pragma: no cover - defensive
+                logger.error('Rust pool did not terminate within the timeout')
             self._pool = None
         self._finish_zygote()
         self._clear_putlock()
@@ -283,16 +266,15 @@ class RsTaskPool(BasePool):
         self._clear_putlock()
 
     def _release_putlock(self):
-        """Rilascia uno slot del semaforo di `_process_task_sem` (come billiard)."""
+        """Release a ``_process_task_sem`` slot as billiard does."""
         if self._putlock is not None:
             try:
                 self._putlock.release()
-            except Exception:  # pragma: no cover - semaforo in stato strano
+            except Exception:  # pragma: no cover - unexpected semaphore state
                 logger.exception('Error releasing pool putlock')
 
     def _clear_putlock(self):
-        # billiard lo azzera alla chiusura: i callback in attesa non devono
-        # essere richiamati dopo lo shutdown.
+        # Match billiard: clear pending callbacks at shutdown.
         if self._putlock is not None:
             try:
                 self._putlock.clear()
@@ -309,7 +291,7 @@ class RsTaskPool(BasePool):
             except OSError:
                 pass
         if pid:
-            if not self._pool_created:  # pragma: no cover - errore in on_start
+            if not self._pool_created:  # pragma: no cover - on_start failure
                 try:
                     os.kill(pid, signal.SIGKILL)
                 except OSError:
@@ -317,17 +299,16 @@ class RsTaskPool(BasePool):
             try:
                 os.waitpid(pid, 0)
             except (ChildProcessError, OSError):
-                # Il supervisore Rust lo ha già raccolto.
+                # The Rust supervisor has already reaped it.
                 pass
         self._pool_created = False
 
-    # -- esecuzione --------------------------------------------------------
 
     def on_apply(self, target, args, kwargs, waitforslot=False,
                  callbacks_propagate=(), **options):
         pool = self._pool
         if pool is None:
-            raise RuntimeError('pool non avviato')
+            raise RuntimeError('pool not started')
         job = next(_job_counter)
         result = RsApplyResult(
             self._cache, job,
@@ -352,10 +333,9 @@ class RsTaskPool(BasePool):
             raise
         return result
 
-    # -- eventi ------------------------------------------------------------
 
     def process_events(self):
-        """Esegue i callback degli eventi pronti; non blocca."""
+        """Run callbacks for ready events without blocking."""
         pool = self._pool
         if pool is None:
             return 0
@@ -370,10 +350,7 @@ class RsTaskPool(BasePool):
             self._zygote_lost = True
             if self._fatal_exitcode is None:
                 self._fatal_exitcode = EX_FAILURE
-                # Nessun altro figlio può nascere: i job in corso finiscono
-                # con WorkerLostError e i messaggi tornano al broker secondo
-                # acks_late/reject_on_worker_lost. Il master deve uscire con
-                # un exit code != 0 perché systemd/supervisor lo riavvii.
+                # Zygote loss prevents replacement children; exit so the service manager restarts the worker.
                 logger.critical(
                     'Pool zygote process %s exited: no new child processes '
                     'can be created. Shutting down the worker with exit '
@@ -386,7 +363,7 @@ class RsTaskPool(BasePool):
             return
         if kind in ('ready', 'worker-lost', 'terminated', 'hard-timeout',
                     'pool-failure'):
-            # Come billiard: lo slot si libera appena il job ha un esito.
+            # Match billiard: release the slot as soon as the job has an outcome.
             if not result.ready():
                 self._release_putlock()
         if kind == 'accepted':
@@ -394,7 +371,7 @@ class RsTaskPool(BasePool):
         elif kind == 'ready':
             try:
                 value = pickle.loads(event.payload)
-            except Exception as exc:  # payload corrotto: errore di protocollo
+            except Exception as exc:  # Corrupt payload: protocol error.
                 value = (False, _exception_info(exc))
             result._set(event.job, value)
         elif kind == 'worker-lost':
@@ -422,23 +399,22 @@ class RsTaskPool(BasePool):
         return _exception_info(TimeLimitExceeded(timeout))
 
     def wait(self, timeout=None):
-        """Attende un evento del pool e lo processa (driver dei test)."""
+        """Wait for a pool event and process it."""
         notified = self.waker.wait(timeout)
         self.process_events()
         return notified
 
     def alive_work(self):
-        """True finché ci sono job non ancora conclusi."""
+        """Return whether any jobs remain unfinished."""
         return any(not result.ready() for result in self._cache.values())
 
-    # -- API BasePool ------------------------------------------------------
 
     def did_start_ok(self):
         return self._pool is not None and self._pool.did_start_ok()
 
     @property
     def fatal_exitcode(self):
-        """Exit code richiesto al worker se il pool è inutilizzabile."""
+        """Return the worker exit code if the pool is unusable."""
         return self._fatal_exitcode
 
     def flush(self):
@@ -451,7 +427,7 @@ class RsTaskPool(BasePool):
                 result.discard()
 
     def maintain_pool(self, *args, **kwargs):
-        # Il supervisore rimpiazza i figli da solo.
+        # The supervisor replaces children automatically.
         self.process_events()
 
     def terminate_job(self, pid, signal=None):

@@ -1,4 +1,4 @@
-"""Initializer dei figli preparato nello zygote: stesso comportamento del riferimento."""
+"""Compare child initialization prepared in the zygote with the reference."""
 import json
 import os
 import subprocess
@@ -15,7 +15,7 @@ from celery.loaders.app import AppLoader
 
 class Loader(AppLoader):
     def on_worker_process_init(self):
-        # Hook utente che registra un task nel figlio, dopo la preparazione.
+        # User hook registering a task in the child after preparation.
         @self.app.task(name='late')
         def late():
             return 'late'

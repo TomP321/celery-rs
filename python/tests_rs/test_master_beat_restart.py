@@ -1,4 +1,4 @@
-"""Import del master e PSS dopo la riconnessione (spec 10a)."""
+"""Master imports and PSS after reconnection."""
 import importlib.util
 import json
 import os
@@ -125,7 +125,7 @@ def test_backend_reset_only_discards_sockets_on_the_restarted_server(broker, exp
 
     class CustomClient(RsRedis):
         def reset(self):
-            raise AssertionError('client personalizzato')
+            raise AssertionError('custom client')
 
     app._backend = SimpleNamespace(client=CustomClient(host='127.0.0.1', port=6390))
     assert not _reset_on_broker_restart(app, broker)
@@ -138,7 +138,7 @@ def test_backend_reset_only_discards_sockets_on_the_restarted_server(broker, exp
 @pytest.mark.parametrize('broker', ['redis', 'amqp'])
 def test_restart_pss_is_bounded(broker, tmp_path):
     if os.environ.get('CELERY_RS_BROKER_LOCKED') != '1':
-        pytest.skip('richiede la corsia esclusiva di tools/dev/with-brokers')
+        pytest.skip('requires an exclusive tools/dev/with-brokers lane')
     sys.path.insert(0, str(ROOT / 'bench'))
     try:
         spec = importlib.util.spec_from_file_location(

@@ -212,8 +212,7 @@ class Consumer:
         self.pool = pool
         self.timer = timer
         self.strategies = self.Strategies()
-        # Come in `Worker.setup_instance`: sul percorso Rust la connessione
-        # descrittiva non deve importare il trasporto kombu.
+        # Match Worker.setup_instance: keep descriptive Rust connections free of transport imports.
         from celery.app import _rs_producer
         self.conninfo = (
             _rs_producer.fast_connection(
@@ -632,8 +631,7 @@ class Consumer:
         conn = self.connection_for_read(heartbeat=self.amqheartbeat)
         if self.hub:
             if _rs_consumer.is_rs_connection(conn):
-                # I fd della connessione kombu lazy (pidbox/gossip) verranno
-                # registrati quando quella connessione viene aperta.
+                # Register lazy kombu descriptors when the connection opens.
                 conn.register_with_event_loop(self.hub)
             else:
                 conn.transport.register_with_event_loop(
@@ -641,9 +639,8 @@ class Consumer:
         return conn
 
     def connection_for_read(self, heartbeat=None):
-        # Worker `-P solo` su Redis/AMQP: la lettura passa dal core Rust.
-        # Le stesse regole di `use_fast_producer`; i test upstream con pool
-        # mock non vengono promossi.
+        # Solo workers on Redis and AMQP read through Rust.
+        # Use fast producer eligibility rules; preserve upstream pool mocks.
         if _rs_consumer.use_rs_worker(self):
             connection = _rs_consumer.connection(self, heartbeat=heartbeat)
             if connection is not None:
@@ -652,8 +649,7 @@ class Consumer:
             self.app.connection_for_read(heartbeat=heartbeat))
 
     def connection_for_write(self, url=None, heartbeat=None):
-        # Dopo la connessione di lettura Rust, anche gli eventi del worker
-        # escono dal producer Rust: nessun socket kombu nel percorso caldo.
+        # After Rust consumption starts, publish worker events through Rust too.
         if _rs_consumer.is_rs_connection(getattr(self, 'connection', None)):
             connection = _rs_producer.fast_connection(
                 self.app, url or self.app.conf.broker_write_url)
@@ -965,8 +961,7 @@ class Evloop(bootsteps.StartStopStep):
     def start(self, c):
         self.patch_all(c)
         loop = c.loop
-        # Solo se il loop è ancora quello di default: i test che sostituiscono
-        # `Consumer.loop` restano sul loro mock.
+        # Preserve custom or mocked Consumer.loop implementations.
         if loop is loops.asynloop and _rs_consumer.is_rs_connection(c.connection):
             loop = _rs_consumer.rsloop
         loop(*c.loop_args())

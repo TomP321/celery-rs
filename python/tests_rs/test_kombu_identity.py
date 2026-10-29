@@ -1,15 +1,7 @@
-"""Identità degli oggetti kombu: celery-rs espone gli stessi oggetti del riferimento.
+"""Kombu object identity and runtime MRO compatibility with the reference.
 
-Scritto dall'orchestratore (decisione 08b): dove il riferimento usa o espone un oggetto di
-kombu, celery-rs deve usare l'oggetto vero (o una sua sottoclasse), anche se costa memoria.
-Non modificare questo file per farlo passare.
-
-1. Nessun nome camuffato: ogni funzione/classe raggiungibile dai moduli `celery.*` che dichiara
-   `__module__` di kombu deve essere davvero l'oggetto definito in quel modulo di kombu, e ogni
-   oggetto che dichiara `__module__` di celery deve essere definito in quel file.
-2. Oggetti a runtime: per una serie di espressioni tipiche (code, exchange, connessioni,
-   producer, mailbox…) le classi di kombu nella MRO del riferimento devono comparire anche nella
-   MRO dell'oggetto di celery-rs (stessa classe, verificata con `isinstance` sulla classe vera).
+Do not weaken these checks to make them pass. Public objects must retain their real
+module identity, and runtime objects must inherit the reference's kombu classes.
 """
 from __future__ import annotations
 
@@ -51,20 +43,19 @@ for name in names:
             continue
         if declared.split('.')[0] not in ('celery', 'kombu', 'amqp', 'billiard', 'click', 'vine'):
             continue
-        # l'oggetto deve essere quello che si trova al nome dichiarato (`__module__` +
-        # `__qualname__`): un nome riscritto a mano punta a un altro oggetto o a niente
+        # Resolve the declared module and qualified name to verify object identity.
         try:
             real = importlib.import_module(declared)
             for part in qual.split('.'):
                 real = getattr(real, part)
         except Exception as exc:
             if declared.startswith('celery'):
-                # nomi rimossi dal namespace dopo la definizione (`del`) sono legittimi
+                # Names removed after definition with del are valid.
                 continue
-            problems.append(f'{name}.{attr}: dichiara {declared}.{qual}, che non esiste ({exc!r})')
+            problems.append(f'{name}.{attr}: declares {declared}.{qual}, which does not exist ({exc!r})')
             continue
         if real is not obj and inspect.unwrap(real) is not inspect.unwrap(obj):
-            problems.append(f'{name}.{attr}: dichiara {declared}.{qual} ma non è quell\'oggetto')
+            problems.append(f'{name}.{attr}: declares {declared}.{qual} but is not that object')
 print(json.dumps(problems))
 '''
 
@@ -133,11 +124,11 @@ with app.producer_or_acquire() as producer:
             obj = eval(expr)
         except Exception as exc:
             if 'error' not in want:
-                problems.append(f'{key}: {type(exc).__name__} (il riferimento non solleva)')
+                problems.append(f'{key}: {type(exc).__name__} (reference does not raise)')
             continue
         for path in want.get('mro', []):
             mod, _, qual = path.rpartition('.')
-            # classi annidate: risolvi per parti dal modulo più lungo importabile
+            # Resolve nested classes from the longest importable module path.
             parts = path.split('.')
             for i in range(len(parts) - 1, 0, -1):
                 try:
@@ -149,7 +140,7 @@ with app.producer_or_acquire() as producer:
                     cls = None
             if cls is None or not isinstance(obj, cls):
                 problems.append(f'{key}: {type(obj).__module__}.{type(obj).__qualname__} '
-                                f'non è istanza di {path} (come nel riferimento)')
+                                f'is not an instance of {path} as in the reference')
 print(json.dumps(problems))
 '''
 

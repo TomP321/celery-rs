@@ -1,19 +1,4 @@
-"""Figlio del pool Rust: esegue i job ricevuti dallo ``socketpair``.
-
-Il processo nasce da ``fork()`` nello zygote (``_rs_zygote``), quindi ha già
-l'app e i task importati e condivide in copy-on-write le pagine dello zygote.
-Qui si replica il loop di ``billiard.pool.Worker``:
-
-* ``process_initializer(app, hostname)`` del riferimento (reset/ignore dei
-  segnali, ``worker_process_init``, logging, ``_set_task_join_will_block``);
-* ``reset_signals(full=True)`` e handler SIGUSR1 → ``SoftTimeLimitExceeded``
-  come billiard;
-* per ogni job: ACK con ``time.monotonic()``, esecuzione del target, READY con
-  il risultato serializzato in ``pickle`` (``ExceptionInfo`` per gli errori);
-* ``maxtasksperchild`` e ``max_memory_per_child`` (``resource.getrusage``)
-  fanno uscire il figlio dopo il job, come billiard;
-* ``process_destructor`` / ``worker_process_shutdown`` all'uscita.
-"""
+"""Rust pool child with billiard-compatible job execution and shutdown."""
 
 import os
 import pickle
@@ -40,12 +25,12 @@ __all__ = ('child_main', 'MAXMEM_USED_FMT')
 
 logger = get_logger(__name__)
 
-#: Messaggio di billiard quando un figlio supera ``max_memory_per_child``.
+# Billiard's message when a child exceeds max_memory_per_child.
 MAXMEM_USED_FMT = """\
 child process exiting after exceeding memory limit ({0}KiB / {1}KiB)
 """
 
-#: Tipi di frame (devono combaciare con ``crates/celery-worker/src/pool/frame.rs``).
+# Frame types must match crates/celery-worker/src/pool/frame.rs.
 TASK = 1
 ACK = 2
 READY = 3
@@ -55,7 +40,7 @@ _META = struct.Struct('>BQ')
 
 
 def _read_exact(sock, size):
-    """Legge esattamente ``size`` byte; ``None`` su EOF a inizio frame."""
+    """Read exactly ``size`` bytes, returning ``None`` on EOF before a frame."""
     buffer = bytearray(size)
     view = memoryview(buffer)
     offset = 0
@@ -67,7 +52,7 @@ def _read_exact(sock, size):
         if not received:
             if offset == 0:
                 return None
-            raise EOFError('frame troncato')
+            raise EOFError('truncated frame')
         offset += received
     return buffer
 
@@ -79,7 +64,7 @@ def _write_frame(sock, kind, job, payload):
 
 
 def _write_ready(sock, job, result, retire=False):
-    """READY con flag: bit 0 = successo, bit 1 = il figlio si ritira."""
+    """Encode READY flags: bit 0 for success, bit 1 for child retirement."""
     flags = (1 if result[0] else 0) | (2 if retire else 0)
     _write_frame(sock, READY, job,
                  bytes((flags,)) +
@@ -87,9 +72,7 @@ def _write_ready(sock, job, result, retire=False):
 
 
 def _clear_result_traceback(result):
-    # Il tracer prova a pulire anche i frame ancora in esecuzione. Dopo
-    # READY sono terminati: liberarli evita cicli con ExceptionInfo e le
-    # grandi liste co_positions di billiard, senza aspettare il GC globale.
+    # After READY, frames have finished; clearing them releases ExceptionInfo cycles without waiting for GC.
     value = result[1]
     if result[0] and isinstance(value, tuple) and len(value) == 3:
         value = value[1]
@@ -100,8 +83,7 @@ def _clear_result_traceback(result):
         if isinstance(exception, BaseException) and exception.__traceback__ is not None:
             tb = exception.__traceback__
             traceback.clear_frames(tb)
-            # f_back conserva anche fast_trace_task e il suo R: clear_frames
-            # percorre soltanto tb_next e lascia quel ciclo intatto.
+            # clear_frames follows tb_next only; f_back retains fast_trace_task and its result cycle.
             frame = tb.tb_frame.f_back
             while frame is not None:
                 try:
@@ -112,7 +94,7 @@ def _clear_result_traceback(result):
 
 
 def child_main(fd, app, hostname, maxtasks=0, max_memory_per_child=0):
-    """Loop del figlio; ritorna l'exit code (stile billiard)."""
+    """Run the child loop and return its exit code."""
     from celery.concurrency.prefork import process_destructor, process_initializer
 
     sock = socket.socket(fileno=fd)
@@ -123,12 +105,12 @@ def child_main(fd, app, hostname, maxtasks=0, max_memory_per_child=0):
     if os.environ.get('CELERY_RS_MEMORY_PROBE'):
         from celery.concurrency._rs_memory_probe import MemoryProbe
         probe = MemoryProbe(os.environ['CELERY_RS_MEMORY_PROBE'])
-    # Billiard azzera il flag ereditato dal padre prima dell'initializer.
+    # Billiard resets the inherited flag before initialization.
     clear_terminate_handler_fired()
     process_initializer(app, hostname)
     reset_signals(full=True)
     signal.signal(signal.SIGUSR1, soft_timeout_sighandler)
-    # L'initializer lascia pagine libere che altrimenti diventano private.
+    # Release free initializer pages before they become private.
     _release_task_memory(force=True)
 
     completed = 0
@@ -140,7 +122,7 @@ def child_main(fd, app, hostname, maxtasks=0, max_memory_per_child=0):
             length = struct.unpack('>I', header)[0]
             body = _read_exact(sock, length)
             if body is None:
-                raise EOFError('frame troncato')
+                raise EOFError('truncated frame')
             kind, job = _META.unpack_from(body)
             if kind == RESET_BACKEND:
                 backend = sys.modules.get('celery.backends._rs_redis')
@@ -157,16 +139,15 @@ def child_main(fd, app, hostname, maxtasks=0, max_memory_per_child=0):
                 result = (True, target(*args, **kwargs))
             except BaseException as exc:
                 if terminate_handler_fired():
-                    # Segnale di shutdown: nessun risultato, come billiard.
+                    # Match billiard: shutdown signals produce no result.
                     raise
                 result = (False, ExceptionInfo())
                 if isinstance(exc, (SystemExit, KeyboardInterrupt)):
-                    # Il figlio esce: non deve ricevere altri job.
+                    # An exiting child must not receive another job.
                     _write_ready(sock, job, result, retire=True)
                     raise
             completed += 1
-            # Decidere il ritiro *prima* del READY: così il supervisore non
-            # assegna un altro job a un figlio che sta per uscire.
+            # Decide retirement before READY so the supervisor cannot assign another job.
             retire = False
             if max_memory_per_child and max_memory_per_child > 0:
                 used_kb = mem_rss()
@@ -182,9 +163,9 @@ def child_main(fd, app, hostname, maxtasks=0, max_memory_per_child=0):
                 retire = True
             _write_ready(sock, job, result, retire=retire)
             _clear_result_traceback(result)
-            # Il figlio inattivo non deve trattenere l'ultimo job e i suoi buffer.
+            # An idle child must not retain the previous job and its buffers.
             del result, target, args, kwargs, body
-            # Restituisce subito i buffer liberi, senza raccogliere oggetti utente.
+            # Release free buffers without collecting user objects.
             _release_task_memory(force=True)
             if probe is not None:
                 probe.sample(completed)

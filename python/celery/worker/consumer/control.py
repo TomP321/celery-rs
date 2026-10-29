@@ -30,8 +30,7 @@ class Control(bootsteps.StartStopStep):
 
     def include_if(self, c):
         from celery.worker import _rs_consumer
-        # Sul percorso Rust il trasporto non va istanziato per leggere
-        # `supports_exchange_type`: Redis e AMQP supportano entrambi il fanout.
+        # Redis and AMQP support fanout; avoid creating a transport just to read supports_exchange_type.
         if _rs_consumer.use_rs_worker(c):
             return c.app.conf.worker_enable_remote_control
         return (c.app.conf.worker_enable_remote_control and

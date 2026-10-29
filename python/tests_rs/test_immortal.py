@@ -1,4 +1,4 @@
-"""L'immortalizzazione irreversibile viene isolata in processi dedicati."""
+"""Isolate irreversible immortalization in dedicated processes."""
 import os
 import subprocess
 import sys
@@ -30,7 +30,7 @@ native = Waker()
 import _celery_rs
 del _celery_rs.Waker
 a, b = sys.getrefcount(finalized), sys.getrefcount(native)
-# Anche tuple non tracciate devono esporre i loro referenti.
+# Untracked tuples must also expose their referents.
 text = ''.join(['another', 'dynamic', 'string'])
 tuple_obj = (text,)
 gc.collect()
@@ -72,7 +72,7 @@ assert sys.getrefcount(obj) == before
 
 
 @pytest.mark.skipif(sys.platform != 'linux' or sys.version_info < (3, 12),
-                    reason='PSS Linux e PEP 683')
+                    reason='Linux PSS and PEP 683')
 def test_fork_private_pages():
     run('''
 import os, sys

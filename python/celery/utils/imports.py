@@ -142,8 +142,7 @@ def gen_task_name(app, name, module_name):
 
 
 def entry_points(**kwargs):
-    # `importlib.metadata` (e con lui `email`/`zipfile`) si importa solo se
-    # qualcuno cerca davvero plugin esterni; il nome resta sostituibile nei test.
+    # Load plugin metadata on demand to avoid email and zipfile imports.
     from importlib.metadata import entry_points as _entry_points
     return _entry_points(**kwargs)
 

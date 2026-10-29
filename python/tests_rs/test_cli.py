@@ -1,18 +1,4 @@
-"""CLI: output ed exit code identici al riferimento, avvio leggero, ``multi``.
-
-Ogni caso esegue lo stesso comando con la CLI di ``.venv-ref`` (Celery
-originale) e con quella di ``.venv-rs``, poi confronta stdout/stderr/exit code
-dopo la normalizzazione di host, pid, uuid e tempi. Il worker è sempre quello
-del riferimento: la variabile misurata è la CLI.
-
-Copre: ``multi`` reale (start/stop/stopwait/restart/kill) e ``worker``/
-``beat --detach`` con worker rs, ``events --dump`` con un task, ``purge`` con
-risposta ``no``/``yes`` su stdin, ``inspect`` con 2 worker (ordine e ``limit``),
-``control -d`` su più nodi, broker irraggiungibile e moduli importati da
-``--help``/``status``/``call``.
-
-Il file è eseguito da ``.venv-rs``; i processi figli usano il venv indicato.
-"""
+"""Compare CLI output and exit codes with the reference after normalizing variable fields."""
 from __future__ import annotations
 
 import json
@@ -38,7 +24,7 @@ REF_PYTHON = REF_VENV / 'bin' / 'python'
 RS_PYTHON = RS_VENV / 'bin' / 'python'
 
 REDIS_HOST, REDIS_PORT = urlsplit(os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390')).hostname, urlsplit(os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390')).port
-#: Database dedicati (gli altri test usano 7-15): broker 3, backend 4.
+# Dedicated databases: broker 3, backend 4; other tests use 7-15.
 BROKER = f'redis://{REDIS_HOST}:{REDIS_PORT}/3'
 BACKEND = f'redis://{REDIS_HOST}:{REDIS_PORT}/4'
 UNREACHABLE = f'redis://{REDIS_HOST}:6399/0'
@@ -85,7 +71,7 @@ def normalize(text, venvs=()):
     text = text.replace(HOST, '<host>')
     for venv in venvs:
         text = text.replace(str(Path(venv).resolve()), '<venv>')
-    # pid dei worker (almeno 4 cifre) e tempi
+    # Normalize worker pids (at least four digits) and timings.
     text = re.sub(r'\b\d{4,7}\b', '<pid>', text)
     text = TIME_RE.sub('<time>', text)
     return text
@@ -121,7 +107,7 @@ def tcp_ok(host, port):
 @pytest.fixture(scope='session', autouse=True)
 def require_redis():
     if not tcp_ok(REDIS_HOST, REDIS_PORT):
-        pytest.skip('Redis non raggiungibile')
+        pytest.skip('Redis unreachable')
 
 
 class Worker:
@@ -162,7 +148,7 @@ class Worker:
             return 'pong' in result.stdout
         if not wait_until(ping, timeout=timeout, interval=0.2):
             self.stop()
-            raise RuntimeError(f'worker non pronto:\n{self.log_text()[-4000:]}')
+            raise RuntimeError(f'worker not ready:\n{self.log_text()[-4000:]}')
         return self
 
     def log_text(self):
@@ -211,9 +197,6 @@ def two_workers(queue, env):
         item.stop()
 
 
-# ---------------------------------------------------------------------------
-# multi / worker --detach / beat --detach
-# ---------------------------------------------------------------------------
 
 def _multi_args(names, directory, extra=()):
     return [
@@ -227,7 +210,7 @@ def _multi_args(names, directory, extra=()):
 
 
 def _multi_sequence(venv, broker):
-    """start → show → restart → kill → stopwait con *venv*."""
+    """Run start, show, restart, kill and stopwait with *venv*."""
     directory = Path(tempfile.mkdtemp(prefix='cli-multi-'))
     env = app_env(broker=broker, queue=unique('cli-multi'))
     steps = []
@@ -267,12 +250,11 @@ def _multi_sequence(venv, broker):
 
 
 def test_multi_real_matches_reference():
-    """``multi start/restart/kill/show/names/expand`` con il worker del venv."""
+    """Run multi commands with the selected venv's worker."""
     steps_ref = _multi_sequence(REF_VENV, f'redis://{REDIS_HOST}:{REDIS_PORT}/5')
     steps_rs = _multi_sequence(RS_VENV, f'redis://{REDIS_HOST}:{REDIS_PORT}/6')
     assert len(steps_ref) == len(steps_rs) == 6
-    # `Cluster.shutdown_nodes` del riferimento itera un `set` di `Node` (hash per id):
-    # l'ordine dei nodi in stop/restart dipende dagli indirizzi di memoria, non è semantica.
+    # Cluster.shutdown_nodes iterates an identity-hashed set; node order depends on memory addresses.
     def unordered(step):
         rc, stdout, stderr = step
         return rc, sorted(stdout), sorted(stderr)
@@ -281,7 +263,7 @@ def test_multi_real_matches_reference():
 
 
 def test_worker_detach_and_beat_detach():
-    """``worker --detach`` e ``beat --detach`` avviano i processi rs."""
+    """Check that detached worker and beat commands start Rust processes."""
     for venv in (REF_VENV, RS_VENV):
         directory = Path(tempfile.mkdtemp(prefix='cli-detach-'))
         env = app_env(queue=unique('cli-detach'))
@@ -294,14 +276,14 @@ def test_worker_detach_and_beat_detach():
                 '--without-gossip', '--without-mingle'], env)
             assert worker.returncode == 0, worker.stderr
             pidfile = directory / 'worker.pid'
-            assert wait_until(pidfile.exists, timeout=30), 'pidfile worker mancante'
+            assert wait_until(pidfile.exists, timeout=30), 'worker pidfile missing'
             pid = int(pidfile.read_text().strip())
             assert wait_until(lambda: Path(f'/proc/{pid}').exists(), timeout=15)
             run_cli(REF_VENV, [
                 '-A', 'cli_app', '-b', env['CELERY_RS_CLI_BROKER'],
                 'control', 'shutdown', '-d', f'detach@{HOST}', '-t', '2'], env)
             assert wait_until(lambda: not Path(f'/proc/{pid}').exists(),
-                              timeout=30), 'worker detach non terminato'
+                              timeout=30), 'detached worker did not exit'
 
             beat = run_cli(venv, [
                 '-A', 'cli_app', 'beat', '--detach',
@@ -310,19 +292,16 @@ def test_worker_detach_and_beat_detach():
                 f'--schedule={directory}/beat.schedule'], env)
             assert beat.returncode == 0, beat.stderr
             pidfile = directory / 'beat.pid'
-            assert wait_until(pidfile.exists, timeout=30), 'pidfile beat mancante'
+            assert wait_until(pidfile.exists, timeout=30), 'beat pidfile missing'
             pid = int(pidfile.read_text().strip())
             assert wait_until(lambda: Path(f'/proc/{pid}').exists(), timeout=15)
             os.kill(pid, signal.SIGTERM)
             assert wait_until(lambda: not Path(f'/proc/{pid}').exists(),
-                              timeout=30), 'beat detach non terminato'
+                              timeout=30), 'detached beat did not exit'
         finally:
             shutil.rmtree(directory, ignore_errors=True)
 
 
-# ---------------------------------------------------------------------------
-# events --dump
-# ---------------------------------------------------------------------------
 
 def _dump_events(venv, env, worker_env, seconds=3.0):
     process = subprocess.Popen(
@@ -366,12 +345,9 @@ def test_events_dump_same_event_types(worker):
     assert _event_types(rust) == _event_types(reference), rust
 
 
-# ---------------------------------------------------------------------------
-# purge con prompt
-# ---------------------------------------------------------------------------
 
 def test_purge_prompt_no_and_yes(queue):
-    """Prompt identico; ``no`` aborta, ``yes`` svuota e conta i messaggi."""
+    """Check the purge prompt, cancellation, message count and queue cleanup."""
     results = {}
     queues = {'ref': unique('purge-ref'), 'rs': unique('purge-rs')}
     venvs = {'ref': REF_VENV, 'rs': RS_VENV}
@@ -402,9 +378,6 @@ def test_purge_prompt_no_and_yes(queue):
     assert 'Purged 2 messages from 1 known task queue.' in results['rs'][3]
 
 
-# ---------------------------------------------------------------------------
-# inspect con 2 worker / control -d
-# ---------------------------------------------------------------------------
 
 def test_inspect_two_workers_order_and_limit(two_workers):
     first, second = two_workers
@@ -443,8 +416,7 @@ def test_inspect_two_workers_order_and_limit(two_workers):
             timeout=60)
         assert result.returncode == 0, result.stderr
         limits[label] = json.loads(result.stdout.strip().splitlines()[-1])
-    # `limit=1` ferma la raccolta dopo un messaggio; il riferimento può
-    # consegnarne due nello stesso `drain_events` (il limite conta i giri).
+    # limit counts drain_events calls; the reference may deliver two replies in a single call.
     assert limits['rs']['count'] == 1
     assert 1 <= limits['ref']['count'] <= 2
     assert set(limits['rs']['nodes']) <= set(nodes)
@@ -468,9 +440,6 @@ def test_control_destination_multiple_nodes(two_workers):
     assert len(outputs['rs'][1]) == 2
 
 
-# ---------------------------------------------------------------------------
-# broker irraggiungibile
-# ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize('args', [
     ['status', '-t', '0.2'],
@@ -489,9 +458,6 @@ def test_unreachable_broker_same_error(args):
     assert outputs['rs'] == outputs['ref']
 
 
-# ---------------------------------------------------------------------------
-# import presenti in sys.modules
-# ---------------------------------------------------------------------------
 
 IMPORT_PROBE = """
 import json, runpy, sys
@@ -526,22 +492,19 @@ def test_imports_help_status_call(worker):
     for name, args in cases.items():
         ref = _imports(REF_VENV, args, env)
         rs = _imports(RS_VENV, args, env)
-        # Nessun trasporto kombu/redis-py in più del riferimento.
+        # Do not load more kombu transports or redis-py modules than the reference.
         for module in ('kombu.transport.redis', 'redis'):
             assert not rs[module] or ref[module], f'{name}: {module} in rs'
         if name == 'help':
             assert not ref['_celery_rs'] and not rs['_celery_rs'], (
-                '--help non deve caricare _celery_rs')
+                '--help must not load _celery_rs')
         else:
-            assert rs['_celery_rs'], f'{name} deve usare il core Rust'
+            assert rs['_celery_rs'], f'{name} must use the Rust core'
         assert not rs['kombu.transport.redis'], (
-            f'{name}: il trasporto kombu non deve essere caricato')
-        assert not rs['redis'], f'{name}: redis-py non deve essere caricato'
+            f'{name}: kombu transport must not be loaded')
+        assert not rs['redis'], f'{name}: redis-py must not be loaded'
 
 
-# ---------------------------------------------------------------------------
-# control shutdown (ultimo: spegne i worker dedicati)
-# ---------------------------------------------------------------------------
 
 def test_control_shutdown_last(queue):
     first = Worker(REF_VENV, f'stop-w1@{HOST}', unique('cli-stop')).start()
@@ -570,7 +533,7 @@ def test_control_shutdown_last(queue):
 
 
 def test_lazy_names_are_the_real_objects():
-    """I nomi caricati su richiesta restano gli oggetti veri, estendibili."""
+    """Check that lazy public names expose the real, extensible objects."""
     probe = (
         'import sys\n'
         'from celery.bin import celery as c\n'

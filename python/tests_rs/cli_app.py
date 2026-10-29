@@ -1,9 +1,4 @@
-"""App usata dai test della CLI (``test_cli.py``).
-
-Lo stesso modulo viene importato dalla CLI ``.venv-ref`` e da ``.venv-rs``: i
-task e la configurazione sono l'unico contratto fra i due processi. Broker,
-backend e coda arrivano dall'ambiente così ogni test può isolarli.
-"""
+"""Shared CLI test app with broker, backend and queue configured through the environment."""
 import os
 
 from celery import Celery
