@@ -19,9 +19,11 @@ uno *zygote* già riscaldato e condividono in copy-on-write tutto ciò che posso
 
 | | Celery 5.7 | celery-rs | |
 |---|---:|---:|---:|
-| worker `-c 10` a riposo | 300 MB | **73 MB** | **−76%** |
-| worker `-c 10` dopo il carico | 301 MB | **81 MB** | −73% |
-| figlio prefork a riposo | 29 MB | **5–6 MB** | −80% |
+| worker `-c 10` a riposo, Python 3.12+ | 352 MB | **51 MB** | **−85%** |
+| worker `-c 10`, picco sotto carico, Python 3.12+ | 353 MB | **55–56 MB** | **−84%** |
+| worker `-c 10` a riposo, Python 3.10/3.11 | 352 MB | **73 MB** | −79% |
+| worker `-c 10`, picco sotto carico, Python 3.10/3.11 | 353 MB | **84–86 MB** | −76% |
+| figlio prefork a riposo, Python 3.12+ | 29 MB | **~4 MB** | −86% |
 | worker `-c 100` dopo il carico | 2.751 MB | **686 MB** | −75% |
 | worker `-P threads -c 10` | 47 MB | **39 MB** | −18% |
 | `celery beat`, 10.000 voci | 110–118 MB | **54–56 MB** | −52% |
@@ -32,6 +34,12 @@ Il risparmio è verificato anche in modo indipendente (`bench/ram_check.py`): il
 Con applicazioni che importano librerie pesanti il risparmio in valore assoluto resta, ma in
 percentuale si riduce (vedi *Consigli*). In un'ora di carico misto con riavvio del broker la
 memoria cresce quanto quella di Celery, partendo da molto più in basso (220 vs 365 MB, Redis c10).
+
+Righe `-c 10`: `bench/memprobe/loadpeak.py`, 30.000 task, anche con argomenti da 16 KB (stessi
+valori ±2 MB). Su Python ≥ 3.12 gli oggetti caricati prima del fork diventano *immortali*
+(PEP 683), quindi i figli non ne riscrivono i contatori: è la differenza principale tra le due
+famiglie di versioni (vedi [docs/DIFFERENZE.md](docs/DIFFERENZE.md), `CELERY_RS_IMMORTALIZE=0`
+per disattivarlo). Le altre righe sono misurate con la versione 0.1.1.
 
 ### Prestazioni
 
@@ -52,7 +60,7 @@ soddisfa le dipendenze di chi richiede `celery`.
 
 ```toml
 # pyproject.toml, al posto di "celery==…": una riga, l'architettura (x86_64/aarch64) è scelta da sola
-"celery[redis] @ https://github.com/TomP321/celery-rs/raw/wheels/celery-5.7.0rc1%2Brs.0.1.1.tar.gz",
+"celery[redis] @ https://github.com/TomP321/celery-rs/raw/wheels/celery-5.7.0rc1%2Brs.0.1.2.tar.gz",
 ```
 
 Il pacchetto sorgente contiene solo un selettore (`tools/selector/`) che scarica e verifica
@@ -111,6 +119,8 @@ celery -A proj beat --loglevel info
 - **Importa le librerie pesanti in cima al modulo dei task**: lo zygote le carica una volta prima
   di creare i figli e restano condivise; importate dentro i task, ogni figlio ne ha una copia.
 - Per task di I/O (rete, database, API) `--pool threads` usa un solo processo.
+- **Usa Python 3.12 o successivo**: a parità di codice il worker `-c 10` pesa circa un terzo in
+  meno che su 3.10/3.11 (oggetti immortali).
 
 ## Struttura
 
