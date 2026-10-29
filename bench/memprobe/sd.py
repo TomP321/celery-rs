@@ -1,8 +1,7 @@
-"""Pagine soft-dirty tra il task 10 e il task 2000 nel pool reale.
+"""Measure soft-dirty pages between tasks 10 and 2000 in the real pool.
 
-Eseguire sotto tools/dev/with-brokers. La sonda non usa tracemalloc: altera
-le allocazioni del percorso misurato. I tipi vengono contati solo dopo la misura.
-"""
+Run under tools/dev/with-brokers. Avoid tracemalloc because it changes
+allocations; count object types only after measuring pages."""
 import argparse
 import collections
 import gc
@@ -111,7 +110,7 @@ def main():
         old_pages = {pg for pg in pages
                      if any(a >> 12 <= pg < b >> 12 for a, b, _ in inherited)}
         master_pages = softdirty(os.getpid(), anon_ranges(os.getpid()))
-        # La classificazione alloca, quindi deve seguire tutte le letture.
+        # Classification allocates, so it must follow all page reads.
         report = call(classify, (pages,))
         print(json.dumps(dict(child_dirty_pages=len(pages),
                               inherited_dirty_pages=len(old_pages),

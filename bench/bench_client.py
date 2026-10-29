@@ -1,12 +1,7 @@
-"""Memoria del processo client: riferimento vs celery-rs.
+"""Compare client PSS and loaded modules in fresh interpreters.
 
-    tools/dev/with-brokers .venv-ref/bin/python bench/bench_client.py
-
-Per ogni venv e broker (Redis, RabbitMQ) avvia un interprete pulito e misura la PSS
-(/proc/self/smaps_rollup) e i moduli caricati dopo ciascun passo tipico di un client:
-``import celery``, definizione dell'app e di un task, ``delay()``, ``AsyncResult.get()``
-(un worker del riferimento esegue il task). Salva bench/results/client.json.
-"""
+Measure import, app creation, delay and get with a reference worker.
+Run under tools/dev/with-brokers. Results: bench/results/client.json."""
 from __future__ import annotations
 
 import argparse
@@ -84,8 +79,8 @@ def run(venv, broker, workdir, source=None):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source', type=Path,
-                        help='sorgente rs alternativo per confrontare la baseline')
-    parser.add_argument('--label', help='suffisso del file client-<label>.json')
+                        help='alternate rs source for baseline comparisons')
+    parser.add_argument('--label', help='client-<label>.json suffix')
     args = parser.parse_args()
     source = str(args.source.resolve()) if args.source else None
     results = {}
@@ -116,7 +111,7 @@ def main():
         for a, b in zip(ref, rs):
             print(f'  {a["step"]:13} PSS ref {a["Pss"] / 1024:5.1f} MB  rs {b["Pss"] / 1024:5.1f} MB'
                   f'   moduli ref {a["modules"]:4} rs {b["modules"]:4}')
-        print(f'  rs carica ancora: {", ".join(rs[-1]["watch"]) or "-"}')
+        print(f'  rs still loads: {", ".join(rs[-1]["watch"]) or "-"}')
     return 0
 
 

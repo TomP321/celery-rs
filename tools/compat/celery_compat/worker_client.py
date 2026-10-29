@@ -1,12 +1,8 @@
-"""Client di `compat wire-worker`: gira **sempre** nel venv del riferimento.
+"""Run wire-worker scenarios in the reference venv.
 
-Così ogni differenza nel traffico catturato viene dal worker sotto esame. Ogni scenario
-pubblica i suoi task e attende che il worker li abbia completati; esce con 0 se gli esiti sono
-quelli attesi.
-
-    python worker_client.py --list
-    python worker_client.py --scenario NAME   (COMPAT_BROKER / COMPAT_BACKEND nell'ambiente)
-"""
+Only the worker varies in captured traffic. Publish tasks and wait for expected
+outcomes; return zero on success. Use --list or --scenario NAME with
+COMPAT_BROKER and COMPAT_BACKEND in the environment."""
 import argparse
 import os
 import sys
@@ -32,7 +28,7 @@ def wait_state(result, state, timeout=TIMEOUT):
         if result.state == state:
             return
         time.sleep(0.05)
-    raise AssertionError(f'{result.id}: stato {result.state}, atteso {state}')
+    raise AssertionError(f'{result.id}: state {result.state}, expected {state}')
 
 
 @scenario
@@ -96,18 +92,17 @@ def inspect():
 
 @scenario
 def two_workers(phase='main'):
-    """Due worker: mingle sincronizza le revoche, gossip/inspect vedono entrambi i nodi.
+    """Check mingle revocations and gossip/inspect across two workers.
 
-    Il driver avvia il primo worker, esegue la fase ``pre``, avvia il secondo
-    (``compat2@``, che consuma anche ``compat2``) e poi la fase ``main``.
-    """
+    The driver runs pre on worker one, starts compat2@ consuming compat2,
+    then runs main."""
     if phase == 'pre':
         app.control.revoke('mingle-0')
         time.sleep(0.5)
         return
     replies = app.control.inspect(timeout=1).ping() or {}
     assert len(replies) == 2, replies
-    # solo il secondo worker consuma `compat2`: la revoca gli arriva da mingle
+    # Only worker two consumes compat2; mingle supplies the revocation.
     r = add.apply_async((1, 2), task_id='mingle-0', queue='compat2')
     wait_state(r, states.REVOKED)
     assert add.apply_async((2, 2), task_id='mingle-1', queue='compat2').get(timeout=TIMEOUT) == 4
@@ -115,7 +110,7 @@ def two_workers(phase='main'):
 
 @scenario
 def long_task():
-    # il driver manda SIGTERM al worker dopo il client: il task deve essere già finito
+    # The driver sends SIGTERM after this client exits, so the task must already be done.
     assert sleep.apply_async((1,), task_id='sleep-0').get(timeout=TIMEOUT) == 1
 
 

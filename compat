@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Wrapper: ./compat <comando> [...]  (vedi tools/compat/celery_compat/cli.py)
-# `wire` svuota e osserva i broker condivisi: un lock evita che due worktree si disturbino.
+# Run the compatibility harness; see tools/compat/celery_compat/cli.py.
+# Wire commands clear and observe shared brokers, so acquire a lane lock.
 run() {
   exec python3 -I -c 'import sys; sys.path.insert(0, sys.argv.pop(1)); from celery_compat.cli import main; main()' "$(dirname "$(readlink -f "$0")")/tools/compat" "$@"
 }

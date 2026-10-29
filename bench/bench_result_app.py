@@ -1,4 +1,4 @@
-"""App usata da ``bench/bench_result.py`` (worker di riferimento)."""
+"""Provide the reference worker app for bench_result.py."""
 import os
 
 from celery import Celery

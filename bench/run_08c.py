@@ -1,4 +1,4 @@
-"""Matrice capacità/PSS 08c; eseguire sotto tools/dev/with-brokers."""
+"""Run the 08c capacity/PSS matrix under tools/dev/with-brokers."""
 import argparse
 import os
 from pathlib import Path
@@ -17,7 +17,7 @@ def main():
     parser.add_argument('--concurrency', nargs='+', type=int, default=[4, 10])
     args = parser.parse_args()
     if os.environ.get('CELERY_RS_BROKER_LOCKED') != '1':
-        parser.error('eseguire sotto tools/dev/with-brokers')
+        parser.error('run under tools/dev/with-brokers')
     directory = ROOT / 'bench/results/08c'
     directory.mkdir(parents=True, exist_ok=True)
     for repeat in range(args.start_repeat, args.repeats + 1):

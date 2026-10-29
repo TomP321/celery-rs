@@ -1,11 +1,8 @@
-"""Controllo indipendente della RAM di una flotta: PSS vs calo di MemAvailable vs tabelle delle pagine.
+"""Compare fleet PSS with MemAvailable loss and page tables.
 
-    tools/dev/with-brokers .venv-rs/bin/python bench/ram_check.py --venv .venv-rs --workers 10
-
-La PSS non include la memoria del kernel per processo (tabelle delle pagine, stack del kernel,
-strutture slab): qui si misurano la somma delle PSS, la somma di VmPTE e il calo di MemAvailable
-del sistema fra prima e dopo l'avvio di N worker `-P prefork -c 10` a riposo.
-"""
+Run under tools/dev/with-brokers with --venv and --workers. PSS excludes
+per-process kernel memory: also sum VmPTE and measure system MemAvailable
+before and after starting idle prefork c10 workers."""
 import argparse
 import json
 import os
@@ -42,7 +39,7 @@ def status_kb(pid, field):
 
 
 def settle_available(seconds=6):
-    """Media di MemAvailable su qualche secondo (attenua il rumore di altri processi)."""
+    """Average MemAvailable over several seconds to reduce background process noise."""
     samples = []
     for _ in range(seconds * 2):
         samples.append(mem_available_kb())

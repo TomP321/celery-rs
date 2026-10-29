@@ -4,7 +4,7 @@ app = Celery('bigapp', broker=os.environ['BROKER'])
 
 @app.task
 def big(n):
-    data = [str(i) * 8 for i in range(n)]  # molti oggetti piccoli: heap Python/glibc
+    data = [str(i) * 8 for i in range(n)]  # Small objects exercise Python and glibc heaps.
     return len(data)
 
 _cache = []
@@ -13,5 +13,5 @@ _cache = []
 @app.task
 def fragment(n):
     data = [str(i) * 8 for i in range(n)]
-    _cache.extend(data[::200])  # pochi sopravvissuti sparsi, come una cache
+    _cache.extend(data[::200])  # Scattered survivors model a cache.
     return len(data)

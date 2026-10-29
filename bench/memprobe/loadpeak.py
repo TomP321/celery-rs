@@ -1,4 +1,4 @@
-"""Worker -c N sotto carico continuo: PSS massima per ruolo durante l'elaborazione."""
+"""Measure peak PSS by process role under continuous worker load."""
 import os, subprocess, sys, time, signal, threading, argparse
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('venv')
@@ -32,7 +32,7 @@ def pss(pid):
 def sample():
     m = pss(p.pid); zs = kids(p.pid); z = sum(pss(x) for x in zs)
     ch = [c for x in zs for c in kids(x)]; c = sum(pss(x) for x in ch)
-    if not ch:  # Il riferimento forka direttamente dal master, senza zygote.
+    if not ch:  # Reference Celery forks directly from the master without a zygote.
         return m, 0, z, len(zs)
     return m, z, c, len(ch)
 idle = sample()
@@ -60,5 +60,8 @@ while True:
     time.sleep(0.2)
 el = time.time() - t0; time.sleep(3); after = sample()
 f = lambda kb: f'{kb/1024:.1f}'
-print(f'{venv.split("/")[-1]} idle tot={f(sum(idle[:3]))} ({idle[3]}) | PICCO tot={f(peak[0])} master={f(peak[1])} zygote={f(peak[2])} figli={f(peak[3])} ({peak[4]}) | dopo tot={f(sum(after[:3]))} master={f(after[0])} zygote={f(after[1])} figli={f(after[2])} | {ntasks/el:.0f} task/s')
+print(f'{venv.split("/")[-1]} idle tot={f(sum(idle[:3]))} ({idle[3]}) | '
+      f'PEAK tot={f(peak[0])} master={f(peak[1])} zygote={f(peak[2])} '
+      f'children={f(peak[3])} ({peak[4]}) | after tot={f(sum(after[:3]))} '
+      f'master={f(after[0])} zygote={f(after[1])} children={f(after[2])} | {ntasks/el:.0f} task/s')
 os.killpg(p.pid, signal.SIGTERM); p.wait(30)

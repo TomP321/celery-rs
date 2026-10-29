@@ -1,9 +1,6 @@
 #!/usr/bin/env bash
-# Esegue una spec con codex in un worktree git isolato, per lavorare in parallelo.
-#   tools/agent/ds-worktree specs/02b-transport-redis.md [messaggio di follow-up]
-# Worktree: ../celery-rs-wt/<spec> sul branch agent/<spec>, con un proprio .venv-ref
-# (maturin develop installa _celery_rs nel venv: con un venv condiviso due agenti si
-# sovrascriverebbero il modulo a vicenda) e una propria cartella target/.
+# Run a spec with Codex in an isolated Git worktree.
+# Each worktree has its own venvs and target directory to avoid overwriting native modules.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$(readlink -f "$0")")/../.." && pwd)"
@@ -13,14 +10,14 @@ WT="$(dirname "$ROOT")/celery-rs-wt/$NAME"
 
 if [[ ! -d "$WT" ]]; then
   git -C "$ROOT" worktree add -q -b "agent/$NAME" "$WT" "${CX_BASE:-HEAD}"
-  # sorgente di riferimento in sola lettura: un symlink basta
+  # A symlink suffices for the read-only reference source.
   ln -s "$ROOT/celery" "$WT/celery"
   uv venv -q -p "$ROOT/.venv-ref/bin/python" "$WT/.venv-ref"
   VIRTUAL_ENV="$WT/.venv-ref" uv pip install -q --no-deps -r "$ROOT/tools/compat/env-requirements.txt" maturin
   VIRTUAL_ENV="$WT/.venv-ref" uv pip install -q --no-deps -e "$ROOT/celery"
   uv venv -q -p "$ROOT/.venv-ref/bin/python" "$WT/.venv-rs"
   VIRTUAL_ENV="$WT/.venv-rs" uv pip install -q --no-deps -r "$ROOT/tools/compat/env-requirements.txt" maturin
-  # maturin rifiuta di partire con CONDA_PREFIX e VIRTUAL_ENV entrambi impostati
+  # maturin rejects simultaneous CONDA_PREFIX and VIRTUAL_ENV.
   mv "$WT/.venv-ref/bin/maturin" "$WT/.venv-ref/bin/maturin.real"
   printf '#!/bin/sh\nunset CONDA_PREFIX\nexec "$(dirname "$0")/maturin.real" "$@"\n' > "$WT/.venv-ref/bin/maturin"
   chmod +x "$WT/.venv-ref/bin/maturin"

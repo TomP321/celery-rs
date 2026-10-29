@@ -1,4 +1,4 @@
-"""Inventario diagnostico: usare solo per la sonda, mai per misure di RAM."""
+"""Collect a diagnostic inventory; exclude this probe from RAM measurements."""
 import gc
 import json
 import os
@@ -14,8 +14,8 @@ from celery.concurrency import _rs_zygote
 def dump(role):
     directory = Path(os.environ['CELERY_RS_INVENTORY'])
     directory.mkdir(parents=True, exist_ok=True)
-    # Costo superficiale più codice/costanti: non attribuisce l'intero grafo
-    # condiviso a ciascun modulo e non pretende di misurare le arene per modulo.
+    # Shallow sizes plus code/constants avoid attributing the shared graph to every module.
+
     modules = []
     for name, module in sorted(sys.modules.copy().items()):
         namespace = getattr(module, '__dict__', None)
@@ -41,7 +41,7 @@ def dump(role):
     prefix.with_suffix('.json').write_text(json.dumps(dict(
         role=role, pid=os.getpid(), modules=modules, freeze=gc.get_freeze_count()), indent=2))
     prefix.with_suffix('.smaps').write_text(Path('/proc/self/smaps').read_text())
-    # Le statistiche pymalloc includono byte liberi e pool parziali ereditati.
+    # pymalloc statistics include inherited free bytes and partial pools.
     fd = os.open(str(prefix) + '.pymalloc', os.O_CREAT | os.O_WRONLY, 0o600)
     saved = os.dup(2)
     try:

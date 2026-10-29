@@ -1,8 +1,7 @@
-"""App Celery per ``bench/bench_cli.py`` (nessun import di redis-py).
+"""Provide the CLI benchmark app without importing redis-py.
 
-Broker, backend e coda arrivano dall'ambiente: il worker è sempre quello del
-riferimento, così il benchmark misura solo la CLI.
-"""
+Broker, backend and queue come from the environment. A reference worker
+keeps the CLI as the only measured variable."""
 import os
 
 from celery import Celery

@@ -1,4 +1,4 @@
-# Broker di test per celery-rs. Porte dedicate per non collidere con altri servizi.
+# Dedicated test broker ports avoid collisions with other services.
 name: celery-rs
 services:
   redis:

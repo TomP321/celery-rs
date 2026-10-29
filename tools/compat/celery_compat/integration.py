@@ -1,4 +1,4 @@
-"""Confronto della suite di integrazione senza alterare i test originali."""
+"""Compare integration outcomes without changing upstream tests."""
 import json
 import os
 from pathlib import Path
@@ -26,7 +26,7 @@ def outcomes(path, source):
             if element is not None:
                 status = value
                 detail = '\n'.join(filter(None, [element.get('message', ''), element.text]))
-        # Un errore di teardown non deve sparire dietro un risultato passato.
+        # A teardown error must not be hidden by a passing call.
         if result.get(node, {}).get('status') in ('error', 'failed') and status == 'passed':
             continue
         result[node] = {'status': status, 'detail': detail}
@@ -42,7 +42,7 @@ def regressions(reference, candidate):
 def cmd_integration(args):
     from .cli import OUT, ROOT
     if os.environ.get('CELERY_RS_BROKER_LOCKED') != '1':
-        # un processo per broker, ognuno sulla propria corsia: i giri sono indipendenti
+        # Run independent broker comparisons in separate processes and lanes.
         base = ['--ref', str(args.ref), '--rs', str(args.rs)] + (['-k', args.k] if args.k else [])
         tail = ['--', *args.paths] if args.paths else []
         procs = [subprocess.Popen([str(ROOT / 'tools/dev/with-brokers'), str(ROOT / 'compat'),
@@ -78,7 +78,7 @@ def run_broker(args, broker):
         runs = {}
 
         def clean_brokers():
-            # Il lock rende esclusivi anche i database usati dai task di supporto.
+            # The lock also reserves databases used by support tasks.
             script = ("import os, redis; from celery import Celery; "
                       "url = os.environ['CELERY_RS_REDIS_URL']; "
                       "redis.Redis.from_url(url + '/0').flushdb(); "
@@ -90,8 +90,8 @@ def run_broker(args, broker):
         for label, venv in [('ref', args.ref), ('rs', args.rs)]:
             clean_brokers()
             prefix = OUT / f'integration-{broker}-{label}'
-            # niente rerun interni (`@flaky` della suite: 5 tentativi × timeout per test): le
-            # riprove dei soli falliti le fa questo runner, uguali per ref e rs
+            # Disable upstream flaky retries; this runner retries failed tests equally for ref and rs.
+
             command = [py(venv), '-P', '-m', 'pytest', '-q', '-p', 'no:cacheprovider',
                        '-p', 'no:rerunfailures', '--timeout=120',
                        '--continue-on-collection-errors', '-o', 'addopts=']
@@ -128,10 +128,10 @@ def run_broker(args, broker):
         differences = regressions(runs['ref']['tests'], runs['rs']['tests'])
         missing = sorted(set(runs['ref']['tests']) - set(runs['rs']['tests']))
         if missing:
-            infrastructure.append(f'{broker}: {len(missing)} test assenti in rs')
+            infrastructure.append(f'{broker}: {len(missing)} tests missing in rs')
         report[broker] = {**runs, 'regressions': differences, 'missing': missing}
         print(f'integration {broker}: ref {runs["ref"]["counts"]}; '
-              f'rs {runs["rs"]["counts"]}; {len(differences)} regressioni', flush=True)
+              f'rs {runs["rs"]["counts"]}; {len(differences)} regressions', flush=True)
     (OUT / f'integration-{broker}.json').write_text(json.dumps(
         {'configurations': report, 'infrastructure': infrastructure}, indent=2))
 
@@ -141,7 +141,7 @@ def write_report(OUT, brokers):
     for broker in brokers:
         path = OUT / f'integration-{broker}.json'
         if not path.exists():
-            infrastructure.append(f'{broker}: risultato assente')
+            infrastructure.append(f'{broker}: missing result')
             continue
         part = json.loads(path.read_text())
         report.update(part['configurations'])
@@ -157,22 +157,22 @@ def write_report(OUT, brokers):
                          ('passed', 'failed', 'skipped', 'error')) + f' | {len(run["regressions"])} |')
     for broker, run in report.items():
         for label in ('ref', 'rs'):
-            lines += ['', f'## {broker}/{label}: falliti e servizi assenti', '']
+            lines += ['', f'## {broker}/{label}: failures and unavailable services', '']
             for node, item in run[label]['tests'].items():
                 if item['status'] != 'passed':
                     detail = ' '.join(item['detail'].split())
                     lines.append(f'- `{node}`: {item["status"]}; {detail}')
-        lines += ['', f'## {broker}: regressioni', *[f'- `{n}`' for n in run['regressions']], '']
-    lines += ['## Errori di esecuzione', *infrastructure]
+        lines += ['', f'## {broker}: regressions', *[f'- `{n}`' for n in run['regressions']], '']
+    lines += ['## Execution errors', *infrastructure]
     (OUT / 'integration-report.md').write_text('\n'.join(lines) + '\n')
     total = sum(len(run['regressions']) for run in report.values())
-    print(f'integration: {total} regressioni; {len(infrastructure)} errori di esecuzione → '
+    print(f'integration: {total} regressions; {len(infrastructure)} execution errors → '
           f'{OUT / "integration-report.md"}', flush=True)
     return int(bool(total or infrastructure))
 
 
 def register(sub, ref, rs):
-    parser = sub.add_parser('integration', help='confronta tutta t/integration su ref e rs')
+    parser = sub.add_parser('integration', help='compare all t/integration tests on ref and rs')
     parser.add_argument('--ref', default=ref)
     parser.add_argument('--rs', default=rs)
     parser.add_argument('--broker', nargs='+', choices=('redis', 'amqp'), default=['redis', 'amqp'])

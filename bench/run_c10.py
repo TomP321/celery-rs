@@ -1,7 +1,4 @@
-"""Matrice c10 della spec 08d, da eseguire sotto tools/dev/with-brokers.
-
-Esempio: tools/dev/with-brokers .venv-ref/bin/python bench/run_c10.py --phase after
-"""
+"""Run the 08d c10 matrix under tools/dev/with-brokers with --phase before|after."""
 import argparse
 import os
 import subprocess
@@ -17,7 +14,7 @@ def main():
     parser.add_argument('--n', type=int, default=30000)
     args = parser.parse_args()
     if os.environ.get('CELERY_RS_BROKER_LOCKED') != '1':
-        parser.error('eseguire sotto tools/dev/with-brokers')
+        parser.error('run under tools/dev/with-brokers')
     directory = ROOT / 'bench/results/08d'
     directory.mkdir(parents=True, exist_ok=True)
     for repeat in range(1, args.repeats + 1):
@@ -26,7 +23,7 @@ def main():
             env['BENCH_BROKER'] = (os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390') + '/0' if broker == 'redis'
                                    else os.environ.get('CELERY_RS_AMQP_URL', 'amqp://guest:guest@127.0.0.1:5673//'))
             for task in ('bench', 'pure'):
-                # Alternare l'ordine limita gli effetti di riscaldamento.
+                # Alternate order to limit warmup effects.
                 implementations = ('ref', 'rs') if repeat % 2 else ('rs', 'ref')
                 for implementation in implementations:
                     label = f'{args.phase}-{implementation}-{broker}-{task}-{repeat}'

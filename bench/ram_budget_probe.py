@@ -1,9 +1,8 @@
-"""Sonda esplicita 10c; importare con --include, mai nel percorso normale.
+"""Collect explicit 10c diagnostics with --include, outside normal execution.
 
-RAM_BUDGET_REPORT indica la directory dei risultati. PYTHONTRACEMALLOC=1
-attribuisce l'heap per file; quelle misure non vanno confrontate con la PSS
-senza profiler. Il file contiene anche mallinfo2 e le arene pymalloc libere.
-"""
+RAM_BUDGET_REPORT selects the output directory. PYTHONTRACEMALLOC=1 adds
+per-file heap attribution, which cannot be compared with unprofiled PSS.
+Also report mallinfo2 and free pymalloc arenas."""
 import ctypes
 import json
 import os
@@ -79,7 +78,7 @@ def report(role, stage):
             visit(value, totals)
         sizes[name] = totals
     data['code_and_docstrings_bytes'] = sizes
-    # CPython scrive direttamente su stderr, non su sys.stderr.
+    # CPython writes to the stderr fd rather than sys.stderr.
     with tempfile.TemporaryFile() as output:
         saved = os.dup(2)
         try:
@@ -130,7 +129,7 @@ def master_loaded(**kwargs):
         report('master', 'loaded')
 
 
-# Il primo comando arriva soltanto dopo import, freeze e trim dello zygote.
+# The first command follows zygote import, freeze and trim.
 from celery.concurrency import _rs_zygote
 _recv = _rs_zygote._recv_control
 _reported = False

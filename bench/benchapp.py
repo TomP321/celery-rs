@@ -1,4 +1,4 @@
-"""App Celery usata dal benchmark. Lo stesso file gira con Celery di riferimento e con celery-rs."""
+"""Provide the same benchmark app for reference Celery and celery-rs."""
 import os
 import time
 from urllib.parse import urlsplit
@@ -22,10 +22,10 @@ _counter = None
 def counter():
     global _counter
     if _counter is None:
-        # Import pigro: il contatore serve ai task, non al master del worker.
-        # Con `import redis` in testa il master caricava redis-py (~19 MB di
-        # PSS) e la misura della memoria del worker non era più quella del
-        # solo worker (spec 08a: il master non deve importare redis-py).
+        # Import lazily: the task counter must not add redis-py (~19 MB PSS) to the master.
+
+
+
         import redis
         _counter = redis.Redis(host=urlsplit(os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390')).hostname, port=urlsplit(os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390')).port, db=2)
     return _counter
@@ -43,11 +43,9 @@ def add(x, y):
 
 @app.task(ignore_result=True)
 def noop_pure():
-    """Task del bench che non importa nulla (misura solo il costo nostro).
+    """Complete tasks without imports; the parent counts appended bytes.
 
-    Il completamento è contato dal padre sulla dimensione del file: nessun
-    client redis-py nel figlio (spec 08b, variante ``--task pure``).
-    """
+    Avoid loading redis-py in children for the --task pure variant (08b)."""
     path = os.environ.get('BENCH_PURE_DONE')
     if path:
         fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o644)

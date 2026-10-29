@@ -1,4 +1,4 @@
-"""Il gate deve rilevare pendenza, picchi nei figli e crescita di fd/thread."""
+"""Check detection of slopes, child peaks and fd/thread growth."""
 from soak import analyze
 
 

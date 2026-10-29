@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Gestione dei broker isolati; CELERY_RS_LANES determina il numero di corsie."""
+"""Manage isolated brokers; CELERY_RS_LANES sets the lane count."""
 import os
 from pathlib import Path
 import subprocess
@@ -20,10 +20,10 @@ def environment(lane):
 
 if __name__ == '__main__':
     if len(sys.argv) != 2 or sys.argv[1] not in ('up', 'down', 'status'):
-        sys.exit('uso: tools/dev/lanes up|down|status')
+        sys.exit('usage: tools/dev/lanes up|down|status')
     count = int(os.environ.get('CELERY_RS_LANES', '4'))
     if count < 1:
-        sys.exit('CELERY_RS_LANES deve essere positivo')
+        sys.exit('CELERY_RS_LANES must be positive')
     for lane in range(count):
         project = 'celery-rs' if lane == 0 else f'celery-rs-lane-{lane}'
         action = {'up': ['up', '-d', '--wait', '--wait-timeout', '120'],

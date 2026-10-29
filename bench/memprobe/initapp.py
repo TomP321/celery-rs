@@ -1,4 +1,4 @@
-"""Pagine scritte dall'initializer, senza tracemalloc (solo diagnosi)."""
+"""Diagnose initializer page writes without tracemalloc."""
 import collections
 import gc
 import json

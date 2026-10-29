@@ -1,9 +1,7 @@
-"""App Celery usata da `compat wire-beat`: gira nel venv del beat sotto esame (ref o rs).
+"""Provide the wire-beat app in the selected venv.
 
-Solo schedule a intervallo breve: in pochi secondi ogni voce scatta più volte, in modo
-deterministico nella forma (non nel numero esatto) dei messaggi. I crontab sono verificati dai
-test differenziali, non qui: scatterebbero solo a cavallo di un minuto.
-"""
+Short intervals produce repeated messages with deterministic shape, not counts.
+Crontab behaviour is covered by differential tests to avoid minute boundaries."""
 import os
 from datetime import timedelta
 

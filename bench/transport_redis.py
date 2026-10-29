@@ -1,12 +1,8 @@
-"""Benchmark informativo del trasporto Redis: Rust (`_celery_rs`) vs kombu.
+"""Compare Rust and kombu Redis publish and consume rates.
 
-Uso: .venv-ref/bin/python bench/transport_redis.py [--messages 5000]
-
-Misura publish/s e consume/s sullo stesso broker (CELERY_RS_TEST_REDIS, default
-``redis://127.0.0.1:6390``), con body JSON breve (51 byte). I numeri dipendono dal
-server Redis locale: servono solo a confrontare i due client a parità di
-condizioni, non come soglia.
-"""
+Use --messages under tools/dev/with-brokers. CELERY_RS_TEST_REDIS defaults to
+redis://127.0.0.1:6390. A short JSON body (51 bytes) keeps conditions equal;
+local server performance affects results, so these are not pass thresholds."""
 
 from __future__ import annotations
 
@@ -130,7 +126,7 @@ def main() -> None:
     fill(consume_queue, count)
     rs_consume = bench_rs_consume(count, consume_queue)
 
-    print(f"Redis {URL}, {count} messaggi da {len(BODY)} byte")
+    print(f"Redis {URL}, {count} messages of {len(BODY)} bytes")
     print(f"publish/s  kombu {kombu_publish:10.0f}   rust {rs_publish:10.0f}"
           f"   ({rs_publish / kombu_publish:.2f}x)")
     print(f"consume/s  kombu {kombu_consume:10.0f}   rust {rs_consume:10.0f}"

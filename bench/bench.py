@@ -1,13 +1,8 @@
-"""Benchmark memoria/throughput/latenza di un worker Celery (riferimento o celery-rs).
+"""Benchmark worker PSS, throughput and latency.
 
-    python3 bench/bench.py --venv .venv-ref [--concurrency 4] [--n 20000] [--label ref]
-
-Avvia il worker del venv indicato, misura e salva bench/results/<label>.json.
-La memoria è PSS (/proc/<pid>/smaps_rollup) sommata sull'intero albero di processi del worker:
-conta correttamente le pagine condivise copy-on-write tra master e figli.
-Con --prefill il gruppo del worker già pronto viene sospeso durante il publish:
-la misura dalla ripresa esclude sia il client sia l'avvio del pool.
-"""
+Use --venv to select Celery and --prefill to exclude publishing and pool startup.
+PSS sums the full process tree, accounting for shared copy-on-write pages.
+Results: bench/results/<label>.json. Run under tools/dev/with-brokers."""
 import argparse
 import json
 import os
@@ -93,7 +88,7 @@ def venv_python(venv):
 
 
 def client(venv, code, env):
-    """Esegue codice client nel venv indicato e ritorna il JSON stampato su stdout."""
+    """Run client code in the selected venv and return its stdout JSON."""
     out = subprocess.run([venv_python(venv), '-c', code], env=env, cwd=HERE,
                          capture_output=True, text=True, check=True)
     return json.loads(out.stdout.strip().splitlines()[-1])
@@ -115,8 +110,8 @@ print(json.dumps({{"publish_s": dt, "wall_start": wall0, "maxrss_kb": resource.g
                   "maxrss_before_kb": rss0}}))
 '''
 
-#: Variante ``--task pure``: nessun import nel figlio, completamenti contati
-#: dal padre sull'append di un byte (spec 08b).
+# The parent counts appended bytes, avoiding imports in pure task children (08b).
+
 PUBLISH_PURE = '''
 import json, resource, time
 from benchapp import noop_pure
@@ -144,11 +139,11 @@ print(json.dumps(lat))
 
 
 def wait_ready(proc, timeout=60):
-    # "ready." è stampato dal worker (anche con loglevel warning il banner va su stdout)
+    # The worker writes ready. to stdout even at warning level.
     deadline = time.time() + timeout
     while time.time() < deadline:
         if proc.poll() is not None:
-            raise SystemExit(f'worker terminato con codice {proc.returncode}')
+            raise SystemExit(f'worker exited with code {proc.returncode}')
         try:
             out = subprocess.run([venv_python(ARGS.venv), '-m', 'celery', '-A', 'benchapp', 'inspect',
                                   'ping', '-t', '1'], cwd=HERE, env=ENV, capture_output=True, text=True)
@@ -157,7 +152,7 @@ def wait_ready(proc, timeout=60):
         except OSError:
             pass
         time.sleep(0.5)
-    raise SystemExit('worker non pronto')
+    raise SystemExit('worker not ready')
 
 
 def main():
@@ -171,13 +166,13 @@ def main():
     ap.add_argument('--latency-n', type=int, default=500)
     ap.add_argument('--task', default='bench', choices=('bench', 'pure', 'bench-toplevel'))
     ap.add_argument('--prefill', action='store_true',
-                    help='riempie la coda con il worker sospeso; misura dalla ripresa')
+                    help='fill the queue while the worker is stopped; measure from resume')
     ap.add_argument('--profile-master', type=Path)
-    ap.add_argument('--include', help='moduli applicativi da precaricare nel worker')
-    ap.add_argument('--source', type=Path, help='sorgente alternativo per confrontare la baseline')
+    ap.add_argument('--include', help='application modules to preload in the worker')
+    ap.add_argument('--source', type=Path, help='alternate source for baseline comparisons')
     ARGS = args = ap.parse_args()
     if args.n < 1 or args.latency_n < 1:
-        ap.error('--n e --latency-n devono essere positivi')
+        ap.error('--n and --latency-n must be positive')
     (HERE / 'results').mkdir(exist_ok=True)
     label = args.label or Path(args.venv).name.lstrip('.').removeprefix('venv-')
     pure_done = None
@@ -229,7 +224,7 @@ def main():
         sampler.start()
 
         if args.prefill:
-            # Il gruppo comprende master, zygote e figli: nessuno consuma durante il publish.
+            # Stop master, zygote and children so no task is consumed during publishing.
             os.killpg(worker.pid, signal.SIGSTOP)
         pub = client(args.venv,
                      (PUBLISH_PURE if args.task == 'pure' else PUBLISH).format(n=args.n),
@@ -238,7 +233,7 @@ def main():
         completed_before_resume = (pure_done.stat().st_size if pure_done is not None and pure_done.exists()
                                    else int(cnt.get(env['BENCH_COUNTER']) or 0))
         if args.prefill and completed_before_resume:
-            raise RuntimeError('il worker ha consumato durante il prefill')
+            raise RuntimeError('worker consumed tasks during prefill')
         t0 = time.perf_counter()
         if args.prefill:
             os.killpg(worker.pid, signal.SIGCONT)
@@ -253,9 +248,9 @@ def main():
             if done >= args.n:
                 break
             if time.perf_counter() - t0 > 600:
-                raise SystemExit('timeout in attesa del completamento')
+                raise SystemExit('timed out waiting for completion')
             time.sleep(0.02)
-        # In prefill il tempo parte dalla ripresa, altrimenti dal primo publish.
+        # Prefill timing starts at resume; other runs start at the first publish.
         drain_s = time.perf_counter() - t0
         total_s = drain_s if args.prefill else time.time() - pub['wall_start']
 
@@ -266,7 +261,7 @@ def main():
         after_total = sum(after_per)
         sampling.set()
         sampler.join()
-        # Anche delay/get della sonda di latenza fa parte del carico misurato.
+        # Latency probes also contribute to measured load.
         peak = max(peak[0], idle_total, after_total)
     finally:
         try:

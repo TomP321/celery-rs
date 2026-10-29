@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Assegna una corsia esclusiva e termina tutti i processi discendenti all'uscita."""
+"""Reserve a broker lane and terminate all descendants on exit."""
 import base64
 import ctypes
 import fcntl
@@ -41,7 +41,7 @@ def clean(env):
         for conn in connections:
             request('/connections/' + urllib.parse.quote(conn['name'], safe=''), 'DELETE')
             if conn['name'] not in closed:
-                print(f"corsia {env['CELERY_RS_LANE']}: chiudo connessione residua {conn['name']}", flush=True)
+                print(f"lane {env['CELERY_RS_LANE']}: closing leftover connection {conn['name']}", flush=True)
                 closed.add(conn['name'])
         pending = False
         for queue in request('/queues'):
@@ -51,21 +51,21 @@ def clean(env):
                 request('/queues/' + urllib.parse.quote(queue['vhost'], safe='') + '/' +
                         urllib.parse.quote(queue['name'], safe=''), 'DELETE')
             except urllib.error.HTTPError as exc:
-                # Il management può mostrare la coda prima della connessione proprietaria.
+                # Management can expose a queue before its owning connection.
                 if exc.code != 400:
                     raise
                 pending = True
             else:
-                print(f"corsia {env['CELERY_RS_LANE']}: elimino coda esclusiva {queue['name']}", flush=True)
+                print(f"lane {env['CELERY_RS_LANE']}: deleting exclusive queue {queue['name']}", flush=True)
         if not connections and not pending:
             return
         if time.monotonic() >= deadline:
-            raise RuntimeError(f"corsia {env['CELERY_RS_LANE']}: residui AMQP dopo 15 secondi")
+            raise RuntimeError(f"lane {env['CELERY_RS_LANE']}: AMQP leftovers after 15 seconds")
         time.sleep(.2)
 
 
 def children():
-    # Il subreaper raccoglie anche worker che hanno creato una sessione propria.
+    # The subreaper also collects workers that created their own sessions.
     result = set()
     todo = [os.getpid()]
     while todo:
@@ -84,12 +84,12 @@ def children():
 
 def main():
     if len(sys.argv) < 2:
-        sys.exit('uso: tools/dev/with-brokers comando ...')
+        sys.exit('usage: tools/dev/with-brokers command ...')
     if os.environ.get('CELERY_RS_BROKER_LOCKED') == '1':
         os.execvp(sys.argv[1], sys.argv[1:])
     count = int(os.environ.get('CELERY_RS_LANES', '4'))
     if count < 1:
-        sys.exit('CELERY_RS_LANES deve essere positivo')
+        sys.exit('CELERY_RS_LANES must be positive')
     lock = None
     while lock is None:
         for lane in range(count):
@@ -105,12 +105,12 @@ def main():
             time.sleep(.2)
     env = lane_environment(lane)
     env['CELERY_RS_BROKER_LOCKED'] = '1'
-    # Compatibilità con i test e i benchmark che espongono già questi override.
+    # Preserve existing test and benchmark overrides.
     for old, new in [('CELERY_RS_TEST_REDIS', 'CELERY_RS_REDIS_URL'),
                      ('CELERY_RS_TEST_AMQP', 'CELERY_RS_AMQP_URL'),
                      ('CELERY_RS_TEST_RABBIT_API', 'CELERY_RS_RABBIT_API')]:
         env[old] = env[new]
-    print(f"corsia {lane}: {' '.join(sys.argv[1:])}", flush=True)
+    print(f"lane {lane}: {' '.join(sys.argv[1:])}", flush=True)
     clean(env)
     if ctypes.CDLL(None, use_errno=True).prctl(36, 1, 0, 0, 0) != 0:
         raise OSError(ctypes.get_errno(), 'prctl subreaper')
@@ -158,7 +158,7 @@ def main():
             try:
                 while True:
                     os.waitpid(-1, os.WNOHANG)
-                    # I figli terminati sono rimossi da /proc; attendi i rimanenti.
+                    # Exited children disappear from /proc; wait for those remaining.
                     if not children():
                         break
                     time.sleep(.02)

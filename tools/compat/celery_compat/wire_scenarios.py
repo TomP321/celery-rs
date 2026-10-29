@@ -1,12 +1,7 @@
-"""Scenari client per `celery-compat wire`. Gira dentro il venv da analizzare (ref o rs).
+"""Run deterministic client-only wire scenarios in the selected venv.
 
-Uso: <venv>/bin/python wire_scenarios.py --broker URL [--backend URL] --scenario NOME
-     <venv>/bin/python wire_scenarios.py --list
-
-Ogni scenario esegue solo operazioni lato client (nessun worker): il traffico generato sul broker
-è catturato dal processo che lancia lo script. Valori deterministici dove possibile (task_id, eta)
-così la normalizzazione deve intervenire il meno possibile.
-"""
+Use --broker URL [--backend URL] --scenario NAME, or --list. The parent
+captures traffic. Fixed task IDs and ETAs minimize normalization."""
 import argparse
 import datetime as dt
 import sys

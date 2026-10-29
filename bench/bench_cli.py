@@ -1,19 +1,7 @@
-"""Benchmark della CLI: riferimento vs celery-rs.
+"""Compare CLI latency and peak RSS with a reference worker.
 
-    tools/dev/with-brokers .venv-rs/bin/python bench/bench_cli.py
-
-Per ogni broker (Redis e AMQP, su database/vhost dedicati) misura, con la
-mediana di ``--runs`` esecuzioni:
-
-  * tempo e max RSS di ``celery --help``, ``call``, ``result``, ``purge -f``,
-    ``status`` (nessun worker), ``inspect ping`` con 1 worker (timeout 1s e
-    ``--timeout 0.2``);
-  * ``app.control.inspect().ping()`` 1000 volte nello stesso processo
-    (latenza p50 per chiamata con ``limit=1`` e RSS finale).
-
-Il worker è sempre quello del riferimento: la variabile misurata è la CLI.
-I risultati sono in ``bench/results/cli-<broker>.json``.
-"""
+Run under tools/dev/with-brokers. Report medians of --runs invocations
+and repeated inspect ping latency in bench/results/cli-<broker>.json."""
 from __future__ import annotations
 
 import argparse
@@ -40,8 +28,8 @@ BACKEND = f'{REDIS}/15'
 RABBIT_API = os.environ.get('CELERY_RS_RABBIT_API', 'http://127.0.0.1:15673/api')
 RABBIT = os.environ.get('CELERY_RS_AMQP_URL', 'amqp://guest:guest@127.0.0.1:5673//')
 
-#: Obiettivi di RSS per caso (rapporto rs/ref): `--help` non deve peggiorare,
-#: gli altri devono essere almeno il 10% sotto il riferimento.
+# RSS ratio targets: --help must not regress; other cases must improve by at least 10%.
+
 RSS_TARGETS = {'help': 1.0, 'status': 0.9, 'inspect-ping': 0.9,
                'inspect-ping-0.2': 0.9, 'call': 0.9}
 
@@ -83,7 +71,7 @@ def rabbit_api(method, path, data=None):
 
 
 def broker_config(name):
-    """URL del broker dedicato e (per AMQP) il vhost creato per la misura."""
+    """Return a dedicated broker URL and the created AMQP vhost."""
     if name == 'redis':
         return f'{REDIS}/14', None
     vhost = f'bench-cli-{os.getpid()}'
@@ -100,7 +88,7 @@ def drop_vhost(quoted):
 
 
 def measure(venv, args, runs, env, cwd=HERE):
-    """Mediana di tempo (s) e max RSS (KB) su *runs* esecuzioni."""
+    """Return median time (s) and peak RSS (KB) across *runs* invocations."""
     times, rss = [], []
     for _ in range(runs):
         process = subprocess.run(
@@ -110,7 +98,7 @@ def measure(venv, args, runs, env, cwd=HERE):
         match = TIME_RE.search(process.stderr)
         if match is None:
             raise SystemExit(
-                f'misura fallita per {args}:\n{process.stdout[-2000:]}\n'
+                f'measurement failed for {args}:\n{process.stdout[-2000:]}\n'
                 f'{process.stderr[-3000:]}')
         rss.append(int(match.group(1)))
         times.append(float(match.group(2)))
@@ -139,8 +127,8 @@ class Worker:
         deadline = time.monotonic() + 60
         while time.monotonic() < deadline:
             if self.process.poll() is not None:
-                raise SystemExit('worker terminato in avvio')
-            # `status` senza worker è misurato prima: qui basta la connessione.
+                raise SystemExit('worker exited during startup')
+            # Workerless status was measured earlier; a connection is sufficient here.
             result = subprocess.run(
                 [python(REF_VENV), '-P', '-m', 'celery', '-A', 'cli_app',
                  '-b', self.env['BENCH_CLI_BROKER'], 'inspect', 'ping',
@@ -150,7 +138,7 @@ class Worker:
                 return self
             time.sleep(0.3)
         self.stop()
-        raise SystemExit('worker non pronto')
+        raise SystemExit('worker not ready')
 
     def stop(self):
         if self.process is None or self.process.poll() is not None:
@@ -167,14 +155,14 @@ class Worker:
 
 
 def call_and_wait(env, broker, backend):
-    """Pubblica un task col client rs e attende il risultato: id pronto per `result`."""
+    """Publish with the Rust client and wait for a task ID usable by result."""
     result = subprocess.run(
         [python(RS_VENV), '-P', '-m', 'celery', '-A', 'cli_app',
          'call', 'bench_cli.add', '-a', '[1, 2]'],
         cwd=HERE, env=env, capture_output=True, text=True)
     match = UUID_RE.search(result.stdout)
     if match is None:
-        raise SystemExit(f'call fallita:\n{result.stdout}\n{result.stderr[-3000:]}')
+        raise SystemExit(f'call failed:\n{result.stdout}\n{result.stderr[-3000:]}')
     task_id = match.group(0)
     wait = (
         'import os, sys\n'
@@ -187,7 +175,7 @@ def call_and_wait(env, broker, backend):
         [python(REF_VENV), '-P', '-c', wait, task_id],
         cwd=HERE, env=env, capture_output=True, text=True)
     if waited.returncode != 0:
-        raise SystemExit(f'risultato non disponibile:\n{waited.stderr[-3000:]}')
+        raise SystemExit(f'result unavailable:\n{waited.stderr[-3000:]}')
     return task_id
 
 
@@ -196,7 +184,7 @@ def probe(venv, env, runs=1000):
         [python(venv), '-P', str(HERE / '_cli_ping_probe.py'), '--n', str(runs)],
         cwd=HERE, env=env, capture_output=True, text=True)
     if result.returncode != 0:
-        raise SystemExit(f'probe fallita ({venv}):\n{result.stderr[-3000:]}')
+        raise SystemExit(f'probe failed ({venv}):\n{result.stderr[-3000:]}')
     return json.loads(result.stdout.strip().splitlines()[-1])
 
 
@@ -212,7 +200,7 @@ def bench_broker(name, runs):
     venvs = {'ref': REF_VENV, 'rs': RS_VENV}
     data = {'broker': name, 'runs': runs, 'cases': {}, 'control_probe': {}}
 
-    # --- status senza worker (prima di avviarlo) -------------------------------------
+
     try:
         for label, venv in venvs.items():
             data['cases'][f'status/{label}'] = measure(
@@ -221,7 +209,7 @@ def bench_broker(name, runs):
         with open(log_path, 'w') as log:
             worker = Worker(broker, BACKEND, queue, log).start()
         try:
-            # --- call / result / purge / inspect -------------------------------------
+
             for label, venv in venvs.items():
                 data['cases'][f'help/{label}'] = measure(
                     venv, ['--help'], runs, base_env)
@@ -251,7 +239,7 @@ def bench_broker(name, runs):
 
 
 def compare(data):
-    """Riepilogo: rapporto rs/ref e verifica degli obiettivi della spec."""
+    """Report rs/ref ratios and check spec targets."""
     lines = []
     targets = {}
     for key, ref in data['cases'].items():
@@ -276,7 +264,7 @@ def compare(data):
     rs_probe = data['control_probe']['rs']
     lines.append(
         f'{data["broker"]:5} control-probe p50 ref {ref_probe["p50_ms"]:.2f} ms '
-        f'rs {rs_probe["p50_ms"]:.2f} ms, RSS finale ref '
+        f'rs {rs_probe["p50_ms"]:.2f} ms, final RSS ref '
         f'{ref_probe["rss_kb"] / 1024:.1f} MB rs {rs_probe["rss_kb"] / 1024:.1f} MB')
     checks = {
         'help_rss_ok': all(ratio <= 1.0 for ratio in targets.get('help', [])),
@@ -316,9 +304,9 @@ def main():
     failures = [f'{broker}:{key}' for broker, checks in all_checks.items()
                 for key, value in checks.items() if not value]
     if failures:
-        print('obiettivi non raggiunti: ' + ', '.join(failures))
+        print('targets not met: ' + ', '.join(failures))
         return 1
-    print('tutti gli obiettivi raggiunti')
+    print('all targets met')
     return 0
 
 

@@ -1,5 +1,4 @@
-"""Filtra lo stream JSON di `opencode run --format json`: testo e chiamate tool nel log leggibile,
-id di sessione salvato per poter continuare la conversazione."""
+"""Filter opencode JSON into readable logs and save the session ID for resume."""
 import json
 import sys
 

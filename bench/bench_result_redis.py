@@ -1,18 +1,9 @@
-"""Benchmark del result backend Redis: riferimento vs client Rust.
+"""Compare reference and Rust Redis result clients.
 
-    .venv-ref/bin/python bench/bench_result_redis.py --flavor ref
-    .venv-rs/bin/python  bench/bench_result_redis.py --flavor rs
-
-Misura, con un worker del **riferimento** (``.venv-ref``) sullo stesso Redis:
-
-- latenza ``apply_async().get()``: p50/p99 su ``--n`` task;
-- throughput ``get_many`` e ``join_native`` su ``--bulk`` risultati;
-- RSS del processo client (corrente e picco).
-
-I risultati sono scritti in ``bench/results/backend-redis-<flavor>.json``.
-Redis e database sono dedicati (``BENCH_BROKER_PORT``/db 6 e 7) e vengono
-azzerati prima della misura: eseguire sotto ``tools/dev/with-brokers``.
-"""
+Measure apply_async/get latency, get_many/join_native throughput and client RSS
+with the same reference worker. Use --flavor ref|rs under tools/dev/with-brokers:
+databases 6 and 7 are cleared before measurement.
+Results: bench/results/backend-redis-<flavor>.json."""
 from __future__ import annotations
 
 import argparse
@@ -37,8 +28,8 @@ BROKER = os.environ.get('BENCH_BROKER', f'redis://{REDIS_ADDRESS.hostname}:{REDI
 BACKEND = os.environ.get('BENCH_BACKEND', f'redis://{REDIS_ADDRESS.hostname}:{REDIS_PORT}/7')
 QUEUE = os.environ.get('BENCH_QUEUE', f'bench-result-{uuid.uuid4().hex[:8]}')
 
-# `benchapp` legge queste variabili all'import: il client deve usare gli stessi
-# URL del worker, altrimenti pubblica su un altro database.
+# benchapp reads URLs at import; match the worker to avoid publishing to another database.
+
 os.environ['BENCH_BROKER'] = BROKER
 os.environ['BENCH_BACKEND'] = BACKEND
 
@@ -88,7 +79,7 @@ class Worker:
             time.sleep(0.1)
         self.stop()
         raise RuntimeError(
-            f'worker non pronto:\n{"".join(self.lines[-30:])}')
+            f'worker not ready:\n{"".join(self.lines[-30:])}')
 
     def _read(self):
         assert self.process is not None and self.process.stdout is not None
@@ -111,9 +102,9 @@ def main():
     parser.add_argument('--worker-python',
                         default=str(ROOT / '.venv-ref' / 'bin' / 'python'))
     parser.add_argument('--n', type=int, default=200,
-                        help='numero di task per la latenza end-to-end')
+                        help='task count for end-to-end latency')
     parser.add_argument('--bulk', type=int, default=1000,
-                        help='risultati per get_many/join')
+                        help='result count for get_many/join')
     parser.add_argument('--no-worker', action='store_true')
     parser.add_argument('--out', default=None)
     args = parser.parse_args()
@@ -132,13 +123,13 @@ def main():
         broker_connection_retry_on_startup=True,
         worker_hijack_root_logger=False,
     )
-    from benchapp import add  # noqa: E402 - usa l'app del modulo (stesso task)
+    from benchapp import add  # noqa: E402 - use the module app and task
 
     worker = Worker(args.worker_python)
     if not args.no_worker:
         worker.start()
     try:
-        # Riscaldamento: la prima connessione paga l'handshake.
+        # Warm up to exclude the first connection handshake.
         add.apply_async((0, 0), queue=QUEUE).get(timeout=60)
 
         latencies = []

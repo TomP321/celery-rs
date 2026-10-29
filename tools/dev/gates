@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Gate bloccanti con log separati e assegnazione automatica delle corsie."""
+"""Run blocking gates with separate logs and automatic broker lane assignment."""
 import argparse
 from concurrent.futures import ThreadPoolExecutor
 import json
@@ -17,11 +17,11 @@ OUT = ROOT / 'target/gates'
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--only', help='nomi separati da virgola; tests_rs seleziona tutti i gruppi')
+    parser.add_argument('--only', help='comma-separated names; tests_rs selects all groups')
     args = parser.parse_args()
     os.chdir(ROOT)
     OUT.mkdir(parents=True, exist_ok=True)
-    # Ogni invocazione conserva i propri log anche con due runner simultanei.
+    # Keep logs from concurrent runner invocations separate.
     run_dir = OUT / f'{time.strftime("%Y%m%d-%H%M%S")}-{os.getpid()}'
     run_dir.mkdir()
     history = OUT / 'durations.json'
@@ -36,7 +36,7 @@ def main():
     files = list(Path('python/tests_rs').glob('test_*.py'))
     count = int(os.environ.get('CELERY_RS_LANES', '4'))
     if count < 1:
-        parser.error('CELERY_RS_LANES deve essere positivo')
+        parser.error('CELERY_RS_LANES must be positive')
     groups = [[] for _ in range(count)]
     costs = [0.] * len(groups)
     for file in sorted(files, key=lambda p: weights.get(p.name, defaults.get(p.name, 40)), reverse=True):
@@ -60,7 +60,7 @@ def main():
     selected = set(args.only.split(',')) if args.only else set(prep) | set(jobs)
     unknown = selected - set(prep) - set(jobs) - {'tests_rs'}
     if unknown:
-        parser.error(f'nomi sconosciuti: {", ".join(sorted(unknown))}')
+        parser.error(f'unknown names: {", ".join(sorted(unknown))}')
     rows = []
     processes = set()
     interrupted = False
@@ -79,10 +79,10 @@ def main():
 
     def run(name, cmd, broker=True):
         if interrupted:
-            return name, 130, 0., 'interrotto'
+            return name, 130, 0., 'interrupted'
         start = time.monotonic()
         logfile = run_dir / f'{name}.log'
-        # Il link stabile è utile per il singolo giro; la directory conserva tutti i giri.
+        # The stable link points to the latest run; its directory preserves history.
         link = OUT / f'{name}.log'
         temp_link = OUT / f'.{name}.{os.getpid()}'
         temp_link.symlink_to(logfile.relative_to(OUT))
@@ -137,16 +137,16 @@ def main():
                              key=lambda item: weights.get('gate:' + item[0],
                                                           estimates.get(item[0], 60)),
                              reverse=True)
-            # `integration` prende da sé una corsia per broker: niente lock esterno
+            # integration acquires one lane per broker itself.
             futures = [pool.submit(run, name, cmd, name != 'integration') for name, cmd in ordered
                        if name in selected or ('tests_rs' in selected and name.startswith('tests_rs-'))]
             rows.extend(f.result() for f in futures)
-    print('nome | esito | durata | sintesi')
+    print('name | result | duration | summary')
     for name, code, seconds, summary in rows:
         print(f'{name} | {"OK" if code == 0 else f"FAIL ({code})"} | {seconds:.1f}s | {summary}')
-    print(f'Totale: {time.monotonic() - start:.1f}s; log: {run_dir}')
+    print(f'Total: {time.monotonic() - start:.1f}s; log: {run_dir}')
     (run_dir / 'results.json').write_text(json.dumps(rows, indent=2))
-    # Le durate reali dei file alimentano il bilanciamento dei giri successivi.
+    # Observed file durations balance later runs.
     import xml.etree.ElementTree as ET
     for report in run_dir.glob('*.xml'):
         sums = {}

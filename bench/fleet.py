@@ -1,12 +1,9 @@
-"""Quanti worker `-P prefork -c N` entrano in un budget di RAM: riferimento vs celery-rs.
+"""Measure how many prefork workers fit a RAM budget.
 
-    tools/dev/with-brokers .venv-rs/bin/python bench/fleet.py --venv .venv-rs --budget-mb 8192
-
-Avvia un worker alla volta (stessa coda, nomi diversi) finché la PSS totale di tutti gli alberi di
-processi supera il budget; poi invia un carico di task `pure` a tutta la flotta e rimisura.
-La PSS somma correttamente le pagine condivise (librerie, copy-on-write) fra tutti i processi.
-Salva bench/results/fleet-<label>.json.
-"""
+Run under tools/dev/with-brokers with --venv and --budget-mb. Start workers
+until total PSS exceeds the budget, then run pure tasks and measure again.
+Sum PSS across all trees to account for shared pages.
+Results: bench/results/fleet-<label>.json."""
 import argparse
 import json
 import os
@@ -63,16 +60,16 @@ def main():
                 cwd=HERE, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                 start_new_session=True)
             workers.append(proc)
-            # pronto quando tutti i figli esistono e la PSS si è assestata
+            # Wait for all children and settled PSS before measuring.
             expected = args.concurrency + 1
             deadline = time.time() + 60
             while time.time() < deadline and len(tree(proc.pid)) < expected:
                 if proc.poll() is not None:
-                    raise RuntimeError(f'worker {n} terminato: {proc.returncode}')
+                    raise RuntimeError(f'worker {n} exited: {proc.returncode}')
                 time.sleep(0.2)
             time.sleep(1.5)
             if any(worker.poll() is not None for worker in workers):
-                raise RuntimeError('un worker della flotta è terminato')
+                raise RuntimeError('a fleet worker exited')
             pids = [w.pid for w in workers]
             total = total_pss_mb(pids)
             series.append({'workers': len(workers), 'pss_mb': round(total, 1),
@@ -82,7 +79,7 @@ def main():
                 break
         fit_idle = max(s['workers'] for s in series if s['pss_mb'] <= args.budget_mb)
         idle_total = series[-1]['pss_mb']
-        # carico: task pure distribuiti su tutta la flotta
+
         publish = ('from benchapp import noop_pure\n'
                    f'for _ in range({args.tasks}): noop_pure.delay()\n')
         t0 = time.time()
@@ -95,9 +92,9 @@ def main():
         elapsed = time.time() - t0
         time.sleep(3)
         if any(worker.poll() is not None for worker in workers):
-            raise RuntimeError('un worker è terminato durante il carico')
+            raise RuntimeError('a worker exited under load')
         if not done_file.exists() or done_file.stat().st_size != args.tasks:
-            raise RuntimeError('carico della flotta incompleto')
+            raise RuntimeError('fleet load incomplete')
         pids = [w.pid for w in workers]
         loaded_total = total_pss_mb(pids)
         per_worker_loaded = loaded_total / len(workers)

@@ -1,4 +1,4 @@
-"""PSS prefork c10 prima/dopo due riavvii, sotto with-brokers (<5 minuti)."""
+"""Measure prefork c10 PSS across two restarts under with-brokers (under five minutes)."""
 import argparse
 import json
 import os
@@ -36,7 +36,7 @@ def probe():
 
 def measure(impl, broker, output, source=None):
     if os.environ.get('CELERY_RS_BROKER_LOCKED') != '1':
-        raise RuntimeError('eseguire sotto tools/dev/with-brokers')
+        raise RuntimeError('run under tools/dev/with-brokers')
     import redis
     client = redis.Redis.from_url(os.environ['CELERY_RS_REDIS_URL'] + '/14')
     url = (os.environ['CELERY_RS_REDIS_URL'] + '/15' if broker == 'redis'
@@ -60,9 +60,9 @@ def measure(impl, broker, output, source=None):
                 deadline = time.monotonic() + 60
                 while not modules.exists():
                     if worker.poll() is not None or time.monotonic() > deadline:
-                        raise RuntimeError('worker non pronto: ' + str(output))
+                        raise RuntimeError('worker not ready: ' + str(output))
                     time.sleep(.1)
-                # Il client usa un interprete diverso dal worker di riferimento.
+                # The client interpreter differs from the reference worker interpreter.
                 from celery import Celery
                 app = Celery('probe-client', broker=url,
                              backend=os.environ['CELERY_RS_REDIS_URL'] + '/14')
@@ -74,7 +74,7 @@ def measure(impl, broker, output, source=None):
                     seen = set()
                     while len(seen) < 10:
                         if time.monotonic() > deadline:
-                            raise RuntimeError('non tutti i figli hanno eseguito il probe')
+                            raise RuntimeError('not all children ran the probe')
                         try:
                             results = [app.send_task('restart_app.probe')
                                        for _ in range(10)]
@@ -120,7 +120,7 @@ if __name__ == '__main__':
     parser.add_argument('--broker', choices=('redis', 'amqp'), default='redis')
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--source', type=Path,
-                        help='sorgente alternativo per confrontare la baseline')
+                        help='alternate source for baseline comparisons')
     args = parser.parse_args()
     measure(args.impl, args.broker, args.output.resolve(),
             str(args.source.resolve()) if args.source else None)

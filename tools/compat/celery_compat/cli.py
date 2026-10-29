@@ -1,15 +1,6 @@
-"""celery-compat: conformità di celery-rs rispetto a Celery di riferimento.
+"""Compare celery-rs API, wire traffic, CLI and test outcomes with reference Celery.
 
-    python -m celery_compat api        [--ref VENV] [--rs VENV]
-    python -m celery_compat wire       [--ref VENV] [--rs VENV] [--broker redis amqp] [-s SCENARIO...]
-    python -m celery_compat wire-worker [--ref VENV] [--rs VENV] [--broker redis amqp] [--pool solo]
-    python -m celery_compat wire-beat  [--ref VENV] [--rs VENV] [--broker redis amqp]
-    python -m celery_compat cli        [--ref VENV] [--rs VENV] [--broker redis amqp] [-s CASO...]
-    python -m celery_compat upstream   [--venv VENV] [--suite unit|integration] [-k EXPR] [paths...]
-    python -m celery_compat integration [--ref VENV] [--rs VENV] [--broker redis amqp]
-
-Ogni comando scrive i risultati in tools/compat/out/ ed esce con codice != 0 se il gate fallisce.
-"""
+Each subcommand writes tools/compat/out/ and returns nonzero on gate failure."""
 import argparse
 import json
 import os
@@ -31,11 +22,9 @@ VENV_RS = ROOT / '.venv-rs'
 
 
 def run_group(cmd, **kwargs):
-    """Come subprocess.run, ma in un gruppo di processi proprio, terminato del tutto all'uscita.
+    """Run a command in its own process group and terminate the entire group on exit.
 
-    Se il pytest principale muore (timeout, OOM, kill) i worker xdist restano orfani e inattivi
-    per sempre: alla fine si uccide l'intero gruppo, qualunque sia l'esito.
-    """
+    This prevents orphaned xdist workers after timeout, OOM or kill."""
     proc = subprocess.Popen(cmd, start_new_session=True, **kwargs)
     try:
         return proc.wait()
@@ -47,7 +36,7 @@ def run_group(cmd, **kwargs):
 
 
 def _exit_on_term(signum, frame):
-    # SIGTERM → SystemExit, così i `finally` di run_group ripuliscono i gruppi.
+    # Convert SIGTERM to SystemExit so run_group finally blocks clean up process groups.
     raise SystemExit(128 + signum)
 
 
@@ -67,7 +56,7 @@ def in_scope(name, scope):
 
 
 def reference_modules():
-    """Moduli in scope, enumerati dal sorgente di riferimento (non serve importarli)."""
+    """List scoped modules from reference sources without importing them."""
     scope = load_scope()
     names = set()
     for f in (REF_SRC / 'celery').rglob('*.py'):
@@ -79,17 +68,17 @@ def reference_modules():
 
 
 def py(venv):
-    # abspath e non resolve(): il symlink bin/python va mantenuto o il venv non viene riconosciuto
+    # Keep the bin/python symlink with abspath so the interpreter recognizes its venv.
     return os.path.join(os.path.abspath(venv), 'bin', 'python')
 
 
-# --------------------------------------------------------------------------- api
+
 
 def run_dump(venv, label, modules_file):
     out = OUT / f'api-{label}.json'
-    # cwd neutro e -P: il dumper deve importare `celery` dal venv, non da cwd/cartella script.
-    # Niente -I perché ignorerebbe PYTHONHASHSEED, che serve fisso: set/frozenset compaiono
-    # nei default delle firme e il loro repr dipende dall'hash.
+    # Use a neutral cwd and -P to import Celery from the venv.
+    # Avoid -I: fixed PYTHONHASHSEED makes set/frozenset signature defaults deterministic.
+
     env = {k: v for k, v in os.environ.items() if not k.startswith('PYTHON')}
     env['PYTHONHASHSEED'] = '0'
     subprocess.run([py(venv), '-P', '-s', str(HERE / 'dump_api.py'), '--modules', str(modules_file),
@@ -112,19 +101,19 @@ def diff_tree(ref, rs, path, diffs):
         diffs.append(('changed', path, ref, rs))
 
 
-#: Differenze di introspezione statica accettate dal proprietario del progetto, con il motivo.
-#: Il comportamento a runtime resta identico; il dump le riporta a parte senza contarle.
+# Owner-approved static introspection differences, with reasons.
+# Runtime behaviour stays identical; report these separately without counting them.
 ACCEPTED_API_DIFFS = {
     'names.RedisBackend.members.connection_class_ssl':
-        'risolta al primo accesso nella vera classe di redis-py (evita +7,5 MB di redis-py '
-        'in ogni client e master che importa celery.backends.redis); vars(cls) vede il descrittore',
+        'resolved lazily to the redis-py class, saving 7.5 MB per client/master; '
+        'vars(cls) sees the descriptor',
     'names.SentinelBackend.members.connection_class_ssl':
-        'come RedisBackend.connection_class_ssl (classe Sentinel+TLS creata al primo accesso)',
+        'like RedisBackend.connection_class_ssl; Sentinel+TLS class created lazily',
     'names.TaskPool.members.Pool':
-        'risolta al primo accesso nella vera celery.concurrency.asynpool.AsynPool (evita billiard/'
-        'asynpool nel master del pool Rust); vars(cls) vede il descrittore',
+        'resolved lazily to celery.concurrency.asynpool.AsynPool, keeping billiard/asynpool '
+        'out of the Rust pool master; vars(cls) sees the descriptor',
     'names.TaskPool.members.BlockingPool':
-        'risolta al primo accesso nella vera billiard.pool.Pool; vars(cls) vede il descrittore',
+        'resolved lazily to billiard.pool.Pool; vars(cls) sees the descriptor',
 }
 
 
@@ -167,7 +156,7 @@ def cmd_api(args):
         report['sections'][section] = diffs
         total += len(diffs)
 
-    lines = [f'# celery-compat api — {total} differenze',
+    lines = [f'# celery-compat api — {total} differences',
              f'ref: {ref["meta"]}', f'rs:  {rs["meta"]}', '']
     lines.append('| area | missing | extra | changed |')
     lines.append('|---|---|---|---|')
@@ -183,22 +172,22 @@ def cmd_api(args):
         for kind, p, a, b in diffs[:args.max_per_area]:
             lines.append(f'- **{kind}** `{p}`: ref={short(a)} rs={short(b)}')
         if len(diffs) > args.max_per_area:
-            lines.append(f'- … altre {len(diffs) - args.max_per_area}')
+            lines.append(f'- … more {len(diffs) - args.max_per_area}')
         lines.append('')
     if report.get('accepted'):
-        lines.append('## Differenze accettate (non contate)')
+        lines.append('## Accepted differences (not counted)')
         for mod, (kind, p, a, b), reason in report['accepted']:
             lines.append(f'- {mod} **{kind}** `{p}`: {reason}')
         lines.append('')
     (OUT / 'api-report.md').write_text('\n'.join(lines))
     (OUT / 'api-diff.json').write_text(json.dumps(report, indent=1, ensure_ascii=False))
 
-    print(f'api: {total} differenze su {len(modules)} moduli + settings/signals/cli '
+    print(f'api: {total} differences in {len(modules)} modules + settings/signals/cli '
           f'→ {OUT / "api-report.md"}')
     return 1 if total else 0
 
 
-# -------------------------------------------------------------------------- wire
+
 
 BROKERS = {
     'redis': (os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390') + '/0', os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390') + '/1'),
@@ -244,15 +233,15 @@ def cmd_wire(args):
             rs, rs_err = run_scenario(args.rs, broker, name)
             key = f'{broker}:{name}'
             if ref_err and ref_err == rs_err:
-                status = f'ok (stesso errore del riferimento: {ref_err[:60]})'
+                status = f'ok (same reference error: {ref_err[:60]})'
             elif ref_err:
-                status = f'ERRORE NEL RIFERIMENTO: {ref_err}'
+                status = f'REFERENCE ERROR: {ref_err}'
             elif rs_err:
-                status = f'errore rs: {rs_err}'
+                status = f'rs error: {rs_err}'
             elif sorted(ref) != sorted(rs):
-                status = 'diverso'
+                status = 'different'
             elif ref != rs:
-                status = 'ok (ordine diverso)'
+                status = 'ok (different order)'
             else:
                 status = 'ok'
             ok = status.startswith('ok')
@@ -263,25 +252,25 @@ def cmd_wire(args):
                 lines.append(f'## {key}\n```diff')
                 lines += difflib.unified_diff(sorted(ref), sorted(rs), 'ref', 'rs', lineterm='', n=0)
                 lines.append('```')
-    (OUT / 'wire-report.md').write_text(f'# celery-compat wire — {failures} scenari diversi\n\n'
+    (OUT / 'wire-report.md').write_text(f'# celery-compat wire — {failures} differing scenarios\n\n'
                                         + '\n'.join(lines) + '\n')
     (OUT / 'wire.json').write_text(json.dumps(results, indent=1, ensure_ascii=False))
-    print(f'wire: {failures} scenari diversi su {len(results)} → {OUT / "wire-report.md"}')
+    print(f'wire: {failures} differing scenarios out of {len(results)} → {OUT / "wire-report.md"}')
     return 1 if failures else 0
 
 
-# ------------------------------------------------------------------ wire-worker
 
-#: comandi Redis di lettura/polling: il loro numero dipende dai tempi, non dalla semantica
+
+# Redis polling counts depend on timing rather than semantics.
 WORKER_REDIS_READS = {'BRPOP', 'BLPOP', 'LLEN', 'GET', 'MGET', 'SMEMBERS', 'SSCAN', 'SCAN', 'KEYS',
                       'EXISTS', 'TTL', 'PTTL', 'HGET', 'HGETALL', 'ZRANGE', 'ZREVRANGEBYSCORE',
                       'ZRANGEBYSCORE', 'ZCARD', 'LRANGE', 'SUBSCRIBE', 'PSUBSCRIBE', 'UNSUBSCRIBE',
                       'PUNSUBSCRIBE', 'MULTI', 'EXEC', 'WATCH', 'UNWATCH', 'TYPE'}
-#: campi degli eventi che dipendono da tempi e carico
+# Event fields vary with timing and load.
 EVENT_FIELDS_RE = __import__('re').compile(
     r'(\\?"(?:clock|runtime|freq|active|processed|utcoffset|loadavg|local_received)\\?":\s*)'
     r'(\[[^\]]*\]|-?[\d.e+-]+)')
-#: percorsi dei sorgenti nei traceback (anche dentro JSON annidato, con virgolette escaped)
+# Source paths in tracebacks also occur inside escaped nested JSON.
 TRACEBACK_RE = __import__('re').compile(r'File (\\*)"[^"]*?/([^/"\\]+)\\*", line \d+')
 
 
@@ -289,7 +278,7 @@ ANY_ID_RE = __import__('re').compile(r'<id\d+>')
 
 
 def _split_multi(broker, rec):
-    """Eventi `task.multi` → un record per evento: il raggruppamento dipende dai tempi."""
+    """Flatten task.multi records because event batching depends on timing."""
     if 'task.multi' not in rec:
         return [rec]
     try:
@@ -313,7 +302,7 @@ def _split_multi(broker, rec):
 
 
 def _decode_unacked(rec):
-    """`HSET unacked <tag> [envelope, exchange, rk]`: il body dell'envelope è base64."""
+    """Decode the base64 envelope body in HSET unacked records."""
     from . import wire
     head, sep, payload = rec.partition(' [')
     if not sep or ' HSET unacked' not in head:
@@ -341,14 +330,14 @@ def _worker_semantic(broker, records, norm):
                     continue
             rec = EVENT_FIELDS_RE.sub(r'\1<v>', rec)
             rec = TRACEBACK_RE.sub(r'File \1"<path>/\2\1", line <n>', rec)
-            # gli id dei task sono fissati dagli scenari; gli uuid restanti (delivery tag, code di
-            # risposta) prendono numeri diversi secondo l'interleaving client/worker
+            # Scenarios fix task IDs; other UUID numbering depends on client/worker interleaving.
+
             rec = ANY_ID_RE.sub('<id>', rec)
             out.append(rec)
     return sorted(out)
 
 
-#: scenari che richiedono un secondo worker avviato tra la fase `pre` e la fase `main`
+# These scenarios start a second worker between pre and main.
 TWO_WORKER_SCENARIOS = {'two_workers'}
 
 
@@ -399,7 +388,7 @@ def run_worker_scenario(venv, ref_venv, broker, name, pool):
         workers.append(worker)
         try:
             if not ready.wait(30):
-                return None, 'worker non pronto: ' + ''.join(log[-5:])[-300:]
+                return None, 'worker not ready: ' + ''.join(log[-5:])[-300:]
             if name in TWO_WORKER_SCENARIOS:
                 pre = subprocess.run([*client_argv, '--phase', 'pre'], cwd=OUT, env=env,
                                      capture_output=True, text=True, timeout=90)
@@ -410,17 +399,17 @@ def run_worker_scenario(venv, ref_venv, broker, name, pool):
                                                      queues='celery,compat2')
                 workers.append(second)
                 if not ready2.wait(30):
-                    return None, 'secondo worker non pronto: ' + ''.join(log2[-5:])[-300:]
+                    return None, 'second worker not ready: ' + ''.join(log2[-5:])[-300:]
             client = subprocess.run(client_argv, cwd=OUT, env=env, capture_output=True,
                                     text=True, timeout=90)
-            # gli eventi dei task sono bufferizzati: lascia che il dispatcher li scarichi
+            # Allow the dispatcher to flush buffered task events.
             time.sleep(1.5)
         finally:
             _stop_workers(workers)
     if client.returncode != 0:
         err = client.stderr.strip().splitlines()
         return None, 'client: ' + (err[-1] if err else 'exit != 0')
-    # scomposizione e decodifica prima della normalizzazione (i segnaposto non sono JSON)
+    # Decode before normalizing: placeholders are not JSON.
     return _worker_semantic(broker, cap.messages(lambda text: text), norm), None
 
 
@@ -444,11 +433,11 @@ def cmd_wire_worker(args):
             rs, rs_err = run_worker_scenario(args.rs, args.ref, broker, name, args.pool)
             key = f'{broker}:{args.pool}:{name}'
             if ref_err:
-                status = f'ERRORE NEL RIFERIMENTO: {ref_err}'
+                status = f'REFERENCE ERROR: {ref_err}'
             elif rs_err:
-                status = f'errore rs: {rs_err}'
+                status = f'rs error: {rs_err}'
             elif ref != rs:
-                status = 'diverso'
+                status = 'different'
             else:
                 status = 'ok'
             ok = status == 'ok'
@@ -460,16 +449,16 @@ def cmd_wire_worker(args):
                 lines += difflib.unified_diff(ref, rs, 'ref', 'rs', lineterm='', n=0)
                 lines.append('```')
     (OUT / 'wire-worker-report.md').write_text(
-        f'# celery-compat wire-worker — {failures} scenari diversi\n\n' + '\n'.join(lines) + '\n')
+        f'# celery-compat wire-worker — {failures} differing scenarios\n\n' + '\n'.join(lines) + '\n')
     (OUT / 'wire-worker.json').write_text(json.dumps(results, indent=1, ensure_ascii=False))
-    print(f'wire-worker: {failures} scenari diversi su {len(results)} → '
+    print(f'wire-worker: {failures} differing scenarios out of {len(results)} → '
           f'{OUT / "wire-worker-report.md"}')
     return 1 if failures else 0
 
 
-# ---------------------------------------------------------------------- wire-beat
 
-#: durata di ogni esecuzione di beat: le voci a 300-500 ms scattano 5-10 volte
+
+# Entries at 300–500 ms fire 5–10 times during each beat run.
 BEAT_SECONDS = 3.5
 
 
@@ -499,7 +488,7 @@ def run_beat(venv, broker):
         threading.Thread(target=pump, daemon=True).start()
         try:
             if not started.wait(30):
-                return None, 'beat non partito: ' + ''.join(log[-5:])[-300:]
+                return None, 'beat did not start: ' + ''.join(log[-5:])[-300:]
             time.sleep(BEAT_SECONDS)
             beat.send_signal(15)
             beat.wait(30)
@@ -509,9 +498,9 @@ def run_beat(venv, broker):
                 beat.wait()
     errors = [line.strip() for line in log if 'Traceback' in line or ' ERROR' in line]
     if errors:
-        return None, 'errori nel log di beat: ' + errors[0][:200]
+        return None, 'errors in beat log: ' + errors[0][:200]
     if not (workdir / 'celerybeat-schedule').exists() and not list(workdir.glob('celerybeat-schedule*')):
-        return None, 'file di schedule non scritto'
+        return None, 'schedule file not written'
     return _worker_semantic(broker, cap.messages(lambda text: text), wire.Normalizer()), None
 
 
@@ -523,7 +512,7 @@ def _beat_counts(records):
 
 
 def cmd_wire_beat(args):
-    """Stessa forma dei messaggi di beat; il numero di invii può variare solo per i tempi."""
+    """Compare beat message shapes, allowing timing-dependent send counts."""
     import difflib
     from . import wire
     OUT.mkdir(parents=True, exist_ok=True)
@@ -535,15 +524,15 @@ def cmd_wire_beat(args):
         rs, rs_err = run_beat(args.rs, broker)
         problems = []
         if ref_err:
-            status = f'ERRORE NEL RIFERIMENTO: {ref_err}'
+            status = f'REFERENCE ERROR: {ref_err}'
         elif rs_err:
-            status = f'errore rs: {rs_err}'
+            status = f'rs error: {rs_err}'
         else:
             rc, sc = _beat_counts(ref), _beat_counts(rs)
             if set(rc) != set(sc):
-                problems.append('messaggi diversi')
+                problems.append('different messages')
             for rec in set(rc) & set(sc):
-                # tolleranza sui tempi: stesso ordine di grandezza di invii per voce
+                # Allow timing differences within the same order of magnitude of sends per entry.
                 if not (rc[rec] * 0.6 - 1 <= sc[rec] <= rc[rec] * 1.4 + 1):
                     problems.append(f'invii {rc[rec]} vs {sc[rec]}: {rec[:100]}')
             status = '; '.join(problems) if problems else 'ok'
@@ -557,15 +546,15 @@ def cmd_wire_beat(args):
                                           lineterm='', n=0)
             lines.append('```')
     (OUT / 'wire-beat-report.md').write_text(
-        f'# celery-compat wire-beat — {failures} broker diversi\n\n' + '\n'.join(lines) + '\n')
+        f'# celery-compat wire-beat — {failures} differing brokers\n\n' + '\n'.join(lines) + '\n')
     (OUT / 'wire-beat.json').write_text(json.dumps(results, indent=1, ensure_ascii=False))
-    print(f'wire-beat: {failures} broker diversi su {len(results)} → {OUT / "wire-beat-report.md"}')
+    print(f'wire-beat: {failures} differing brokers out of {len(results)} → {OUT / "wire-beat-report.md"}')
     return 1 if failures else 0
 
 
-# ---------------------------------------------------------------------------- cli
 
-#: broker senza worker (vhost/db dedicati): `status` e `inspect` devono non ricevere risposte
+
+# Dedicated workerless brokers ensure status and inspect receive no replies.
 EMPTY_BROKERS = {'redis': os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390') + '/3', 'amqp': os.environ.get('CELERY_RS_AMQP_URL', 'amqp://guest:guest@127.0.0.1:5673//')}
 NUMBER_RE = __import__('re').compile(r'(?<![\w<])-?\d+(?:\.\d+)?(?![\w>])')
 
@@ -587,7 +576,7 @@ def _start_ref_worker(ref_venv, env):
     threading.Thread(target=pump, daemon=True).start()
     if not ready.wait(30):
         os.killpg(worker.pid, 9)
-        raise RuntimeError('worker del riferimento non pronto: ' + ''.join(log[-5:])[-300:])
+        raise RuntimeError('reference worker not ready: ' + ''.join(log[-5:])[-300:])
     return worker
 
 
@@ -607,7 +596,7 @@ def _cli_normalize(text, venv, tmp, numbers):
     import socket
     text = text.replace(str(Path(venv).resolve()), '<venv>').replace(str(venv), '<venv>')
     text = text.replace(str(tmp), '<tmp>').replace(str(HERE), '<compat>')
-    # shebang dello script `celery`: pip scrive python3, `maturin develop` python
+    # pip writes python3 in the celery shebang; maturin develop writes python.
     text = text.replace('<venv>/bin/python3', '<venv>/bin/python')
     text = TRACEBACK_RE.sub(r'File \1"<path>/\2\1", line <n>', text)
     text = wire.Normalizer()(text)
@@ -623,7 +612,7 @@ def run_cli_cases(venv, ref_venv, broker, cases):
     import shutil
     import socket
     url, _ = BROKERS[broker]
-    # `celery result` da un altro processo richiede un backend persistente (rpc:// no)
+    # Cross-process celery result needs a persistent backend, excluding rpc://.
     backend = os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390') + '/1'
     tmp = OUT / 'cli-tmp'
     shutil.rmtree(tmp, ignore_errors=True)
@@ -636,7 +625,7 @@ def run_cli_cases(venv, ref_venv, broker, cases):
     out, last_id, worker = {}, '', None
     venv = Path(venv).resolve()
     celery = str(venv / 'bin' / 'celery')
-    # messaggi rimasti da esecuzioni precedenti cambierebbero `inspect stats` del worker
+    # Leftover messages would change the worker inspect stats.
     subprocess.run([py(ref_venv), '-P', '-m', 'celery', '-A', 'worker_app', 'purge', '-f'],
                    cwd=tmp, env=env, capture_output=True, timeout=60)
     try:
@@ -675,7 +664,7 @@ def run_cli_cases(venv, ref_venv, broker, cases):
 
 
 def cmd_cli(args):
-    """Stessi comandi `celery ...` con la CLI ref e rs: stdout, stderr ed exit code identici."""
+    """Compare stdout, stderr and exit codes for identical ref and rs CLI commands."""
     import difflib
     from . import cli_cases
     OUT.mkdir(parents=True, exist_ok=True)
@@ -699,7 +688,7 @@ def cmd_cli(args):
             ok = not diff
             failures += not ok
             key = f'{broker}:{name}'
-            status = 'ok' if ok else 'diverso: ' + ', '.join(diff)
+            status = 'ok' if ok else 'different: ' + ', '.join(diff)
             results[key] = {'status': status, 'ref': a, 'rs': b}
             print(f'{"✓" if ok else "✗"} {key:45} {status}  (rc {a["rc"]})')
             if not ok:
@@ -709,14 +698,14 @@ def cmd_cli(args):
                                                   f'ref {k}', f'rs {k}', lineterm='', n=1)
                 lines.append('```')
     (OUT / 'cli-report.md').write_text(
-        f'# celery-compat cli — {failures} comandi diversi\n\n' + '\n'.join(lines) + '\n')
+        f'# celery-compat cli — {failures} differing commands\n\n' + '\n'.join(lines) + '\n')
     (OUT / 'cli.json').write_text(json.dumps(results, indent=1, ensure_ascii=False))
-    print(f'cli: {failures} comandi diversi su {len(results)} '
-          f'(tempo totale ref {timing["ref"]:.1f}s, rs {timing["rs"]:.1f}s) → {OUT / "cli-report.md"}')
+    print(f'cli: {failures} differences in {len(results)} commands '
+          f'(total time ref {timing["ref"]:.1f}s, rs {timing["rs"]:.1f}s) → {OUT / "cli-report.md"}')
     return 1 if failures else 0
 
 
-# ---------------------------------------------------------------------- upstream
+
 
 def junit_failures(xml_path):
     failed = set()
@@ -725,7 +714,7 @@ def junit_failures(xml_path):
     for case in ET.parse(xml_path).getroot().iter('testcase'):
         if case.find('failure') is not None or case.find('error') is not None:
             cls = case.get('classname', '')
-            # classname = "t.unit.app.test_app.test_App" → file + classe
+
             parts = cls.split('.')
             for i in range(len(parts), 0, -1):
                 f = Path(TEST_SRC, *parts[:i]).with_suffix('.py')
@@ -749,11 +738,10 @@ TEST_SRC = OUT / 'upstream-src'
 
 
 def prepare_test_tree():
-    """Copia dei test di Celery in una cartella senza il pacchetto `celery`.
+    """Copy Celery tests outside the source package.
 
-    Eseguiti da `celery/`, pytest metterebbe in sys.path la cartella che contiene `t/`
-    e quindi il sorgente di riferimento: il venv-rs importerebbe il Celery originale.
-    """
+    Otherwise pytest adds the reference source to sys.path and the Rust venv
+    imports reference Celery."""
     import shutil
     shutil.rmtree(TEST_SRC, ignore_errors=True)
     shutil.copytree(REF_SRC / 't', TEST_SRC / 't', ignore=shutil.ignore_patterns('__pycache__'))
@@ -767,23 +755,23 @@ def cmd_upstream(args):
     prepare_test_tree()
     label = Path(args.venv).name.lstrip('.')
     paths = args.paths or [f't/{args.suite}']
-    # -P: niente cwd in sys.path; il pacchetto celery deve venire dal venv
+    # Use -P to keep cwd off sys.path and import Celery from the venv.
     pytest = [py(args.venv), '-P', '-m', 'pytest']
     opts = ['-q', '-p', 'no:cacheprovider', '--timeout=300', '-o', 'addopts=']
     if args.k:
         opts += ['-k', args.k]
     env = {**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'}
 
-    # passo 1: parallelo per file
+
     x1 = OUT / f'upstream-{args.suite}-{label}-pass1.xml'
     run_group([*pytest, *paths, *opts, '-n', str(args.jobs), '--dist', 'loadfile',
                f'--junitxml={x1}'],
               cwd=TEST_SRC, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     failed1 = junit_failures(x1)
 
-    # passo 2: ripete in seriale solo i falliti, un processo per file: alcuni test passano da soli
-    # ma falliscono per interferenze con altri test (thread rimasti, stato globale).
-    # Restano rotti solo quelli che falliscono di nuovo.
+    # Retry failed files in fresh serial processes to isolate leftover threads and global state.
+
+    # Only repeated failures remain broken.
     failed = set()
     by_file = {}
     for node in failed1:
@@ -795,7 +783,7 @@ def cmd_upstream(args):
         failed |= junit_failures(x2)
         x2.unlink(missing_ok=True)
 
-    # fallimenti che si verificano anche col riferimento non sono regressioni di celery-rs
+    # Failures shared with the reference are not celery-rs regressions.
     known = set()
     ref_json = OUT / f'upstream-{args.suite}-venv-ref.json'
     if label != 'venv-ref' and ref_json.exists():
@@ -809,13 +797,13 @@ def cmd_upstream(args):
     out = OUT / f'upstream-{args.suite}-{label}.json'
     out.write_text(json.dumps(result, indent=1))
     passed = s.get('tests', 0) - s.get('skipped', 0) - len(failed1)
-    print(f'upstream {args.suite} [{label}]: {s.get("tests", 0)} test, {passed} ok al primo passo, '
-          f'{len(failed1) - len(failed)} instabili, {len(failed)} falliti '
-          f'({len(failed & known)} noti anche nel riferimento) → {out}')
+    print(f'upstream {args.suite} [{label}]: {s.get("tests", 0)} tests, {passed} passed initially, '
+          f'{len(failed1) - len(failed)} flaky, {len(failed)} failed '
+          f'({len(failed & known)} known reference failures) → {out}')
     for n in sorted(regressions)[:args.show]:
         print('  FAIL', n)
     if label == 'venv-ref':
-        return 0  # il riferimento definisce la baseline
+        return 0  # The reference defines the baseline.
     return 1 if regressions else 0
 
 
@@ -823,49 +811,49 @@ def main(argv=None):
     ap = argparse.ArgumentParser(prog='celery-compat')
     sub = ap.add_subparsers(dest='cmd', required=True)
 
-    a = sub.add_parser('api', help='diff della superficie pubblica ref vs rs')
+    a = sub.add_parser('api', help='compare ref and rs public API')
     a.add_argument('--ref', default=VENV_REF)
     a.add_argument('--rs', default=VENV_RS)
     a.add_argument('--max-per-area', type=int, default=40)
     a.set_defaults(fn=cmd_api)
 
-    w = sub.add_parser('wire', help='diff del traffico sul broker generato dal client ref vs rs')
+    w = sub.add_parser('wire', help='compare ref and rs client broker traffic')
     w.add_argument('--ref', default=VENV_REF)
     w.add_argument('--rs', default=VENV_RS)
     w.add_argument('--broker', nargs='+', choices=tuple(BROKERS), default=list(BROKERS))
-    w.add_argument('-s', '--scenario', nargs='+', help='filtra gli scenari per sottostringa')
+    w.add_argument('-s', '--scenario', nargs='+', help='filter scenarios by substring')
     w.set_defaults(fn=cmd_wire)
 
     ww = sub.add_parser('wire-worker',
-                        help='diff del traffico sul broker generato dal worker ref vs rs (client ref)')
+                        help='compare ref and rs worker traffic (ref client)')
     ww.add_argument('--ref', default=VENV_REF)
     ww.add_argument('--rs', default=VENV_RS)
     ww.add_argument('--broker', nargs='+', choices=tuple(BROKERS), default=list(BROKERS))
     ww.add_argument('--pool', default='solo')
-    ww.add_argument('-s', '--scenario', nargs='+', help='filtra gli scenari per sottostringa')
+    ww.add_argument('-s', '--scenario', nargs='+', help='filter scenarios by substring')
     ww.set_defaults(fn=cmd_wire_worker)
 
     wb = sub.add_parser('wire-beat',
-                        help='diff dei messaggi pubblicati da celery beat ref vs rs')
+                        help='compare ref and rs beat messages')
     wb.add_argument('--ref', default=VENV_REF)
     wb.add_argument('--rs', default=VENV_RS)
     wb.add_argument('--broker', nargs='+', choices=tuple(BROKERS), default=list(BROKERS))
     wb.set_defaults(fn=cmd_wire_beat)
 
-    c = sub.add_parser('cli', help='diff di output ed exit code della CLI `celery` ref vs rs')
+    c = sub.add_parser('cli', help='compare ref and rs CLI output and exit codes')
     c.add_argument('--ref', default=VENV_REF)
     c.add_argument('--rs', default=VENV_RS)
     c.add_argument('--broker', nargs='+', choices=tuple(BROKERS), default=list(BROKERS))
-    c.add_argument('-s', '--scenario', nargs='+', help='filtra i casi per sottostringa')
+    c.add_argument('-s', '--scenario', nargs='+', help='filter cases by substring')
     c.set_defaults(fn=cmd_cli)
 
-    u = sub.add_parser('upstream', help='esegue la test suite di Celery contro un venv')
+    u = sub.add_parser('upstream', help='run the Celery test suite in a venv')
     u.add_argument('--venv', default=VENV_RS)
     u.add_argument('--suite', choices=('unit', 'integration'), default='unit')
     u.add_argument('-k')
     u.add_argument('-j', '--jobs', type=int, default=16)
     u.add_argument('--show', type=int, default=50)
-    u.add_argument('paths', nargs='*', help='sottoinsieme di test (relativo a celery/)')
+    u.add_argument('paths', nargs='*', help='test subset (relative to celery/)')
     u.set_defaults(fn=cmd_upstream)
 
     from .integration import register

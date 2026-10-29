@@ -1,5 +1,4 @@
-"""Filtra lo stream JSON di `codex exec --json`: messaggi e comandi nel log leggibile,
-id del thread salvato per poter continuare la conversazione (`codex exec resume`)."""
+"""Filter codex exec JSON into readable logs and save the thread ID for resume."""
 import json
 import sys
 
@@ -12,7 +11,7 @@ with open(log_path, 'a') as log:
             continue
         kind = ev.get('type')
         if kind == 'thread.started' and ev.get('thread_id'):
-            # salvato subito: se la sessione si blocca si può riprendere lo stesso
+            # Save immediately so a stalled session can be resumed.
             with open(sid_file, 'w') as fh:
                 fh.write(ev['thread_id'])
         item = ev.get('item') or {}
@@ -26,5 +25,5 @@ with open(log_path, 'a') as log:
                 files = ', '.join(c.get('path', '') for c in item.get('changes', []))[:200]
                 log.write(f"[file] {files}\n")
         elif kind in ('turn.failed', 'error'):
-            log.write(f"[errore] {json.dumps(ev)[:500]}\n")
+            log.write(f"[error] {json.dumps(ev)[:500]}\n")
         log.flush()

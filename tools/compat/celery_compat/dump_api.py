@@ -1,10 +1,6 @@
-"""Dump della superficie pubblica di `celery` nel venv in cui viene eseguito.
+"""Dump the installed Celery public API deterministically using only the stdlib.
 
-Uso: <venv>/bin/python -I dump_api.py --modules modules.json --out api.json
-
-Gira dentro il venv da analizzare (riferimento o celery-rs), quindi usa solo la stdlib.
-L'output è deterministico: stesso pacchetto → stesso JSON, così il diff è significativo.
-"""
+Usage: <venv>/bin/python -I dump_api.py --modules modules.json --out api.json."""
 import argparse
 import enum
 import importlib
@@ -25,7 +21,7 @@ def norm(text):
 
 
 def value_repr(value, depth=0):
-    """repr stabile di valori semplici; None se il valore non è confrontabile."""
+    """Return a stable repr for simple values, or None if not comparable."""
     if isinstance(value, enum.Enum):
         return f'{type(value).__qualname__}.{value.name}'
     if isinstance(value, SIMPLE):
@@ -49,8 +45,7 @@ def value_repr(value, depth=0):
 
 
 def public_type(cls):
-    """Primo tipo pubblico nella MRO: una sottoclasse privata (`_Nome`) del tipo del riferimento
-    è un dettaglio di implementazione, non superficie pubblica."""
+    """Find the first public MRO type; private subclasses are implementation details."""
     for klass in getattr(cls, '__mro__', (cls,)):
         if not getattr(klass, '__qualname__', '_').split('.')[-1].startswith('_'):
             return klass
@@ -110,7 +105,7 @@ def describe_member(cls, name, raw):
     if inspect.isclass(raw):
         return {'kind': 'nested-class', 'origin': origin(raw)}
     if hasattr(raw, '__get__') and not isinstance(raw, SIMPLE):
-        # descrittori custom (cached_property, Proxy, ...)
+
         return {'kind': 'descriptor', 'type': origin(type(raw))}
     return {'kind': 'attr', 'type': type(raw).__name__, 'value': value_repr(raw)}
 
@@ -134,7 +129,7 @@ def public_names(mod):
     names = getattr(mod, '__all__', None)
     if names is None:
         names = [n for n in vars(mod) if not n.startswith('_')]
-        # nomi risolti al primo accesso (PEP 562: `__getattr__` + `__dir__` di modulo)
+        # Resolve lazy module names through PEP 562 __getattr__ and __dir__.
         if '__getattr__' in vars(mod) and '__dir__' in vars(mod):
             names += [n for n in mod.__dir__() if not n.startswith('_')]
     return sorted(set(names))
@@ -143,19 +138,19 @@ def public_names(mod):
 def dump_module(modname):
     try:
         mod = importlib.import_module(modname)
-    except Exception as exc:  # noqa: BLE001 — ogni errore di import è un dato del report
+    except Exception as exc:  # noqa: BLE001 — import errors are report data
         return {'import_error': f'{type(exc).__name__}: {exc}'}
     out = {'all': getattr(mod, '__all__', None) is not None, 'names': {}}
     for name in public_names(mod):
         if name.startswith('__'):
-            continue  # __file__, __path__, ...: dipendono da dove è installato
+            continue  # Installation-dependent paths are not API differences.
         try:
             obj = getattr(mod, name)
         except Exception as exc:  # noqa: BLE001
             out['names'][name] = {'kind': 'getattr-error', 'error': f'{type(exc).__name__}: {exc}'}
             continue
-        # nomi importati da librerie esterne (os, kombu, ...) non fanno parte della nostra API
-        # se il modulo non li dichiara in __all__
+        # External imports are public only when explicitly listed in __all__.
+
         org = getattr(obj, '__module__', None)
         if not (inspect.isclass(obj) or inspect.isroutine(obj) or isinstance(obj, types.ModuleType)):
             org = getattr(public_type(type(obj)), '__module__', org)
@@ -219,7 +214,7 @@ def dump_cli():
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--modules', required=True, help='JSON con la lista dei moduli da analizzare')
+    ap.add_argument('--modules', required=True, help='JSON list of modules to inspect')
     ap.add_argument('--out', required=True)
     args = ap.parse_args()
     with open(args.modules) as fh:

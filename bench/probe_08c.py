@@ -1,4 +1,4 @@
-"""Sonde rpc/ping e profili client, senza modificare i percorsi del worker."""
+"""Probe RPC/ping and profile clients without changing worker execution."""
 import argparse
 import json
 import os
@@ -66,7 +66,7 @@ def main():
     parser.add_argument('--pool', choices=('solo', 'prefork'), default='prefork')
     args = parser.parse_args()
     if os.environ.get('CELERY_RS_BROKER_LOCKED') != '1':
-        parser.error('eseguire sotto tools/dev/with-brokers')
+        parser.error('run under tools/dev/with-brokers')
     directory = ROOT / 'bench/results/08c'
     directory.mkdir(parents=True, exist_ok=True)
     for implementation in ('ref', 'rs'):
@@ -81,7 +81,7 @@ def main():
             try:
                 for _ in range(60):
                     if worker.poll() is not None:
-                        raise RuntimeError('worker terminato')
+                        raise RuntimeError('worker exited')
                     ready = subprocess.run([venv_python('.venv-ref'), '-c',
                         'from benchapp import app; assert app.control.inspect(timeout=1,limit=1).ping()'],
                         env=env, cwd=HERE, capture_output=True)
@@ -89,7 +89,7 @@ def main():
                         break
                     time.sleep(.5)
                 else:
-                    raise RuntimeError('worker non pronto')
+                    raise RuntimeError('worker not ready')
                 results = {}
                 for client in ('ref', 'rs'):
                     env['BENCH_PROFILE'] = str(directory / f'{args.phase}-{implementation}-{client}.prof')

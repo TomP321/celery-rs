@@ -1,7 +1,6 @@
-"""Misura ``app.control.inspect(timeout=2, limit=1).ping()`` in un processo.
+"""Measure inspect ping latency and final/peak RSS in one process.
 
-Usata da ``bench/bench_cli.py``: stampa una riga JSON con la latenza mediana
-(p50) per chiamata su ``--n`` iterazioni e il RSS finale/picco del processo.
+Used by bench_cli.py; print median latency over --n iterations as JSON.
 """
 import argparse
 import json
@@ -22,7 +21,7 @@ def main():
     app.conf.update(broker_connection_retry_on_startup=True)
     inspect = app.control.inspect
 
-    # Warmup: connessione, coda di risposta, script Lua.
+    # Warm up the connection, reply queue and Lua script.
     assert inspect(timeout=args.timeout, limit=1).ping()
 
     times = []
@@ -31,7 +30,7 @@ def main():
         reply = inspect(timeout=args.timeout, limit=1).ping()
         times.append((time.perf_counter() - started) * 1000.0)
         if not reply:
-            raise SystemExit('nessuna risposta dal worker')
+            raise SystemExit('no worker reply')
     times.sort()
     usage = resource.getrusage(resource.RUSAGE_SELF)
     print(json.dumps({

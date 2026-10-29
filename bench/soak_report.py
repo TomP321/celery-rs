@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Tabella delle serie PSS: nessun risultato viene nascosto o aggregato tra pid."""
+"""Report PSS series without hiding results or aggregating different PIDs."""
 import json
 from pathlib import Path
 import sys
 
-print('| Implementazione/broker | Processo | PSS iniziale MiB | Δ max MiB | MiB/h | fd | thread | Esito |')
+print('| Implementation/broker | Process | Initial PSS MiB | Δ max MiB | MiB/h | fd | thread | Result |')
 print('|---|---|---:|---:|---:|---|---|---|')
 for arg in sys.argv[1:]:
     path = Path(arg)

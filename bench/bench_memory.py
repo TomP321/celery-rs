@@ -1,9 +1,7 @@
-"""Scomposizione del master: mapping PSS, heap Python tracciato e allocatore libc.
+"""Break down master PSS, traced Python heap and libc allocations.
 
-Eseguire sotto tools/dev/with-brokers. Le misure senza tracemalloc sono quelle
-fisiche; quelle tracciate servono all'attribuzione per modulo e non sono PSS
-comparabili, perché il tracciatore occupa memoria propria.
-"""
+Run under tools/dev/with-brokers. Tracemalloc adds memory overhead;
+its module attribution cannot be compared with unprofiled PSS."""
 from __future__ import annotations
 
 import argparse
@@ -72,7 +70,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--venv', default='.venv-rs')
     parser.add_argument('--label', default='08b-master')
-    parser.add_argument('--native', help='directory con la build diagnostica di _celery_rs')
+    parser.add_argument('--native', help='directory containing the diagnostic _celery_rs build')
     args = parser.parse_args()
     data = {}
     with tempfile.TemporaryDirectory(prefix='celery-memory-') as directory:

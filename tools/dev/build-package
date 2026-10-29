@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Installa il pacchetto completo celery-rs (`celery` + `_celery_rs`) nel venv indicato
-# (default .venv-rs), in modalità editable.
+# Install the full editable celery-rs package (default: .venv-rs).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$(readlink -f "$0")")/../.." && pwd)"
 VENV="$(cd "${1:-$ROOT/.venv-rs}" && pwd)"

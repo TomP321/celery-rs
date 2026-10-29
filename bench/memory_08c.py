@@ -1,4 +1,4 @@
-"""Controllo PSS beat a tre voci per la spec 08c."""
+"""Check beat PSS with three entries for spec 08c."""
 import argparse
 import json
 from pathlib import Path

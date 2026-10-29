@@ -1,4 +1,4 @@
-"""Genera il rapporto ripetibile c10 dai JSON di bench.py (spec 08d)."""
+"""Generate a reproducible c10 report from bench.py JSON (spec 08d)."""
 import argparse
 import json
 import statistics
@@ -25,8 +25,8 @@ def main():
         broker = 'amqp' if row['broker'].startswith('amqp') else 'redis'
         impl = 'ref' if row['venv'].endswith('ref') else 'rs'
         groups.setdefault((broker, row['task'], impl), []).append(row)
-    print('PSS in MiB; media e intervallo min–max di almeno due esecuzioni.\n')
-    print('| Broker/task | impl (n) | idle | picco | dopo | task/s | p50/p99 ms |')
+    print('PSS in MiB; mean and min–max range of at least two runs.\n')
+    print('| Broker/task | impl (n) | idle | peak | after | task/s | p50/p99 ms |')
     print('|---|---|---:|---:|---:|---:|---:|')
     for (broker, task, impl), rows in sorted(groups.items()):
         cells = []
@@ -38,7 +38,7 @@ def main():
                    for key in ('p50', 'p99')]
         print(f'| {broker}/{task} | {impl} ({len(rows)}) | ' + ' | '.join(cells)
               + f' | {rate:.0f} ({low:.0f}–{high:.0f}) | {latency[0]:.2f}/{latency[1]:.2f} |')
-    print('\n| Broker/task | risparmio idle MiB (%) | picco MiB (%) | dopo MiB (%) |')
+    print('\n| Broker/task | idle savings MiB (%) | peak MiB (%) | after MiB (%) |')
     print('|---|---:|---:|---:|')
     for broker in ('redis', 'amqp'):
         for task in ('bench', 'pure'):
@@ -52,8 +52,8 @@ def main():
                 saved = reference - average(rs, key)[0]
                 cells.append(f'{memory(saved)} ({saved / reference * 100:.1f}%)')
             print(f'| {broker}/{task} | ' + ' | '.join(cells) + ' |')
-    print('\nPSS e Private_Dirty per processo, ogni esecuzione (idle → dopo, MiB).\n')
-    print('| misura | ruolo/pid | PSS | Private_Dirty |')
+    print('\nPSS and Private_Dirty per process for each run (idle → after, MiB).\n')
+    print('| metric | role/pid | PSS | Private_Dirty |')
     print('|---|---|---:|---:|')
     for key, rows in sorted(groups.items()):
         for index, row in enumerate(rows, 1):

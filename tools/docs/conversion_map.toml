@@ -1,9 +1,8 @@
-# Copertura dei ruoli a runtime, non percentuale di testo tradotto letteralmente.
-# Conteggio: righe fisiche incluse righe vuote e commenti. Nei file misti Celery
-# si contano simboli di ruoli scavalcati oppure le sole chiamate delegate.
-# rust_calls usa simbolo|nome_chiamata; le righe sovrapposte contano una sola volta.
-# Gli altri moduli Celery (canvas, trace, loader, ecc.) sono aggregati ad app.
-# originale/assente esclusi dal denominatore globale, inclusi in quello per pacchetto.
+# Runtime role coverage, not a literal source translation percentage.
+# Count physical lines, including blanks and comments. Mixed files count replaced
+# role symbols or delegated calls. rust_calls uses symbol|call; overlaps count once.
+# Other Celery modules (canvas, trace, loader, etc.) belong to the app group.
+# Original/absent files are excluded globally, but included in package denominators.
 version = 1
 
 [[files]]
@@ -11,28 +10,28 @@ path = "celery/__init__.py"
 group = "celery/app"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/__main__.py"
 group = "celery/app"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/_state.py"
 group = "celery/app"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/app/__init__.py"
 group = "celery/app"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/app/amqp.py"
@@ -42,44 +41,44 @@ crate = "celery-transport"
 rust = 0.03886397608370702
 rust_symbols = ["AMQP.TaskConsumer", "AMQP.producer_pool"]
 rust_calls = ["AMQP._create_task_sender|producer.publish"]
-# Quota misurata: 26/669 righe fisiche, unione senza doppio conteggio.
-# Simboli interi: AMQP.TaskConsumer, AMQP.producer_pool; chiamate: AMQP._create_task_sender|producer.publish.
-# TaskConsumer devia a RsTaskConsumer e producer_pool a FastProducerPool; publish usa RsProducer. Routing, segnali e costruzione Task v1/v2 restano Python.
+# Measured share: 26/669 physical lines, counting overlaps once.
+# Whole symbols: AMQP.TaskConsumer, AMQP.producer_pool; calls: AMQP._create_task_sender|producer.publish.
+# TaskConsumer uses RsTaskConsumer; producer_pool uses FastProducerPool; publish uses RsProducer. Routing, signals and Task v1/v2 construction stay Python.
 
 [[files]]
 path = "celery/app/annotations.py"
 group = "celery/app"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/app/autoretry.py"
 group = "celery/app"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/app/backends.py"
 group = "celery/app"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/app/base.py"
 group = "celery/app"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/app/builtins.py"
 group = "celery/app"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/app/control.py"
@@ -89,226 +88,226 @@ crate = "celery-transport"
 rust = 0.04556962025316456
 rust_symbols = ["Control.broadcast"]
 rust_calls = []
-# Quota misurata: 36/790 righe fisiche, unione senza doppio conteggio.
-# Simboli interi: Control.broadcast; chiamate: nessuna.
-# _rs_control.broadcast scavalca mailbox._broadcast per invio/raccolta risposte. Le API Control/Inspect attorno al broadcast e Panel restano Python; broadcast è contato per il ruolo I/O scavalcato, inclusi i wrapper come in kombu.connection.
+# Measured share: 36/790 physical lines, counting overlaps once.
+# Whole symbols: Control.broadcast; calls: none.
+# _rs_control.broadcast replaces mailbox._broadcast send/collect I/O. Control/Inspect APIs and Panel stay Python. Count replaced I/O roles including wrappers, as in kombu.connection.
 
 [[files]]
 path = "celery/app/defaults.py"
 group = "celery/app"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/app/events.py"
 group = "celery/app"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/app/log.py"
 group = "celery/app"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/app/registry.py"
 group = "celery/app"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/app/routes.py"
 group = "celery/app"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/app/task.py"
 group = "celery/app"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/app/trace.py"
 group = "celery/app"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/app/utils.py"
 group = "celery/app"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/apps/__init__.py"
 group = "celery/app"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/apps/beat.py"
 group = "celery/app"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/apps/multi.py"
 group = "celery/app"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/apps/worker.py"
 group = "celery/app"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/backends/__init__.py"
 group = "celery/backends"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/backends/arangodb.py"
 group = "celery/backends"
-status = "originale"
+status = "original"
 crate = ""
-# Backend opzionale fuori dal percorso Redis/RPC/memory.
+# Optional backend outside the Redis/RPC/memory path.
 
 [[files]]
 path = "celery/backends/asynchronous.py"
 group = "celery/backends"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/backends/azureblockblob.py"
 group = "celery/backends"
-status = "originale"
+status = "original"
 crate = ""
-# Backend opzionale fuori dal percorso Redis/RPC/memory.
+# Optional backend outside the Redis/RPC/memory path.
 
 [[files]]
 path = "celery/backends/base.py"
 group = "celery/backends"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/backends/cache.py"
 group = "celery/backends"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/backends/cassandra.py"
 group = "celery/backends"
-status = "originale"
+status = "original"
 crate = ""
-# Backend opzionale fuori dal percorso Redis/RPC/memory.
+# Optional backend outside the Redis/RPC/memory path.
 
 [[files]]
 path = "celery/backends/consul.py"
 group = "celery/backends"
-status = "originale"
+status = "original"
 crate = ""
-# Backend opzionale fuori dal percorso Redis/RPC/memory.
+# Optional backend outside the Redis/RPC/memory path.
 
 [[files]]
 path = "celery/backends/cosmosdbsql.py"
 group = "celery/backends"
-status = "originale"
+status = "original"
 crate = ""
-# Backend opzionale fuori dal percorso Redis/RPC/memory.
+# Optional backend outside the Redis/RPC/memory path.
 
 [[files]]
 path = "celery/backends/couchbase.py"
 group = "celery/backends"
-status = "originale"
+status = "original"
 crate = ""
-# Backend opzionale fuori dal percorso Redis/RPC/memory.
+# Optional backend outside the Redis/RPC/memory path.
 
 [[files]]
 path = "celery/backends/couchdb.py"
 group = "celery/backends"
-status = "originale"
+status = "original"
 crate = ""
-# Backend opzionale fuori dal percorso Redis/RPC/memory.
+# Optional backend outside the Redis/RPC/memory path.
 
 [[files]]
 path = "celery/backends/database/__init__.py"
 group = "celery/backends"
-status = "originale"
+status = "original"
 crate = ""
-# Backend opzionale fuori dal percorso Redis/RPC/memory.
+# Optional backend outside the Redis/RPC/memory path.
 
 [[files]]
 path = "celery/backends/database/models.py"
 group = "celery/backends"
-status = "originale"
+status = "original"
 crate = ""
-# Backend opzionale fuori dal percorso Redis/RPC/memory.
+# Optional backend outside the Redis/RPC/memory path.
 
 [[files]]
 path = "celery/backends/database/session.py"
 group = "celery/backends"
-status = "originale"
+status = "original"
 crate = ""
-# Backend opzionale fuori dal percorso Redis/RPC/memory.
+# Optional backend outside the Redis/RPC/memory path.
 
 [[files]]
 path = "celery/backends/dynamodb.py"
 group = "celery/backends"
-status = "originale"
+status = "original"
 crate = ""
-# Backend opzionale fuori dal percorso Redis/RPC/memory.
+# Optional backend outside the Redis/RPC/memory path.
 
 [[files]]
 path = "celery/backends/elasticsearch.py"
 group = "celery/backends"
-status = "originale"
+status = "original"
 crate = ""
-# Backend opzionale fuori dal percorso Redis/RPC/memory.
+# Optional backend outside the Redis/RPC/memory path.
 
 [[files]]
 path = "celery/backends/filesystem.py"
 group = "celery/backends"
-status = "originale"
+status = "original"
 crate = ""
-# Backend opzionale fuori dal percorso Redis/RPC/memory.
+# Optional backend outside the Redis/RPC/memory path.
 
 [[files]]
 path = "celery/backends/gcs.py"
 group = "celery/backends"
-status = "originale"
+status = "original"
 crate = ""
-# Backend opzionale fuori dal percorso Redis/RPC/memory.
+# Optional backend outside the Redis/RPC/memory path.
 
 [[files]]
 path = "celery/backends/mongodb.py"
 group = "celery/backends"
-status = "originale"
+status = "original"
 crate = ""
-# Backend opzionale fuori dal percorso Redis/RPC/memory.
+# Optional backend outside the Redis/RPC/memory path.
 
 [[files]]
 path = "celery/backends/redis.py"
@@ -318,9 +317,9 @@ crate = "celery-backend"
 rust = 0.18687872763419483
 rust_symbols = ["ResultConsumer._reconnect_pubsub", "ResultConsumer._reconnect", "ResultConsumer.start", "ResultConsumer.stop", "ResultConsumer.drain_events", "ResultConsumer._drain_one", "ResultConsumer._wait_for_pubsub", "ResultConsumer.consume_from", "ResultConsumer._consume_from", "ResultConsumer.cancel_for", "ResultConsumer._flush_pending_unsubscribe", "RedisBackend.get", "RedisBackend.mget", "RedisBackend._set", "RedisBackend.delete", "RedisBackend.incr", "RedisBackend.expire", "RedisBackend._create_client", "RedisBackend._get_client", "RedisBackend._get_pool", "RedisBackend.ConnectionPool"]
 rust_calls = ["ResultConsumer._reconnect_pubsub|pubsub", "ResultConsumer._reconnect_pubsub|subscribe", "ResultConsumer.stop|close", "ResultConsumer._consume_from|subscribe", "ResultConsumer._drain_one|get_message"]
-# Quota misurata: 188/1006 righe fisiche, unione senza doppio conteggio.
-# Simboli interi: ResultConsumer._reconnect_pubsub, ResultConsumer._reconnect, ResultConsumer.start, ResultConsumer.stop, ResultConsumer.drain_events, ResultConsumer._drain_one, ResultConsumer._wait_for_pubsub, ResultConsumer.consume_from, ResultConsumer._consume_from, ResultConsumer.cancel_for, ResultConsumer._flush_pending_unsubscribe, RedisBackend.get, RedisBackend.mget, RedisBackend._set, RedisBackend.delete, RedisBackend.incr, RedisBackend.expire, RedisBackend._create_client, RedisBackend._get_client, RedisBackend._get_pool, RedisBackend.ConnectionPool; chiamate: ResultConsumer._reconnect_pubsub|pubsub, ResultConsumer._reconnect_pubsub|subscribe, ResultConsumer.stop|close, ResultConsumer._consume_from|subscribe, ResultConsumer._drain_one|get_message.
-# _create_rs_client seleziona _rs_redis.RsRedis/RsPubSub. Conta i simboli del ruolo I/O KV/pubsub via shim; callback on_state_change, URL, retry backend, metadati e chord restano Python. Nei simboli I/O contati restano wrapper e riconnessione Python, come in kombu.connection.
+# Measured share: 188/1006 physical lines, counting overlaps once.
+# Whole symbols: ResultConsumer._reconnect_pubsub, ResultConsumer._reconnect, ResultConsumer.start, ResultConsumer.stop, ResultConsumer.drain_events, ResultConsumer._drain_one, ResultConsumer._wait_for_pubsub, ResultConsumer.consume_from, ResultConsumer._consume_from, ResultConsumer.cancel_for, ResultConsumer._flush_pending_unsubscribe, RedisBackend.get, RedisBackend.mget, RedisBackend._set, RedisBackend.delete, RedisBackend.incr, RedisBackend.expire, RedisBackend._create_client, RedisBackend._get_client, RedisBackend._get_pool, RedisBackend.ConnectionPool; calls: ResultConsumer._reconnect_pubsub|pubsub, ResultConsumer._reconnect_pubsub|subscribe, ResultConsumer.stop|close, ResultConsumer._consume_from|subscribe, ResultConsumer._drain_one|get_message.
+# _create_rs_client selects _rs_redis.RsRedis/RsPubSub. Count KV/pubsub I/O roles via the shim, including Python wrappers and reconnection as in kombu.connection. on_state_change, URLs, backend retries, metadata and chords stay Python.
 
 [[files]]
 path = "celery/backends/rpc.py"
@@ -330,331 +329,331 @@ crate = "celery-backend"
 rust = 0.20489977728285078
 rust_symbols = ["ResultConsumer.start", "ResultConsumer.drain_events", "ResultConsumer._reconnect", "ResultConsumer.stop", "ResultConsumer.consume_from", "ResultConsumer.cancel_for"]
 rust_calls = ["RPCBackend.store_result|publish"]
-# Quota misurata: 92/449 righe fisiche, unione senza doppio conteggio.
-# Simboli interi: ResultConsumer.start, ResultConsumer.drain_events, ResultConsumer._reconnect, ResultConsumer.stop, ResultConsumer.consume_from, ResultConsumer.cancel_for; chiamate: RPCBackend.store_result|publish.
-# RsResultConsumer/promote_to_rust scavalcano consumer I/O; producer.publish usa RsProducer. Cache, _to_result, callback, API e gestione risultati restano Python.
+# Measured share: 92/449 physical lines, counting overlaps once.
+# Whole symbols: ResultConsumer.start, ResultConsumer.drain_events, ResultConsumer._reconnect, ResultConsumer.stop, ResultConsumer.consume_from, ResultConsumer.cancel_for; calls: RPCBackend.store_result|publish.
+# RsResultConsumer/promote_to_rust replace consumer I/O; producer.publish uses RsProducer. Cache, _to_result, callbacks, API and result handling stay Python.
 
 [[files]]
 path = "celery/backends/s3.py"
 group = "celery/backends"
-status = "originale"
+status = "original"
 crate = ""
-# Backend opzionale fuori dal percorso Redis/RPC/memory.
+# Optional backend outside the Redis/RPC/memory path.
 
 [[files]]
 path = "celery/beat.py"
 group = "celery/beat+schedules"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/bin/__init__.py"
 group = "celery/bin"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/bin/amqp.py"
 group = "celery/bin"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/bin/base.py"
 group = "celery/bin"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/bin/beat.py"
 group = "celery/bin"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/bin/call.py"
 group = "celery/bin"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/bin/celery.py"
 group = "celery/bin"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/bin/control.py"
 group = "celery/bin"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/bin/events.py"
 group = "celery/bin"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/bin/graph.py"
 group = "celery/bin"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/bin/list.py"
 group = "celery/bin"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/bin/logtool.py"
 group = "celery/bin"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/bin/migrate.py"
 group = "celery/bin"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/bin/multi.py"
 group = "celery/bin"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/bin/purge.py"
 group = "celery/bin"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/bin/result.py"
 group = "celery/bin"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/bin/shell.py"
 group = "celery/bin"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/bin/upgrade.py"
 group = "celery/bin"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/bin/worker.py"
 group = "celery/bin"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/bootsteps.py"
 group = "celery/app"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/canvas.py"
 group = "celery/app"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/concurrency/__init__.py"
 group = "celery/concurrency"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/concurrency/asynpool.py"
 group = "celery/concurrency"
 status = "rust"
 crate = "celery-worker"
-# Ruolo del loop/pool prefork scavalcato da _rs_consumer e rs_prefork; wrapper pubblici restano Python.
+# _rs_consumer and rs_prefork replace the prefork loop/pool role; public wrappers stay Python.
 
 [[files]]
 path = "celery/concurrency/base.py"
 group = "celery/concurrency"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/concurrency/eventlet.py"
 group = "celery/concurrency"
-status = "assente"
+status = "absent"
 crate = ""
-# Pool non supportato.
+# Unsupported pool.
 
 [[files]]
 path = "celery/concurrency/gevent.py"
 group = "celery/concurrency"
-status = "assente"
+status = "absent"
 crate = ""
-# Pool non supportato.
+# Unsupported pool.
 
 [[files]]
 path = "celery/concurrency/prefork.py"
 group = "celery/concurrency"
 status = "rust"
 crate = "celery-worker"
-# Ruolo del loop/pool prefork scavalcato da _rs_consumer e rs_prefork; wrapper pubblici restano Python.
+# _rs_consumer and rs_prefork replace the prefork loop/pool role; public wrappers stay Python.
 
 [[files]]
 path = "celery/concurrency/solo.py"
 group = "celery/concurrency"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/concurrency/thread.py"
 group = "celery/concurrency"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/contrib/__init__.py"
 group = "celery/app"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/contrib/abortable.py"
 group = "celery/app"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/contrib/django/__init__.py"
 group = "celery/app"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/contrib/django/task.py"
 group = "celery/app"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/contrib/migrate.py"
 group = "celery/app"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/contrib/pytest.py"
 group = "celery/app"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/contrib/rdb.py"
 group = "celery/app"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/contrib/sphinx.py"
 group = "celery/app"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/contrib/testing/__init__.py"
 group = "celery/app"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/contrib/testing/app.py"
 group = "celery/app"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/contrib/testing/manager.py"
 group = "celery/app"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/contrib/testing/mocks.py"
 group = "celery/app"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/contrib/testing/tasks.py"
 group = "celery/app"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/contrib/testing/worker.py"
 group = "celery/app"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/events/__init__.py"
 group = "celery/events"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/events/cursesmon.py"
 group = "celery/events"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/events/dispatcher.py"
@@ -664,114 +663,114 @@ crate = "celery-transport"
 rust = 0.09541984732824428
 rust_symbols = ["EventDispatcher._publish"]
 rust_calls = ["EventDispatcher.enable|Producer"]
-# Quota misurata: 25/262 righe fisiche, unione senza doppio conteggio.
-# Simboli interi: EventDispatcher._publish; chiamate: EventDispatcher.enable|Producer.
-# _create_producer seleziona _rs_producer.RsProducer. Conta il ruolo I/O di _publish e la creazione producer; costruzione Event, clock, API send/publish e gestione buffer restano Python.
+# Measured share: 25/262 physical lines, counting overlaps once.
+# Whole symbols: EventDispatcher._publish; calls: EventDispatcher.enable|Producer.
+# _create_producer selects _rs_producer.RsProducer. Count _publish I/O and producer creation; Event construction, clock, send/publish API and buffer handling stay Python.
 
 [[files]]
 path = "celery/events/dumper.py"
 group = "celery/events"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/events/event.py"
 group = "celery/events"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/events/receiver.py"
 group = "celery/events"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/events/snapshot.py"
 group = "celery/events"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/events/state.py"
 group = "celery/events"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/exceptions.py"
 group = "celery/app"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/fixups/__init__.py"
 group = "celery/app"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/fixups/django.py"
 group = "celery/app"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/loaders/__init__.py"
 group = "celery/app"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/loaders/app.py"
 group = "celery/app"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/loaders/base.py"
 group = "celery/app"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/loaders/default.py"
 group = "celery/app"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/local.py"
 group = "celery/app"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/platforms.py"
 group = "celery/app"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/result.py"
 group = "celery/app"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/schedules.py"
@@ -779,268 +778,268 @@ group = "celery/beat+schedules"
 status = "rust"
 crate = "celery-beat"
 rust = 0.13995726495726496
-# Frazione misurata: 131/936 righe fisiche dei ruoli delegati.
-# Simboli: crontab_parser.parse, crontab_parser._parse_part, crontab_parser._expand_range, crontab_parser._range_steps, crontab_parser._star_steps, crontab_parser._expand_star, crontab_parser._expand_number, crontab._delta_to_next.
-# Il resto rimane Python; compressione: solo codec nativi, registry/fallback Python.
+# Measured fraction: 131/936 physical lines of delegated roles.
+# Symbols: crontab_parser.parse, crontab_parser._parse_part, crontab_parser._expand_range, crontab_parser._range_steps, crontab_parser._star_steps, crontab_parser._expand_star, crontab_parser._expand_number, crontab._delta_to_next.
+# Other code stays Python; compression counts native codecs only, excluding Python registry/fallback.
 
 [[files]]
 path = "celery/security/__init__.py"
 group = "celery/app"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/security/certificate.py"
 group = "celery/app"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/security/key.py"
 group = "celery/app"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/security/serialization.py"
 group = "celery/app"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/security/utils.py"
 group = "celery/app"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/signals.py"
 group = "celery/app"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/states.py"
 group = "celery/app"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/utils/__init__.py"
 group = "celery/utils"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/utils/abstract.py"
 group = "celery/utils"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/utils/annotations.py"
 group = "celery/utils"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/utils/collections.py"
 group = "celery/utils"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/utils/debug.py"
 group = "celery/utils"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/utils/deprecated.py"
 group = "celery/utils"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/utils/dispatch/__init__.py"
 group = "celery/utils"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/utils/dispatch/signal.py"
 group = "celery/utils"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/utils/functional.py"
 group = "celery/utils"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/utils/graph.py"
 group = "celery/utils"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/utils/imports.py"
 group = "celery/utils"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/utils/iso8601.py"
 group = "celery/utils"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/utils/log.py"
 group = "celery/utils"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/utils/nodenames.py"
 group = "celery/utils"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/utils/objects.py"
 group = "celery/utils"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/utils/quorum_queues.py"
 group = "celery/utils"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/utils/saferepr.py"
 group = "celery/utils"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/utils/serialization.py"
 group = "celery/utils"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/utils/static/__init__.py"
 group = "celery/utils"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/utils/sysinfo.py"
 group = "celery/utils"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/utils/term.py"
 group = "celery/utils"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/utils/text.py"
 group = "celery/utils"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/utils/threads.py"
 group = "celery/utils"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/utils/time.py"
 group = "celery/utils"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/utils/timer2.py"
 group = "celery/utils"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/worker/__init__.py"
 group = "celery/worker"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/worker/autoscale.py"
 group = "celery/worker"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/worker/components.py"
 group = "celery/worker"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/worker/consumer/__init__.py"
 group = "celery/worker"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/worker/consumer/agent.py"
 group = "celery/worker"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/worker/consumer/connection.py"
@@ -1050,9 +1049,9 @@ crate = "celery-worker"
 rust = 0.24074074074074073
 rust_symbols = ["Connection.start", "Connection.close_connection"]
 rust_calls = []
-# Quota misurata: 13/54 righe fisiche, unione senza doppio conteggio.
-# Simboli interi: Connection.start, Connection.close_connection; chiamate: nessuna.
-# c.connect restituisce RsConnection; close chiude il trasporto nativo. Logging, stato e bootstep Python esclusi.
+# Measured share: 13/54 physical lines, counting overlaps once.
+# Whole symbols: Connection.start, Connection.close_connection; calls: none.
+# c.connect returns RsConnection; close shuts down native transport. Exclude Python logging, state and bootsteps.
 
 [[files]]
 path = "celery/worker/consumer/consumer.py"
@@ -1062,23 +1061,23 @@ crate = "celery-worker"
 rust = 0.10816542948038176
 rust_symbols = ["Consumer.connect", "Consumer.connection_for_read", "Consumer.connection_for_write", "Consumer.ensure_connected", "Consumer.add_task_queue", "Consumer.cancel_task_queue", "Consumer.register_with_event_loop"]
 rust_calls = ["Consumer.ensure_connected|ensure_connection", "Consumer.add_task_queue|select_add", "Consumer.add_task_queue|consume", "Consumer.cancel_task_queue|cancel_by_queue"]
-# Quota misurata: 102/943 righe fisiche, unione senza doppio conteggio.
-# Simboli interi: Consumer.connect, Consumer.connection_for_read, Consumer.connection_for_write, Consumer.ensure_connected, Consumer.add_task_queue, Consumer.cancel_task_queue, Consumer.register_with_event_loop; chiamate: Consumer.ensure_connected|ensure_connection, Consumer.add_task_queue|select_add, Consumer.add_task_queue|consume, Consumer.cancel_task_queue|cancel_by_queue.
-# _rs_consumer.connection/RsConnection e RsTaskConsumer: connessioni, sottoscrizioni, ack/reject. Bootstep, strategie, callback, ETA/rate limit e segnali restano Python.
+# Measured share: 102/943 physical lines, counting overlaps once.
+# Whole symbols: Consumer.connect, Consumer.connection_for_read, Consumer.connection_for_write, Consumer.ensure_connected, Consumer.add_task_queue, Consumer.cancel_task_queue, Consumer.register_with_event_loop; calls: Consumer.ensure_connected|ensure_connection, Consumer.add_task_queue|select_add, Consumer.add_task_queue|consume, Consumer.cancel_task_queue|cancel_by_queue.
+# _rs_consumer.connection/RsConnection and RsTaskConsumer handle connections, subscriptions and ack/reject. Bootsteps, strategies, callbacks, ETA/rate limits and signals stay Python.
 
 [[files]]
 path = "celery/worker/consumer/control.py"
 group = "celery/worker"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/worker/consumer/delayed_delivery.py"
 group = "celery/worker"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/worker/consumer/events.py"
@@ -1088,9 +1087,9 @@ crate = "celery-worker"
 rust = 0.05333333333333334
 rust_symbols = []
 rust_calls = ["Events.start|connection_for_write", "Events.start|register_with_event_loop", "Events._close|ignore_errors"]
-# Quota misurata: 4/75 righe fisiche, unione senza doppio conteggio.
-# Simboli interi: nessuno; chiamate: Events.start|connection_for_write, Events.start|register_with_event_loop, Events._close|ignore_errors.
-# Connessione eventi RsProducer e heartbeat AMQP nel runtime; registrazione socket Kombu scavalcata. Configurazione e buffer Python esclusi.
+# Measured share: 4/75 physical lines, counting overlaps once.
+# Whole symbols: none; calls: Events.start|connection_for_write, Events.start|register_with_event_loop, Events._close|ignore_errors.
+# RsProducer events connection and runtime AMQP heartbeats replace Kombu socket registration. Exclude Python configuration and buffers.
 
 [[files]]
 path = "celery/worker/consumer/gossip.py"
@@ -1100,9 +1099,9 @@ crate = "celery-worker"
 rust = 0.05339805825242718
 rust_symbols = ["Gossip.get_consumers"]
 rust_calls = []
-# Quota misurata: 11/206 righe fisiche, unione senza doppio conteggio.
-# Simboli interi: Gossip.get_consumers; chiamate: nessuna.
-# _start_rs usa _rs_mailbox.events_consumer al posto del consumer Kombu; elezioni, stato nodi e handler Python esclusi.
+# Measured share: 11/206 physical lines, counting overlaps once.
+# Whole symbols: Gossip.get_consumers; calls: none.
+# _start_rs uses _rs_mailbox.events_consumer instead of Kombu. Exclude Python elections, node state and handlers.
 
 [[files]]
 path = "celery/worker/consumer/heart.py"
@@ -1112,9 +1111,9 @@ crate = "celery-worker"
 rust = 0.05555555555555555
 rust_symbols = []
 rust_calls = ["Heart.start|start", "Heart.stop|stop"]
-# Quota misurata: 2/36 righe fisiche, unione senza doppio conteggio.
-# Simboli interi: nessuno; chiamate: Heart.start|start, Heart.stop|stop.
-# Invio online/offline propagato a EventDispatcher/RsProducer. Creazione Heart, timer e bootstep rimangono Python; non si conta tutto start/stop.
+# Measured share: 2/36 physical lines, counting overlaps once.
+# Whole symbols: none; calls: Heart.start|start, Heart.stop|stop.
+# Online/offline sends use EventDispatcher/RsProducer. Heart creation, timers and bootsteps stay Python; do not count all of start/stop.
 
 [[files]]
 path = "celery/worker/consumer/mingle.py"
@@ -1124,9 +1123,9 @@ crate = "celery-worker"
 rust = 0.125
 rust_symbols = ["Mingle.send_hello"]
 rust_calls = []
-# Quota misurata: 10/80 righe fisiche, unione senza doppio conteggio.
-# Simboli interi: Mingle.send_hello; chiamate: nessuna.
-# inspect.hello usa app._rs_control con connessione nativa; merge clock/revoche e orchestrazione Python esclusi.
+# Measured share: 10/80 physical lines, counting overlaps once.
+# Whole symbols: Mingle.send_hello; calls: none.
+# inspect.hello uses app._rs_control with a native connection. Exclude Python clock/revocation merging and orchestration.
 
 [[files]]
 path = "celery/worker/consumer/tasks.py"
@@ -1136,16 +1135,16 @@ crate = "celery-worker"
 rust = 0.0967741935483871
 rust_symbols = []
 rust_calls = ["Tasks.start|basic_qos", "Tasks.start|TaskConsumer", "Tasks.start|qos", "Tasks.stop|ignore_errors", "Tasks.shutdown|ignore_errors"]
-# Quota misurata: 12/124 righe fisiche, unione senza doppio conteggio.
-# Simboli interi: nessuno; chiamate: Tasks.start|basic_qos, Tasks.start|TaskConsumer, Tasks.start|qos, Tasks.stop|ignore_errors, Tasks.shutdown|ignore_errors.
-# AMQP.TaskConsumer devia su RsTaskConsumer; QoS, cancel e close nativi. Strategie, politiche QoS e bootstep restano Python.
+# Measured share: 12/124 physical lines, counting overlaps once.
+# Whole symbols: none; calls: Tasks.start|basic_qos, Tasks.start|TaskConsumer, Tasks.start|qos, Tasks.stop|ignore_errors, Tasks.shutdown|ignore_errors.
+# AMQP.TaskConsumer uses RsTaskConsumer with native QoS, cancel and close. Strategies, QoS policies and bootsteps stay Python.
 
 [[files]]
 path = "celery/worker/control.py"
 group = "celery/worker"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/worker/heartbeat.py"
@@ -1155,9 +1154,9 @@ crate = "celery-worker"
 rust = 0.09836065573770492
 rust_symbols = []
 rust_calls = ["Heart._send|send"]
-# Quota misurata: 6/61 righe fisiche, unione senza doppio conteggio.
-# Simboli interi: nessuno; chiamate: Heart._send|send.
-# Solo invio evento via EventDispatcher/RsProducer; heartbeat_sent, raccolta metriche, timer e callback restano Python.
+# Measured share: 6/61 physical lines, counting overlaps once.
+# Whole symbols: none; calls: Heart._send|send.
+# Count event sends via EventDispatcher/RsProducer only; heartbeat_sent, metrics, timers and callbacks stay Python.
 
 [[files]]
 path = "celery/worker/loops.py"
@@ -1167,9 +1166,9 @@ crate = "celery-worker"
 rust = 0.5022026431718062
 rust_symbols = ["asynloop", "_enable_amqheartbeats"]
 rust_calls = []
-# Quota misurata: 114/227 righe fisiche, unione senza doppio conteggio.
-# Simboli interi: asynloop, _enable_amqheartbeats; chiamate: nessuna.
-# _rs_consumer.rsloop e _enable_heartbeats: I/O e heartbeat AMQP nativi; synloop/fallback e helper Python esclusi.
+# Measured share: 114/227 physical lines, counting overlaps once.
+# Whole symbols: asynloop, _enable_amqheartbeats; calls: none.
+# _rs_consumer.rsloop and _enable_heartbeats use native I/O and AMQP heartbeats. Exclude synloop/fallback and Python helpers.
 
 [[files]]
 path = "celery/worker/pidbox.py"
@@ -1179,23 +1178,23 @@ crate = "celery-worker"
 rust = 0.07936507936507936
 rust_symbols = ["Pidbox.start", "Pidbox._close_channel"]
 rust_calls = []
-# Quota misurata: 10/126 righe fisiche, unione senza doppio conteggio.
-# Simboli interi: Pidbox.start, Pidbox._close_channel; chiamate: nessuna.
-# start devia a _rs_mailbox.pidbox_consumer: trasporto/chiusura consumer nativi. _RsNode e dispatch Panel, handler e stato restano Python.
+# Measured share: 10/126 physical lines, counting overlaps once.
+# Whole symbols: Pidbox.start, Pidbox._close_channel; calls: none.
+# start uses _rs_mailbox.pidbox_consumer for native transport and consumer close. _RsNode, Panel dispatch, handlers and state stay Python.
 
 [[files]]
 path = "celery/worker/request.py"
 group = "celery/worker"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/worker/state.py"
 group = "celery/worker"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "celery/worker/strategy.py"
@@ -1205,163 +1204,163 @@ crate = "celery-worker"
 rust = 0.04035874439461883
 rust_symbols = []
 rust_calls = ["default|send_event"]
-# Quota misurata: 9/223 righe fisiche, unione senza doppio conteggio.
-# Simboli interi: nessuno; chiamate: default|send_event.
-# Solo pubblicazione task-received via RsProducer. task_message_handler, Request, revoche, ETA, rate limit, task_received e trace restano Python: non si attribuisce la strategia intera a Rust.
+# Measured share: 9/223 physical lines, counting overlaps once.
+# Whole symbols: none; calls: default|send_event.
+# Count task-received publishing via RsProducer only. task_message_handler, Request, revocations, ETA, rate limits, task_received and trace stay Python; do not count the whole strategy.
 
 [[files]]
 path = "celery/worker/worker.py"
 group = "celery/worker"
 status = "python"
 crate = ""
-# API, orchestrazione o utilità Python conservata.
+# Preserved Python API, orchestration or utilities.
 
 [[files]]
 path = "kombu/__init__.py"
 group = "kombu"
 status = "python"
 crate = ""
-# Tipi pubblici e utilità ancora disponibili al guscio Python.
+# Public types and utilities remain available to the Python shell.
 
 [[files]]
 path = "kombu/abstract.py"
 group = "kombu"
 status = "python"
 crate = ""
-# Tipi pubblici e utilità ancora disponibili al guscio Python.
+# Public types and utilities remain available to the Python shell.
 
 [[files]]
 path = "kombu/asynchronous/__init__.py"
 group = "kombu"
-status = "originale"
+status = "original"
 crate = ""
-# Percorso opzionale Kombu non usato dal trasporto nativo.
+# Optional Kombu path unused by native transport.
 
 [[files]]
 path = "kombu/asynchronous/aws/__init__.py"
 group = "kombu"
-status = "originale"
+status = "original"
 crate = ""
-# Percorso opzionale Kombu non usato dal trasporto nativo.
+# Optional Kombu path unused by native transport.
 
 [[files]]
 path = "kombu/asynchronous/aws/connection.py"
 group = "kombu"
-status = "originale"
+status = "original"
 crate = ""
-# Percorso opzionale Kombu non usato dal trasporto nativo.
+# Optional Kombu path unused by native transport.
 
 [[files]]
 path = "kombu/asynchronous/aws/ext.py"
 group = "kombu"
-status = "originale"
+status = "original"
 crate = ""
-# Percorso opzionale Kombu non usato dal trasporto nativo.
+# Optional Kombu path unused by native transport.
 
 [[files]]
 path = "kombu/asynchronous/aws/sqs/__init__.py"
 group = "kombu"
-status = "originale"
+status = "original"
 crate = ""
-# Percorso opzionale Kombu non usato dal trasporto nativo.
+# Optional Kombu path unused by native transport.
 
 [[files]]
 path = "kombu/asynchronous/aws/sqs/connection.py"
 group = "kombu"
-status = "originale"
+status = "original"
 crate = ""
-# Percorso opzionale Kombu non usato dal trasporto nativo.
+# Optional Kombu path unused by native transport.
 
 [[files]]
 path = "kombu/asynchronous/aws/sqs/ext.py"
 group = "kombu"
-status = "originale"
+status = "original"
 crate = ""
-# Percorso opzionale Kombu non usato dal trasporto nativo.
+# Optional Kombu path unused by native transport.
 
 [[files]]
 path = "kombu/asynchronous/aws/sqs/message.py"
 group = "kombu"
-status = "originale"
+status = "original"
 crate = ""
-# Percorso opzionale Kombu non usato dal trasporto nativo.
+# Optional Kombu path unused by native transport.
 
 [[files]]
 path = "kombu/asynchronous/aws/sqs/queue.py"
 group = "kombu"
-status = "originale"
+status = "original"
 crate = ""
-# Percorso opzionale Kombu non usato dal trasporto nativo.
+# Optional Kombu path unused by native transport.
 
 [[files]]
 path = "kombu/asynchronous/debug.py"
 group = "kombu"
-status = "originale"
+status = "original"
 crate = ""
-# Percorso opzionale Kombu non usato dal trasporto nativo.
+# Optional Kombu path unused by native transport.
 
 [[files]]
 path = "kombu/asynchronous/http/__init__.py"
 group = "kombu"
-status = "originale"
+status = "original"
 crate = ""
-# Percorso opzionale Kombu non usato dal trasporto nativo.
+# Optional Kombu path unused by native transport.
 
 [[files]]
 path = "kombu/asynchronous/http/base.py"
 group = "kombu"
-status = "originale"
+status = "original"
 crate = ""
-# Percorso opzionale Kombu non usato dal trasporto nativo.
+# Optional Kombu path unused by native transport.
 
 [[files]]
 path = "kombu/asynchronous/http/curl.py"
 group = "kombu"
-status = "originale"
+status = "original"
 crate = ""
-# Percorso opzionale Kombu non usato dal trasporto nativo.
+# Optional Kombu path unused by native transport.
 
 [[files]]
 path = "kombu/asynchronous/hub.py"
 group = "kombu"
-status = "originale"
+status = "original"
 crate = ""
-# Percorso opzionale Kombu non usato dal trasporto nativo.
+# Optional Kombu path unused by native transport.
 
 [[files]]
 path = "kombu/asynchronous/semaphore.py"
 group = "kombu"
-status = "originale"
+status = "original"
 crate = ""
-# Percorso opzionale Kombu non usato dal trasporto nativo.
+# Optional Kombu path unused by native transport.
 
 [[files]]
 path = "kombu/asynchronous/timer.py"
 group = "kombu"
-status = "originale"
+status = "original"
 crate = ""
-# Percorso opzionale Kombu non usato dal trasporto nativo.
+# Optional Kombu path unused by native transport.
 
 [[files]]
 path = "kombu/clocks.py"
 group = "kombu"
 status = "python"
 crate = ""
-# Tipi pubblici e utilità ancora disponibili al guscio Python.
+# Public types and utilities remain available to the Python shell.
 
 [[files]]
 path = "kombu/common.py"
 group = "kombu"
 status = "python"
 crate = ""
-# Tipi pubblici e utilità ancora disponibili al guscio Python.
+# Public types and utilities remain available to the Python shell.
 
 [[files]]
 path = "kombu/compat.py"
 group = "kombu"
 status = "python"
 crate = ""
-# Tipi pubblici e utilità ancora disponibili al guscio Python.
+# Public types and utilities remain available to the Python shell.
 
 [[files]]
 path = "kombu/compression.py"
@@ -1369,1553 +1368,1553 @@ group = "kombu"
 status = "rust"
 crate = "celery-proto"
 rust = 0.1623931623931624
-# Frazione misurata: 19/117 righe fisiche dei ruoli delegati.
-# Simboli: compress, decompress.
-# Il resto rimane Python; compressione: solo codec nativi, registry/fallback Python.
+# Measured fraction: 19/117 physical lines of delegated roles.
+# Symbols: compress, decompress.
+# Other code stays Python; compression counts native codecs only, excluding Python registry/fallback.
 
 [[files]]
 path = "kombu/connection.py"
 group = "kombu"
 status = "rust"
 crate = "celery-transport"
-# Ruolo I/O sostituito da FastConnection/RsProducer/RsMessage; eventuali tipi pubblici restano importabili.
+# FastConnection/RsProducer/RsMessage replace I/O roles; public types remain importable.
 
 [[files]]
 path = "kombu/entity.py"
 group = "kombu"
 status = "python"
 crate = ""
-# Tipi pubblici e utilità ancora disponibili al guscio Python.
+# Public types and utilities remain available to the Python shell.
 
 [[files]]
 path = "kombu/exceptions.py"
 group = "kombu"
 status = "python"
 crate = ""
-# Tipi pubblici e utilità ancora disponibili al guscio Python.
+# Public types and utilities remain available to the Python shell.
 
 [[files]]
 path = "kombu/log.py"
 group = "kombu"
 status = "python"
 crate = ""
-# Tipi pubblici e utilità ancora disponibili al guscio Python.
+# Public types and utilities remain available to the Python shell.
 
 [[files]]
 path = "kombu/matcher.py"
 group = "kombu"
 status = "python"
 crate = ""
-# Tipi pubblici e utilità ancora disponibili al guscio Python.
+# Public types and utilities remain available to the Python shell.
 
 [[files]]
 path = "kombu/message.py"
 group = "kombu"
 status = "rust"
 crate = "celery-transport"
-# Ruolo I/O sostituito da FastConnection/RsProducer/RsMessage; eventuali tipi pubblici restano importabili.
+# FastConnection/RsProducer/RsMessage replace I/O roles; public types remain importable.
 
 [[files]]
 path = "kombu/messaging.py"
 group = "kombu"
 status = "rust"
 crate = "celery-transport"
-# Ruolo I/O sostituito da FastConnection/RsProducer/RsMessage; eventuali tipi pubblici restano importabili.
+# FastConnection/RsProducer/RsMessage replace I/O roles; public types remain importable.
 
 [[files]]
 path = "kombu/mixins.py"
 group = "kombu"
 status = "python"
 crate = ""
-# Tipi pubblici e utilità ancora disponibili al guscio Python.
+# Public types and utilities remain available to the Python shell.
 
 [[files]]
 path = "kombu/pidbox.py"
 group = "kombu"
 status = "python"
 crate = ""
-# Tipi pubblici e utilità ancora disponibili al guscio Python.
+# Public types and utilities remain available to the Python shell.
 
 [[files]]
 path = "kombu/pools.py"
 group = "kombu"
 status = "rust"
 crate = "celery-transport"
-# Ruolo I/O sostituito da FastConnection/RsProducer/RsMessage; eventuali tipi pubblici restano importabili.
+# FastConnection/RsProducer/RsMessage replace I/O roles; public types remain importable.
 
 [[files]]
 path = "kombu/resource.py"
 group = "kombu"
 status = "rust"
 crate = "celery-transport"
-# Ruolo I/O sostituito da FastConnection/RsProducer/RsMessage; eventuali tipi pubblici restano importabili.
+# FastConnection/RsProducer/RsMessage replace I/O roles; public types remain importable.
 
 [[files]]
 path = "kombu/serialization.py"
 group = "kombu"
 status = "python"
 crate = ""
-# Tipi pubblici e utilità ancora disponibili al guscio Python.
+# Public types and utilities remain available to the Python shell.
 
 [[files]]
 path = "kombu/simple.py"
 group = "kombu"
 status = "python"
 crate = ""
-# Tipi pubblici e utilità ancora disponibili al guscio Python.
+# Public types and utilities remain available to the Python shell.
 
 [[files]]
 path = "kombu/transport/SLMQ.py"
 group = "kombu"
-status = "originale"
+status = "original"
 crate = ""
-# Percorso opzionale Kombu non usato dal trasporto nativo.
+# Optional Kombu path unused by native transport.
 
 [[files]]
 path = "kombu/transport/SQS/SNS.py"
 group = "kombu"
-status = "originale"
+status = "original"
 crate = ""
-# Percorso opzionale Kombu non usato dal trasporto nativo.
+# Optional Kombu path unused by native transport.
 
 [[files]]
 path = "kombu/transport/SQS/__init__.py"
 group = "kombu"
-status = "originale"
+status = "original"
 crate = ""
-# Percorso opzionale Kombu non usato dal trasporto nativo.
+# Optional Kombu path unused by native transport.
 
 [[files]]
 path = "kombu/transport/SQS/exceptions.py"
 group = "kombu"
-status = "originale"
+status = "original"
 crate = ""
-# Percorso opzionale Kombu non usato dal trasporto nativo.
+# Optional Kombu path unused by native transport.
 
 [[files]]
 path = "kombu/transport/__init__.py"
 group = "kombu"
-status = "originale"
+status = "original"
 crate = ""
-# Percorso opzionale Kombu non usato dal trasporto nativo.
+# Optional Kombu path unused by native transport.
 
 [[files]]
 path = "kombu/transport/azureservicebus.py"
 group = "kombu"
-status = "originale"
+status = "original"
 crate = ""
-# Percorso opzionale Kombu non usato dal trasporto nativo.
+# Optional Kombu path unused by native transport.
 
 [[files]]
 path = "kombu/transport/azurestoragequeues.py"
 group = "kombu"
-status = "originale"
+status = "original"
 crate = ""
-# Percorso opzionale Kombu non usato dal trasporto nativo.
+# Optional Kombu path unused by native transport.
 
 [[files]]
 path = "kombu/transport/base.py"
 group = "kombu"
 status = "rust"
 crate = "celery-transport"
-# Ruolo I/O sostituito da FastConnection/RsProducer/RsMessage; eventuali tipi pubblici restano importabili.
+# FastConnection/RsProducer/RsMessage replace I/O roles; public types remain importable.
 
 [[files]]
 path = "kombu/transport/confluentkafka.py"
 group = "kombu"
-status = "originale"
+status = "original"
 crate = ""
-# Percorso opzionale Kombu non usato dal trasporto nativo.
+# Optional Kombu path unused by native transport.
 
 [[files]]
 path = "kombu/transport/consul.py"
 group = "kombu"
-status = "originale"
+status = "original"
 crate = ""
-# Percorso opzionale Kombu non usato dal trasporto nativo.
+# Optional Kombu path unused by native transport.
 
 [[files]]
 path = "kombu/transport/etcd.py"
 group = "kombu"
-status = "originale"
+status = "original"
 crate = ""
-# Percorso opzionale Kombu non usato dal trasporto nativo.
+# Optional Kombu path unused by native transport.
 
 [[files]]
 path = "kombu/transport/filesystem.py"
 group = "kombu"
-status = "originale"
+status = "original"
 crate = ""
-# Percorso opzionale Kombu non usato dal trasporto nativo.
+# Optional Kombu path unused by native transport.
 
 [[files]]
 path = "kombu/transport/gcpubsub.py"
 group = "kombu"
-status = "originale"
+status = "original"
 crate = ""
-# Percorso opzionale Kombu non usato dal trasporto nativo.
+# Optional Kombu path unused by native transport.
 
 [[files]]
 path = "kombu/transport/librabbitmq.py"
 group = "kombu"
-status = "originale"
+status = "original"
 crate = ""
-# Percorso opzionale Kombu non usato dal trasporto nativo.
+# Optional Kombu path unused by native transport.
 
 [[files]]
 path = "kombu/transport/memory.py"
 group = "kombu"
 status = "rust"
 crate = "celery-transport"
-# Ruolo I/O sostituito da FastConnection/RsProducer/RsMessage; eventuali tipi pubblici restano importabili.
+# FastConnection/RsProducer/RsMessage replace I/O roles; public types remain importable.
 
 [[files]]
 path = "kombu/transport/mongodb.py"
 group = "kombu"
-status = "originale"
+status = "original"
 crate = ""
-# Percorso opzionale Kombu non usato dal trasporto nativo.
+# Optional Kombu path unused by native transport.
 
 [[files]]
 path = "kombu/transport/native_delayed_delivery.py"
 group = "kombu"
-status = "originale"
+status = "original"
 crate = ""
-# Percorso opzionale Kombu non usato dal trasporto nativo.
+# Optional Kombu path unused by native transport.
 
 [[files]]
 path = "kombu/transport/pgmq.py"
 group = "kombu"
-status = "originale"
+status = "original"
 crate = ""
-# Percorso opzionale Kombu non usato dal trasporto nativo.
+# Optional Kombu path unused by native transport.
 
 [[files]]
 path = "kombu/transport/pyamqp.py"
 group = "kombu"
 status = "rust"
 crate = "celery-transport"
-# Ruolo I/O sostituito da FastConnection/RsProducer/RsMessage; eventuali tipi pubblici restano importabili.
+# FastConnection/RsProducer/RsMessage replace I/O roles; public types remain importable.
 
 [[files]]
 path = "kombu/transport/pyro.py"
 group = "kombu"
-status = "originale"
+status = "original"
 crate = ""
-# Percorso opzionale Kombu non usato dal trasporto nativo.
+# Optional Kombu path unused by native transport.
 
 [[files]]
 path = "kombu/transport/qpid.py"
 group = "kombu"
-status = "originale"
+status = "original"
 crate = ""
-# Percorso opzionale Kombu non usato dal trasporto nativo.
+# Optional Kombu path unused by native transport.
 
 [[files]]
 path = "kombu/transport/redis.py"
 group = "kombu"
 status = "rust"
 crate = "celery-transport"
-# Ruolo I/O sostituito da FastConnection/RsProducer/RsMessage; eventuali tipi pubblici restano importabili.
+# FastConnection/RsProducer/RsMessage replace I/O roles; public types remain importable.
 
 [[files]]
 path = "kombu/transport/sqlalchemy/__init__.py"
 group = "kombu"
-status = "originale"
+status = "original"
 crate = ""
-# Percorso opzionale Kombu non usato dal trasporto nativo.
+# Optional Kombu path unused by native transport.
 
 [[files]]
 path = "kombu/transport/sqlalchemy/models.py"
 group = "kombu"
-status = "originale"
+status = "original"
 crate = ""
-# Percorso opzionale Kombu non usato dal trasporto nativo.
+# Optional Kombu path unused by native transport.
 
 [[files]]
 path = "kombu/transport/virtual/__init__.py"
 group = "kombu"
 status = "rust"
 crate = "celery-transport"
-# Ruolo I/O sostituito da FastConnection/RsProducer/RsMessage; eventuali tipi pubblici restano importabili.
+# FastConnection/RsProducer/RsMessage replace I/O roles; public types remain importable.
 
 [[files]]
 path = "kombu/transport/virtual/base.py"
 group = "kombu"
 status = "rust"
 crate = "celery-transport"
-# Ruolo I/O sostituito da FastConnection/RsProducer/RsMessage; eventuali tipi pubblici restano importabili.
+# FastConnection/RsProducer/RsMessage replace I/O roles; public types remain importable.
 
 [[files]]
 path = "kombu/transport/virtual/exchange.py"
 group = "kombu"
 status = "rust"
 crate = "celery-transport"
-# Ruolo I/O sostituito da FastConnection/RsProducer/RsMessage; eventuali tipi pubblici restano importabili.
+# FastConnection/RsProducer/RsMessage replace I/O roles; public types remain importable.
 
 [[files]]
 path = "kombu/transport/zookeeper.py"
 group = "kombu"
-status = "originale"
+status = "original"
 crate = ""
-# Percorso opzionale Kombu non usato dal trasporto nativo.
+# Optional Kombu path unused by native transport.
 
 [[files]]
 path = "kombu/utils/__init__.py"
 group = "kombu"
 status = "python"
 crate = ""
-# Tipi pubblici e utilità ancora disponibili al guscio Python.
+# Public types and utilities remain available to the Python shell.
 
 [[files]]
 path = "kombu/utils/amq_manager.py"
 group = "kombu"
 status = "python"
 crate = ""
-# Tipi pubblici e utilità ancora disponibili al guscio Python.
+# Public types and utilities remain available to the Python shell.
 
 [[files]]
 path = "kombu/utils/collections.py"
 group = "kombu"
 status = "python"
 crate = ""
-# Tipi pubblici e utilità ancora disponibili al guscio Python.
+# Public types and utilities remain available to the Python shell.
 
 [[files]]
 path = "kombu/utils/compat.py"
 group = "kombu"
 status = "python"
 crate = ""
-# Tipi pubblici e utilità ancora disponibili al guscio Python.
+# Public types and utilities remain available to the Python shell.
 
 [[files]]
 path = "kombu/utils/debug.py"
 group = "kombu"
 status = "python"
 crate = ""
-# Tipi pubblici e utilità ancora disponibili al guscio Python.
+# Public types and utilities remain available to the Python shell.
 
 [[files]]
 path = "kombu/utils/div.py"
 group = "kombu"
 status = "python"
 crate = ""
-# Tipi pubblici e utilità ancora disponibili al guscio Python.
+# Public types and utilities remain available to the Python shell.
 
 [[files]]
 path = "kombu/utils/encoding.py"
 group = "kombu"
 status = "python"
 crate = ""
-# Tipi pubblici e utilità ancora disponibili al guscio Python.
+# Public types and utilities remain available to the Python shell.
 
 [[files]]
 path = "kombu/utils/eventio.py"
 group = "kombu"
 status = "python"
 crate = ""
-# Tipi pubblici e utilità ancora disponibili al guscio Python.
+# Public types and utilities remain available to the Python shell.
 
 [[files]]
 path = "kombu/utils/functional.py"
 group = "kombu"
 status = "python"
 crate = ""
-# Tipi pubblici e utilità ancora disponibili al guscio Python.
+# Public types and utilities remain available to the Python shell.
 
 [[files]]
 path = "kombu/utils/imports.py"
 group = "kombu"
 status = "python"
 crate = ""
-# Tipi pubblici e utilità ancora disponibili al guscio Python.
+# Public types and utilities remain available to the Python shell.
 
 [[files]]
 path = "kombu/utils/json.py"
 group = "kombu"
 status = "python"
 crate = ""
-# Tipi pubblici e utilità ancora disponibili al guscio Python.
+# Public types and utilities remain available to the Python shell.
 
 [[files]]
 path = "kombu/utils/limits.py"
 group = "kombu"
 status = "python"
 crate = ""
-# Tipi pubblici e utilità ancora disponibili al guscio Python.
+# Public types and utilities remain available to the Python shell.
 
 [[files]]
 path = "kombu/utils/objects.py"
 group = "kombu"
 status = "python"
 crate = ""
-# Tipi pubblici e utilità ancora disponibili al guscio Python.
+# Public types and utilities remain available to the Python shell.
 
 [[files]]
 path = "kombu/utils/scheduling.py"
 group = "kombu"
 status = "python"
 crate = ""
-# Tipi pubblici e utilità ancora disponibili al guscio Python.
+# Public types and utilities remain available to the Python shell.
 
 [[files]]
 path = "kombu/utils/text.py"
 group = "kombu"
 status = "python"
 crate = ""
-# Tipi pubblici e utilità ancora disponibili al guscio Python.
+# Public types and utilities remain available to the Python shell.
 
 [[files]]
 path = "kombu/utils/time.py"
 group = "kombu"
 status = "python"
 crate = ""
-# Tipi pubblici e utilità ancora disponibili al guscio Python.
+# Public types and utilities remain available to the Python shell.
 
 [[files]]
 path = "kombu/utils/url.py"
 group = "kombu"
 status = "python"
 crate = ""
-# Tipi pubblici e utilità ancora disponibili al guscio Python.
+# Public types and utilities remain available to the Python shell.
 
 [[files]]
 path = "kombu/utils/uuid.py"
 group = "kombu"
 status = "python"
 crate = ""
-# Tipi pubblici e utilità ancora disponibili al guscio Python.
+# Public types and utilities remain available to the Python shell.
 
 [[files]]
 path = "billiard/__init__.py"
 group = "billiard"
 status = "python"
 crate = ""
-# Compatibilità, errori e trace ancora usati dal guscio/figli.
+# Compatibility, errors and trace remain in use by the shell and children.
 
 [[files]]
 path = "billiard/_ext.py"
 group = "billiard"
-status = "originale"
+status = "original"
 crate = ""
-# Percorso multiprocessing non usato dal pool nativo.
+# Multiprocessing path unused by the native pool.
 
 [[files]]
 path = "billiard/_win.py"
 group = "billiard"
-status = "originale"
+status = "original"
 crate = ""
-# Percorso multiprocessing non usato dal pool nativo.
+# Multiprocessing path unused by the native pool.
 
 [[files]]
 path = "billiard/common.py"
 group = "billiard"
 status = "python"
 crate = ""
-# Compatibilità, errori e trace ancora usati dal guscio/figli.
+# Compatibility, errors and trace remain in use by the shell and children.
 
 [[files]]
 path = "billiard/compat.py"
 group = "billiard"
 status = "python"
 crate = ""
-# Compatibilità, errori e trace ancora usati dal guscio/figli.
+# Compatibility, errors and trace remain in use by the shell and children.
 
 [[files]]
 path = "billiard/connection.py"
 group = "billiard"
 status = "rust"
 crate = "celery-worker"
-# Supervisione, fork e IPC svolti da pool Rust e zygote Python.
+# Rust pool and Python zygote handle supervision, fork and IPC.
 
 [[files]]
 path = "billiard/context.py"
 group = "billiard"
 status = "python"
 crate = ""
-# Compatibilità, errori e trace ancora usati dal guscio/figli.
+# Compatibility, errors and trace remain in use by the shell and children.
 
 [[files]]
 path = "billiard/dummy/__init__.py"
 group = "billiard"
-status = "originale"
+status = "original"
 crate = ""
-# Percorso multiprocessing non usato dal pool nativo.
+# Multiprocessing path unused by the native pool.
 
 [[files]]
 path = "billiard/dummy/connection.py"
 group = "billiard"
-status = "originale"
+status = "original"
 crate = ""
-# Percorso multiprocessing non usato dal pool nativo.
+# Multiprocessing path unused by the native pool.
 
 [[files]]
 path = "billiard/einfo.py"
 group = "billiard"
 status = "python"
 crate = ""
-# Compatibilità, errori e trace ancora usati dal guscio/figli.
+# Compatibility, errors and trace remain in use by the shell and children.
 
 [[files]]
 path = "billiard/exceptions.py"
 group = "billiard"
 status = "python"
 crate = ""
-# Compatibilità, errori e trace ancora usati dal guscio/figli.
+# Compatibility, errors and trace remain in use by the shell and children.
 
 [[files]]
 path = "billiard/forkserver.py"
 group = "billiard"
-status = "originale"
+status = "original"
 crate = ""
-# Percorso multiprocessing non usato dal pool nativo.
+# Multiprocessing path unused by the native pool.
 
 [[files]]
 path = "billiard/heap.py"
 group = "billiard"
-status = "originale"
+status = "original"
 crate = ""
-# Percorso multiprocessing non usato dal pool nativo.
+# Multiprocessing path unused by the native pool.
 
 [[files]]
 path = "billiard/managers.py"
 group = "billiard"
-status = "originale"
+status = "original"
 crate = ""
-# Percorso multiprocessing non usato dal pool nativo.
+# Multiprocessing path unused by the native pool.
 
 [[files]]
 path = "billiard/pool.py"
 group = "billiard"
 status = "rust"
 crate = "celery-worker"
-# Supervisione, fork e IPC svolti da pool Rust e zygote Python.
+# Rust pool and Python zygote handle supervision, fork and IPC.
 
 [[files]]
 path = "billiard/popen_fork.py"
 group = "billiard"
 status = "rust"
 crate = "celery-worker"
-# Supervisione, fork e IPC svolti da pool Rust e zygote Python.
+# Rust pool and Python zygote handle supervision, fork and IPC.
 
 [[files]]
 path = "billiard/popen_forkserver.py"
 group = "billiard"
-status = "originale"
+status = "original"
 crate = ""
-# Percorso multiprocessing non usato dal pool nativo.
+# Multiprocessing path unused by the native pool.
 
 [[files]]
 path = "billiard/popen_spawn_posix.py"
 group = "billiard"
-status = "originale"
+status = "original"
 crate = ""
-# Percorso multiprocessing non usato dal pool nativo.
+# Multiprocessing path unused by the native pool.
 
 [[files]]
 path = "billiard/popen_spawn_win32.py"
 group = "billiard"
-status = "originale"
+status = "original"
 crate = ""
-# Percorso multiprocessing non usato dal pool nativo.
+# Multiprocessing path unused by the native pool.
 
 [[files]]
 path = "billiard/process.py"
 group = "billiard"
 status = "rust"
 crate = "celery-worker"
-# Supervisione, fork e IPC svolti da pool Rust e zygote Python.
+# Rust pool and Python zygote handle supervision, fork and IPC.
 
 [[files]]
 path = "billiard/queues.py"
 group = "billiard"
 status = "rust"
 crate = "celery-worker"
-# Supervisione, fork e IPC svolti da pool Rust e zygote Python.
+# Rust pool and Python zygote handle supervision, fork and IPC.
 
 [[files]]
 path = "billiard/reduction.py"
 group = "billiard"
 status = "python"
 crate = ""
-# Compatibilità, errori e trace ancora usati dal guscio/figli.
+# Compatibility, errors and trace remain in use by the shell and children.
 
 [[files]]
 path = "billiard/resource_sharer.py"
 group = "billiard"
-status = "originale"
+status = "original"
 crate = ""
-# Percorso multiprocessing non usato dal pool nativo.
+# Multiprocessing path unused by the native pool.
 
 [[files]]
 path = "billiard/semaphore_tracker.py"
 group = "billiard"
-status = "originale"
+status = "original"
 crate = ""
-# Percorso multiprocessing non usato dal pool nativo.
+# Multiprocessing path unused by the native pool.
 
 [[files]]
 path = "billiard/sharedctypes.py"
 group = "billiard"
-status = "originale"
+status = "original"
 crate = ""
-# Percorso multiprocessing non usato dal pool nativo.
+# Multiprocessing path unused by the native pool.
 
 [[files]]
 path = "billiard/spawn.py"
 group = "billiard"
-status = "originale"
+status = "original"
 crate = ""
-# Percorso multiprocessing non usato dal pool nativo.
+# Multiprocessing path unused by the native pool.
 
 [[files]]
 path = "billiard/synchronize.py"
 group = "billiard"
-status = "originale"
+status = "original"
 crate = ""
-# Percorso multiprocessing non usato dal pool nativo.
+# Multiprocessing path unused by the native pool.
 
 [[files]]
 path = "billiard/util.py"
 group = "billiard"
 status = "python"
 crate = ""
-# Compatibilità, errori e trace ancora usati dal guscio/figli.
+# Compatibility, errors and trace remain in use by the shell and children.
 
 [[files]]
 path = "amqp/__init__.py"
 group = "amqp/redis-py"
 status = "python"
 crate = ""
-# Tipi, eccezioni o compatibilità pubblica conservati.
+# Preserved public types, exceptions or compatibility.
 
 [[files]]
 path = "amqp/abstract_channel.py"
 group = "amqp/redis-py"
 status = "rust"
 crate = "celery-transport"
-# Protocollo/socket sostituiti da lapin o client Redis Rust; copertura del ruolo, non equivalenza di tutte le API opzionali.
+# lapin or Rust Redis clients replace protocol/sockets; role coverage does not imply support for every optional API.
 
 [[files]]
 path = "amqp/basic_message.py"
 group = "amqp/redis-py"
 status = "rust"
 crate = "celery-transport"
-# Protocollo/socket sostituiti da lapin o client Redis Rust; copertura del ruolo, non equivalenza di tutte le API opzionali.
+# lapin or Rust Redis clients replace protocol/sockets; role coverage does not imply support for every optional API.
 
 [[files]]
 path = "amqp/channel.py"
 group = "amqp/redis-py"
 status = "rust"
 crate = "celery-transport"
-# Protocollo/socket sostituiti da lapin o client Redis Rust; copertura del ruolo, non equivalenza di tutte le API opzionali.
+# lapin or Rust Redis clients replace protocol/sockets; role coverage does not imply support for every optional API.
 
 [[files]]
 path = "amqp/connection.py"
 group = "amqp/redis-py"
 status = "rust"
 crate = "celery-transport"
-# Protocollo/socket sostituiti da lapin o client Redis Rust; copertura del ruolo, non equivalenza di tutte le API opzionali.
+# lapin or Rust Redis clients replace protocol/sockets; role coverage does not imply support for every optional API.
 
 [[files]]
 path = "amqp/exceptions.py"
 group = "amqp/redis-py"
 status = "python"
 crate = ""
-# Tipi, eccezioni o compatibilità pubblica conservati.
+# Preserved public types, exceptions or compatibility.
 
 [[files]]
 path = "amqp/method_framing.py"
 group = "amqp/redis-py"
 status = "rust"
 crate = "celery-transport"
-# Protocollo/socket sostituiti da lapin o client Redis Rust; copertura del ruolo, non equivalenza di tutte le API opzionali.
+# lapin or Rust Redis clients replace protocol/sockets; role coverage does not imply support for every optional API.
 
 [[files]]
 path = "amqp/platform.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "amqp/protocol.py"
 group = "amqp/redis-py"
 status = "rust"
 crate = "celery-transport"
-# Protocollo/socket sostituiti da lapin o client Redis Rust; copertura del ruolo, non equivalenza di tutte le API opzionali.
+# lapin or Rust Redis clients replace protocol/sockets; role coverage does not imply support for every optional API.
 
 [[files]]
 path = "amqp/sasl.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "amqp/serialization.py"
 group = "amqp/redis-py"
 status = "rust"
 crate = "celery-transport"
-# Protocollo/socket sostituiti da lapin o client Redis Rust; copertura del ruolo, non equivalenza di tutte le API opzionali.
+# lapin or Rust Redis clients replace protocol/sockets; role coverage does not imply support for every optional API.
 
 [[files]]
 path = "amqp/spec.py"
 group = "amqp/redis-py"
 status = "rust"
 crate = "celery-transport"
-# Protocollo/socket sostituiti da lapin o client Redis Rust; copertura del ruolo, non equivalenza di tutte le API opzionali.
+# lapin or Rust Redis clients replace protocol/sockets; role coverage does not imply support for every optional API.
 
 [[files]]
 path = "amqp/transport.py"
 group = "amqp/redis-py"
 status = "rust"
 crate = "celery-transport"
-# Protocollo/socket sostituiti da lapin o client Redis Rust; copertura del ruolo, non equivalenza di tutte le API opzionali.
+# lapin or Rust Redis clients replace protocol/sockets; role coverage does not imply support for every optional API.
 
 [[files]]
 path = "amqp/utils.py"
 group = "amqp/redis-py"
 status = "python"
 crate = ""
-# Tipi, eccezioni o compatibilità pubblica conservati.
+# Preserved public types, exceptions or compatibility.
 
 [[files]]
 path = "redis/__init__.py"
 group = "amqp/redis-py"
 status = "python"
 crate = ""
-# Tipi, eccezioni o compatibilità pubblica conservati.
+# Preserved public types, exceptions or compatibility.
 
 [[files]]
 path = "redis/_defaults.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/_himport_exec.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/_parsers/__init__.py"
 group = "amqp/redis-py"
 status = "rust"
 crate = "celery-backend"
-# Protocollo/socket sostituiti da lapin o client Redis Rust; copertura del ruolo, non equivalenza di tutte le API opzionali.
+# lapin or Rust Redis clients replace protocol/sockets; role coverage does not imply support for every optional API.
 
 [[files]]
 path = "redis/_parsers/base.py"
 group = "amqp/redis-py"
 status = "rust"
 crate = "celery-backend"
-# Protocollo/socket sostituiti da lapin o client Redis Rust; copertura del ruolo, non equivalenza di tutte le API opzionali.
+# lapin or Rust Redis clients replace protocol/sockets; role coverage does not imply support for every optional API.
 
 [[files]]
 path = "redis/_parsers/commands.py"
 group = "amqp/redis-py"
 status = "rust"
 crate = "celery-backend"
-# Protocollo/socket sostituiti da lapin o client Redis Rust; copertura del ruolo, non equivalenza di tutte le API opzionali.
+# lapin or Rust Redis clients replace protocol/sockets; role coverage does not imply support for every optional API.
 
 [[files]]
 path = "redis/_parsers/encoders.py"
 group = "amqp/redis-py"
 status = "rust"
 crate = "celery-backend"
-# Protocollo/socket sostituiti da lapin o client Redis Rust; copertura del ruolo, non equivalenza di tutte le API opzionali.
+# lapin or Rust Redis clients replace protocol/sockets; role coverage does not imply support for every optional API.
 
 [[files]]
 path = "redis/_parsers/helpers.py"
 group = "amqp/redis-py"
 status = "rust"
 crate = "celery-backend"
-# Protocollo/socket sostituiti da lapin o client Redis Rust; copertura del ruolo, non equivalenza di tutte le API opzionali.
+# lapin or Rust Redis clients replace protocol/sockets; role coverage does not imply support for every optional API.
 
 [[files]]
 path = "redis/_parsers/hiredis.py"
 group = "amqp/redis-py"
 status = "rust"
 crate = "celery-backend"
-# Protocollo/socket sostituiti da lapin o client Redis Rust; copertura del ruolo, non equivalenza di tutte le API opzionali.
+# lapin or Rust Redis clients replace protocol/sockets; role coverage does not imply support for every optional API.
 
 [[files]]
 path = "redis/_parsers/resp2.py"
 group = "amqp/redis-py"
 status = "rust"
 crate = "celery-backend"
-# Protocollo/socket sostituiti da lapin o client Redis Rust; copertura del ruolo, non equivalenza di tutte le API opzionali.
+# lapin or Rust Redis clients replace protocol/sockets; role coverage does not imply support for every optional API.
 
 [[files]]
 path = "redis/_parsers/resp3.py"
 group = "amqp/redis-py"
 status = "rust"
 crate = "celery-backend"
-# Protocollo/socket sostituiti da lapin o client Redis Rust; copertura del ruolo, non equivalenza di tutte le API opzionali.
+# lapin or Rust Redis clients replace protocol/sockets; role coverage does not imply support for every optional API.
 
 [[files]]
 path = "redis/_parsers/response_callbacks.py"
 group = "amqp/redis-py"
 status = "rust"
 crate = "celery-backend"
-# Protocollo/socket sostituiti da lapin o client Redis Rust; copertura del ruolo, non equivalenza di tutte le API opzionali.
+# lapin or Rust Redis clients replace protocol/sockets; role coverage does not imply support for every optional API.
 
 [[files]]
 path = "redis/_parsers/socket.py"
 group = "amqp/redis-py"
 status = "rust"
 crate = "celery-backend"
-# Protocollo/socket sostituiti da lapin o client Redis Rust; copertura del ruolo, non equivalenza di tutte le API opzionali.
+# lapin or Rust Redis clients replace protocol/sockets; role coverage does not imply support for every optional API.
 
 [[files]]
 path = "redis/asyncio/__init__.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/asyncio/_himport_exec.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/asyncio/client.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/asyncio/cluster.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/asyncio/connection.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/asyncio/http/__init__.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/asyncio/http/http_client.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/asyncio/keyspace_notifications.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/asyncio/lock.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/asyncio/maint_notifications.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/asyncio/multidb/__init__.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/asyncio/multidb/client.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/asyncio/multidb/command_executor.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/asyncio/multidb/config.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/asyncio/multidb/database.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/asyncio/multidb/event.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/asyncio/multidb/failover.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/asyncio/multidb/failure_detector.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/asyncio/multidb/healthcheck.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/asyncio/observability/__init__.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/asyncio/observability/recorder.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/asyncio/retry.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/asyncio/sentinel.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/asyncio/utils.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/auth/__init__.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/auth/err.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/auth/idp.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/auth/token.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/auth/token_manager.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/background.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/backoff.py"
 group = "amqp/redis-py"
 status = "rust"
 crate = "celery-backend"
-# Protocollo/socket sostituiti da lapin o client Redis Rust; copertura del ruolo, non equivalenza di tutte le API opzionali.
+# lapin or Rust Redis clients replace protocol/sockets; role coverage does not imply support for every optional API.
 
 [[files]]
 path = "redis/cache.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/client.py"
 group = "amqp/redis-py"
 status = "rust"
 crate = "celery-backend"
-# Protocollo/socket sostituiti da lapin o client Redis Rust; copertura del ruolo, non equivalenza di tutte le API opzionali.
+# lapin or Rust Redis clients replace protocol/sockets; role coverage does not imply support for every optional API.
 
 [[files]]
 path = "redis/cluster.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/commands/__init__.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/commands/bf/__init__.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/commands/bf/commands.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/commands/bf/info.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/commands/cluster.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/commands/core.py"
 group = "amqp/redis-py"
 status = "rust"
 crate = "celery-backend"
-# Protocollo/socket sostituiti da lapin o client Redis Rust; copertura del ruolo, non equivalenza di tutte le API opzionali.
+# lapin or Rust Redis clients replace protocol/sockets; role coverage does not imply support for every optional API.
 
 [[files]]
 path = "redis/commands/helpers.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/commands/json/__init__.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/commands/json/_util.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/commands/json/commands.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/commands/json/decoders.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/commands/json/path.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/commands/policies.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/commands/redismodules.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/commands/search/__init__.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/commands/search/_util.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/commands/search/aggregation.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/commands/search/commands.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/commands/search/dialect.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/commands/search/document.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/commands/search/field.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/commands/search/hybrid_query.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/commands/search/hybrid_result.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/commands/search/index_definition.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/commands/search/profile_information.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/commands/search/query.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/commands/search/querystring.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/commands/search/reducers.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/commands/search/result.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/commands/search/suggestion.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/commands/sentinel.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/commands/timeseries/__init__.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/commands/timeseries/commands.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/commands/timeseries/info.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/commands/timeseries/utils.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/commands/vectorset/__init__.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/commands/vectorset/commands.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/commands/vectorset/utils.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/connection.py"
 group = "amqp/redis-py"
 status = "rust"
 crate = "celery-backend"
-# Protocollo/socket sostituiti da lapin o client Redis Rust; copertura del ruolo, non equivalenza di tutte le API opzionali.
+# lapin or Rust Redis clients replace protocol/sockets; role coverage does not imply support for every optional API.
 
 [[files]]
 path = "redis/crc.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/credentials.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/data_structure.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/driver_info.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/event.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/exceptions.py"
 group = "amqp/redis-py"
 status = "python"
 crate = ""
-# Tipi, eccezioni o compatibilità pubblica conservati.
+# Preserved public types, exceptions or compatibility.
 
 [[files]]
 path = "redis/himport.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/http/__init__.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/http/http_client.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/keyspace_notifications.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/lock.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/maint_notifications.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/multidb/__init__.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/multidb/circuit.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/multidb/client.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/multidb/command_executor.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/multidb/config.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/multidb/database.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/multidb/event.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/multidb/exception.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/multidb/failover.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/multidb/failure_detector.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/observability/__init__.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/observability/attributes.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/observability/config.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/observability/metrics.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/observability/providers.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/observability/recorder.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/observability/registry.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/ocsp.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/retry.py"
 group = "amqp/redis-py"
 status = "rust"
 crate = "celery-backend"
-# Protocollo/socket sostituiti da lapin o client Redis Rust; copertura del ruolo, non equivalenza di tutte le API opzionali.
+# lapin or Rust Redis clients replace protocol/sockets; role coverage does not imply support for every optional API.
 
 [[files]]
 path = "redis/sentinel.py"
 group = "amqp/redis-py"
-status = "originale"
+status = "original"
 crate = ""
-# Funzionalità opzionale del client originale fuori dal percorso supportato.
+# Optional reference client feature outside the supported path.
 
 [[files]]
 path = "redis/typing.py"
 group = "amqp/redis-py"
 status = "python"
 crate = ""
-# Tipi, eccezioni o compatibilità pubblica conservati.
+# Preserved public types, exceptions or compatibility.
 
 [[files]]
 path = "redis/utils.py"
 group = "amqp/redis-py"
 status = "python"
 crate = ""
-# Tipi, eccezioni o compatibilità pubblica conservati.
+# Preserved public types, exceptions or compatibility.

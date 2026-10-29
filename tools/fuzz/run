@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Esegue ogni target proptest per almeno 600 secondi, con log permanenti."""
+"""Run each proptest target for at least 600 seconds with permanent logs."""
 import json
 import os
 from pathlib import Path

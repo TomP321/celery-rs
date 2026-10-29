@@ -1,4 +1,4 @@
-"""Avvia un worker -c N e scompone la PSS per processo e per mappatura."""
+"""Start a worker -c N and break down PSS by process and mapping."""
 import os, subprocess, sys, time, collections, signal
 venv, conc = sys.argv[1], sys.argv[2]
 app_dir = sys.argv[3]
@@ -52,8 +52,8 @@ for pid, d in walk(p.pid):
     thr=len(os.listdir(f'/proc/{pid}/task'))
     print(f"{'  '*d}{pid} pss={r['Pss']/1024:.1f} anon={r.get('Pss_Anon',0)/1024:.1f} file={r.get('Pss_File',0)/1024:.1f} privdirty={r['Private_Dirty']/1024:.1f} rss={r['Rss']/1024:.1f} thr={thr} {cmd}")
     seen.append((pid,d))
-print(f"TOTALE PSS {tot/1024:.1f} MB")
+print(f"TOTAL PSS {tot/1024:.1f} MB")
 for pid,d in seen[:3]:
-    print('--- top mappe', pid)
+    print('--- top mappings', pid)
     for n,v in bymap(pid).most_common(12): print(f'   {v/1024:6.2f} {n}')
 os.killpg(p.pid, signal.SIGTERM); p.wait(30)

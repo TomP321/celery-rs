@@ -1,12 +1,8 @@
-"""Cattura e confronto del traffico sul broker (solo stdlib: gira nel Python dell'harness).
+"""Capture, decode and normalize broker traffic using only the stdlib.
 
-Redis: connessione MONITOR grezza → ogni comando ricevuto dal server.
-RabbitMQ: firehose tracer (`amq.rabbitmq.trace`, `publish.#`) letto dall'API di management HTTP.
-  L'API restituisce le tabelle AMQP come oggetti JSON senza garanzia d'ordine: su AMQP l'ordine
-  delle chiavi negli header non è verificato (non è semantico per i consumer); su Redis sì.
-I messaggi vengono decodificati (envelope kombu, base64, compressione) e normalizzati
-(id, timestamp, hostname, pid) prima del confronto.
-"""
+Redis uses raw MONITOR; RabbitMQ uses the HTTP management firehose tracer.
+AMQP header ordering is not compared because management JSON has no order guarantee.
+Redis ordering is compared. Normalize IDs, timestamps, hostnames and PIDs."""
 import os
 from urllib.parse import urlsplit
 
@@ -26,28 +22,28 @@ RABBIT_API = os.environ.get('CELERY_RS_RABBIT_API', 'http://127.0.0.1:15673/api'
 RABBIT_AUTH = 'Basic ' + base64.b64encode(b'guest:guest').decode()
 TRACE_QUEUE = 'compat.trace'
 
-# comandi di gestione della connessione: dipendono dalla libreria client, non dal protocollo Celery
+# Connection management commands depend on the client library rather than Celery protocol.
 REDIS_IGNORED = {'HELLO', 'CLIENT', 'PING', 'INFO', 'AUTH', 'QUIT', 'COMMAND', 'MONITOR', 'FLUSHALL',
                  'SELECT', 'RESET'}
 
 
-# ------------------------------------------------------------------ normalizzazione
+
 
 UUID_RE = re.compile(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}')
-# timestamp ISO calcolati da "now" (countdown/expires); quelli fissi degli scenari (2030) restano
+# Normalize timestamps derived from now; keep fixed scenario timestamps (2030).
 ISO_RE = re.compile(r'(?!2030)\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:[+-]\d\d:\d\d|Z)?')
 UNIX_TS_RE = re.compile(r'(?<![\d.])1[5-9]\d{8}\.\d+')
 UNIX_MS_RE = re.compile(r'(?<![\d.])1[5-9]\d{11}(?![\d.])')
 HEX32_RE = re.compile(r'(?<![0-9a-f])[0-9a-f]{32}(?![0-9a-f])')
-# il JSON del body è annidato come stringa dentro l'envelope: le virgolette possono essere escaped
+# Envelope bodies contain nested JSON strings, possibly with escaped quotes.
 PID_RE = re.compile(r'(\\?"pid\\?":\s*)\d+')
-# TTL in ms calcolato da `expires - now`
+# TTL in milliseconds is derived from expires minus now.
 EXPIRATION_RE = re.compile(r'(\\?"expiration\\?":\s*\\?")\d+')
 ORIGIN_RE = re.compile(r'gen\d+@')
 
 
 class Normalizer:
-    """Sostituzioni coerenti all'interno di uno scenario: lo stesso id → stesso segnaposto."""
+    """Use the same placeholder for repeated IDs within a scenario."""
 
     def __init__(self):
         self.ids = {}
@@ -79,8 +75,9 @@ def decompress(body, content_type):
 
 
 def body_text(body, content_type, compression):
-    """Il body come testo confrontabile. I byte compressi non devono coincidere (cambia la
-    libreria), il contenuto decompresso sì; è indicato esplicitamente che era compresso."""
+    """Return comparable body text, marking compression explicitly.
+
+    Compare decompressed contents because compression libraries can differ."""
     prefix = ''
     if compression:
         body = decompress(body, compression)
@@ -91,7 +88,7 @@ def body_text(body, content_type, compression):
 
 
 def decode_kombu_envelope(raw):
-    """Envelope JSON del trasporto Redis di kombu → testo normalizzabile, con il body decodificato."""
+    """Decode the kombu Redis envelope body into normalizable text."""
     try:
         env = json.loads(raw)
     except ValueError:
@@ -106,12 +103,12 @@ def decode_kombu_envelope(raw):
         body = body.encode('utf-8')
     headers = env.get('headers') or {}
     env['body'] = body_text(body, env.get('content-type'), headers.get('compression'))
-    # l'envelope stesso va confrontato anche come testo (ordine chiavi, spazi): lo ricodifichiamo
-    # sostituendo solo il body, mantenendo l'ordine originale delle chiavi.
+    # Re-encode only the body, preserving envelope key order and spacing for text comparison.
+
     return json.dumps(env, ensure_ascii=False)
 
 
-# ------------------------------------------------------------------------ Redis
+
 
 def parse_monitor_line(line):
     """`<ts> [db addr] "CMD" "arg" ...` → [db, CMD, arg bytes...]."""
@@ -175,7 +172,7 @@ class RedisCapture:
             self.lines += [d.decode('latin1') for d in done if d.startswith(b'+')]
 
     def __exit__(self, *exc):
-        time.sleep(0.3)  # lascia arrivare i comandi in volo
+        time.sleep(0.3)  # Allow in-flight commands to arrive.
         self.stop.set()
         self.thread.join()
         self.sock.close()
@@ -198,7 +195,7 @@ class RedisCapture:
         return out
 
 
-# --------------------------------------------------------------------- RabbitMQ
+
 
 def api(method, path, data=None):
     req = urllib.request.Request(f'{RABBIT_API}{path}', method=method,
@@ -212,7 +209,7 @@ def api(method, path, data=None):
 
 class RabbitCapture:
     def __enter__(self):
-        # stato iniziale identico per ref e rs: nessuna coda/exchange creati da run precedenti
+        # Clear queues and exchanges left by previous runs to match initial state.
         for q in api('GET', '/queues/%2F'):
             if q['name'] != TRACE_QUEUE:
                 api('DELETE', f'/queues/%2F/{urllib.request.quote(q["name"], safe="")}')
@@ -225,7 +222,7 @@ class RabbitCapture:
         return self
 
     def __exit__(self, *exc):
-        time.sleep(0.5)  # il tracer è asincrono
+        time.sleep(0.5)  # The tracer is asynchronous.
 
     def messages(self, norm):
         got = api('POST', f'/queues/%2F/{TRACE_QUEUE}/get',

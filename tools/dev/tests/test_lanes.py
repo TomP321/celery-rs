@@ -1,4 +1,4 @@
-"""Verifica assegnazione, rientranza e pulizia dei processi con i broker reali."""
+"""Check lane assignment, reentrancy and process cleanup with real brokers."""
 import concurrent.futures
 import os
 from pathlib import Path
@@ -18,7 +18,7 @@ class LanesTests(unittest.TestCase):
                                  'import os; print("LANE=" + os.environ["CELERY_RS_LANE"])'],
                                 capture_output=True, text=True, timeout=60)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout.count('corsia '), 1)
+        self.assertEqual(result.stdout.count('lane '), 1)
         self.assertIn('LANE=', result.stdout)
 
     def test_distinct_lanes(self):
@@ -50,7 +50,7 @@ with contextlib.suppress(Exception):
         result = subprocess.run([str(WRAPPER), str(ROOT / '.venv-ref/bin/python'), '-c', code],
                                 capture_output=True, text=True, timeout=60)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn('chiudo connessione residua', result.stdout)
+        self.assertIn('closing leftover connection', result.stdout)
 
     def test_reaps_daemon_before_command_exits(self):
         child_code = 'import subprocess; print(subprocess.Popen(["sleep", ".1"], start_new_session=True).pid)'

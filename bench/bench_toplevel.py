@@ -1,4 +1,4 @@
-"""Task con redis-py importato prima del fork, come in un'app reale."""
+"""Import redis-py before fork to model a typical application."""
 import os
 from urllib.parse import urlsplit
 

@@ -1,11 +1,8 @@
-"""Confronto alternato del ciclo invii beat e profilo cProfile del branch.
+"""Compare alternating beat send loops and cProfile results.
 
-    tools/dev/with-brokers .venv-ref/bin/python bench/bench_beat_compare.py
-
-Il Python di main è estratto da git; l'estensione nativa e le dipendenze sono
-identiche per isolare gli import. Rispetto a 303a59a, l'unica modifica Rust
-08b è in saferepr, che il benchmark non chiama.
-"""
+Run under tools/dev/with-brokers. Python from main is extracted from git;
+the native extension and dependencies stay fixed to isolate imports.
+The only Rust change since 303a59a is saferepr, which this probe does not call."""
 from __future__ import annotations
 
 import argparse

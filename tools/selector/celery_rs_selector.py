@@ -1,10 +1,8 @@
-"""Backend di build PEP 517 che installa la wheel precompilata di celery-rs adatta alla macchina.
+"""Select a prebuilt celery-rs wheel as a PEP 517 backend.
 
-Il pacchetto sorgente (sdist) di celery-rs non contiene codice da compilare: quando pip o uv lo
-"costruiscono", questo backend sceglie la wheel per l'architettura corrente (x86_64 o aarch64,
-Linux glibc), la scarica dal branch `wheels` del repository, ne verifica lo SHA-256 e la consegna
-come wheel costruita. Nessuna toolchain Rust necessaria.
-"""
+The sdist contains no compilable source. Download the Linux glibc wheel for
+x86_64 or aarch64 from the wheels branch, verify SHA-256 and return it as
+the build result. No Rust toolchain is needed."""
 import hashlib
 import os
 import platform
@@ -26,15 +24,15 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 def _wheel_for_this_machine():
     if not sys.platform.startswith('linux'):
-        raise RuntimeError(f'celery-rs supporta solo Linux (piattaforma: {sys.platform})')
+        raise RuntimeError(f'celery-rs supports Linux only (platform: {sys.platform})')
     libc, _ = platform.libc_ver()
     if libc and libc != 'glibc':
-        raise RuntimeError(f'celery-rs richiede glibc ≥ 2.28 (libc trovata: {libc})')
+        raise RuntimeError(f'celery-rs requires glibc ≥ 2.28 (found libc: {libc})')
     machine = platform.machine().lower()
     machine = ALIASES.get(machine, machine)
     if machine not in WHEELS:
-        raise RuntimeError(f'nessuna wheel celery-rs per l\'architettura {machine!r} '
-                           f'(disponibili: {", ".join(WHEELS)})')
+        raise RuntimeError(f'no celery-rs wheel for architecture {machine!r} '
+                           f'(available: {", ".join(WHEELS)})')
     return WHEELS[machine]
 
 
@@ -48,7 +46,7 @@ def _download(name, sha256, directory):
             out.write(chunk)
     if digest.hexdigest() != sha256:
         os.unlink(target)
-        raise RuntimeError(f'SHA-256 della wheel {name} non corrisponde: download alterato?')
+        raise RuntimeError(f'wheel {name} SHA-256 mismatch: corrupted download?')
     return name
 
 

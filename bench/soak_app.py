@@ -1,4 +1,4 @@
-"""App comune al riferimento e a celery-rs per il soak 09b."""
+"""Provide the shared reference and Rust app for the 09b soak."""
 import os
 
 from celery import Celery

@@ -1,8 +1,7 @@
-"""Misure riproducibili della spec 08f, sotto tools/dev/with-brokers.
+"""Measure beat memory for spec 08f under tools/dev/with-brokers.
 
-Include tutti i processi discendenti nel costo di worker -B. Il profilo
-tracemalloc gira separatamente per non contaminare la misura della PSS.
-"""
+Include descendants in worker -B costs. Run tracemalloc separately to avoid
+contaminating physical PSS measurements."""
 import argparse
 import json
 import os
@@ -119,7 +118,7 @@ def measure_process(python, directory, broker, count, pool=None, embedded=False,
         except subprocess.TimeoutExpired:
             os.killpg(process.pid, signal.SIGKILL)
             process.wait()
-        # Il worker può lasciare discendenti dopo un errore all'avvio.
+        # Startup failures can leave worker descendants.
         try:
             os.killpg(process.pid, signal.SIGKILL)
         except ProcessLookupError:
@@ -131,7 +130,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--venv', required=True)
     parser.add_argument('--label', required=True)
-    parser.add_argument('--source', help='guscio Python alternativo per la baseline')
+    parser.add_argument('--source', help='alternate Python shell for the baseline')
     parser.add_argument('--workers', action='store_true')
     parser.add_argument('--trace', action='store_true')
     args = parser.parse_args()

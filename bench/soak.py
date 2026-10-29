@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
-"""Soak worker c10 + beat; confronto su quattro corsie con --compare.
+"""Compare c10 workers and beat across four lanes with --compare --minutes 60.
 
-Esempio: .venv-rs/bin/python bench/soak.py --compare --minutes 60
-I risultati sono scritti anche in caso di errore o interruzione.
-"""
+Write results even on failure or interruption."""
 from __future__ import annotations
 
 import argparse
@@ -29,7 +27,7 @@ def descendants(root):
         pid, parent = todo.pop()
         try:
             proc = Path(f'/proc/{pid}')
-            # Il campo comm può contenere spazi e parentesi.
+            # The comm field can contain spaces and parentheses.
             stat = (proc / 'stat').read_text().rsplit(')', 1)[1].split()
             if stat[0] == 'Z':
                 continue
@@ -110,7 +108,7 @@ def load():
             results.extend(group_result.results)
             results.append(chord([add.s(i, 1) for i in range(4)])(total.s()))
             results.append(large.delay())
-            # Il produttore aspetta e libera: backlog e cache del client restano limitati.
+            # Wait and release results to bound the backlog and client cache.
             for result in results:
                 try:
                     result.get(timeout=20, propagate=False)
@@ -254,7 +252,7 @@ if __name__ == '__main__':
     parser.add_argument('--load', action='store_true', help=argparse.SUPPRESS)
     args = parser.parse_args()
     if args.minutes <= 0 or args.sample_seconds <= 0:
-        parser.error('durata e intervallo devono essere positivi')
+        parser.error('duration and interval must be positive')
     if args.load:
         load()
     else:

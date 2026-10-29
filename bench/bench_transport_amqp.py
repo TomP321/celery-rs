@@ -1,10 +1,7 @@
-"""Benchmark informativo del trasporto AMQP: `_celery_rs` vs kombu (py-amqp).
+"""Compare Rust and kombu AMQP publish and acknowledged consume rates.
 
-    .venv-ref/bin/python bench/bench_transport_amqp.py [--n 5000] [--url ...]
-
-Misura publish/s (senza publisher confirms) e consume/s con ack, su code
-dedicate e svuotate prima di ogni misura.
-"""
+Use --n and --url under tools/dev/with-brokers. Dedicated queues are cleared
+before each measurement; publisher confirms are disabled."""
 
 from __future__ import annotations
 
@@ -37,7 +34,7 @@ def wait_size(connection, queue, expected, timeout=10.0):
         if connection.size(queue) == expected:
             return
         time.sleep(0.005)
-    raise AssertionError(f"{queue}: attesi {expected}, trovati {connection.size(queue)}")
+    raise AssertionError(f"{queue}: expected {expected}, found {connection.size(queue)}")
 
 
 def bench_publish_rs(url, queue, count):
@@ -100,7 +97,7 @@ def bench_publish_kombu(url, queue, count):
             break
         time.sleep(0.005)
     else:
-        raise AssertionError("publish kombu non accodati")
+        raise AssertionError("kombu publishes not queued")
     channel.queue_purge(queue)
     connection.close()
     return count / elapsed
@@ -157,7 +154,7 @@ def main():
         "k-con": f"bench.kombu.con.{suffix}",
     }
 
-    # warm-up delle connessioni
+
     bench_publish_rs(args.url, f"bench.rs.warm.{suffix}", 10)
     bench_publish_kombu(args.url, f"bench.kombu.warm.{suffix}", 10)
 

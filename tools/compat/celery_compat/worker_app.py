@@ -1,8 +1,7 @@
-"""App Celery usata da `compat wire-worker`: gira nel venv del worker sotto esame (ref o rs).
+"""Provide deterministic wire-worker tasks in the selected worker venv.
 
-Broker e backend arrivano da COMPAT_BROKER / COMPAT_BACKEND. I task sono deterministici:
-stessi argomenti → stessi risultati, eccezioni e retry in entrambi i venv.
-"""
+COMPAT_BROKER and COMPAT_BACKEND select connections. Equal arguments produce
+equal results, exceptions and retries in both venvs."""
 import os
 import time
 

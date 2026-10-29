@@ -1,19 +1,14 @@
-"""Casi di `compat cli`: ogni comando `celery ...` gira con la CLI del riferimento e con quella
-di celery-rs, in sequenza, contro lo stesso worker del riferimento.
+"""Define CLI cases run sequentially against the same reference worker.
 
-Campi di un caso:
-  argv     argomenti dopo `celery` ({broker}, {backend}, {tmp}, {last_id} sostituiti)
-  worker   True se serve il worker del riferimento in esecuzione
-  numbers  True se l'output contiene contatori/tempi del worker (normalizzati a <n>)
-  stdin    testo passato su stdin
-  only     limita il caso a un broker
-I casi sono eseguiti nell'ordine dato: `{last_id}` è l'ultimo uuid stampato dalla stessa CLI.
-"""
+argv follows celery; broker, backend, tmp and last_id placeholders are replaced.
+worker requests a reference worker; numbers normalizes counters/timings to <n>;
+stdin supplies input; only restricts the broker. last_id is the latest UUID
+printed by the same CLI."""
 
 APP = ['-A', 'worker_app']
 
 CASES = [
-    # --- help e versione -------------------------------------------------------------------
+
     {'name': 'help', 'argv': ['--help']},
     {'name': 'version', 'argv': ['--version']},
     *({'name': f'help-{cmd}', 'argv': [cmd, '--help']} for cmd in (
@@ -23,7 +18,7 @@ CASES = [
     {'name': 'help-control-list', 'argv': ['control', '--list']},
     {'name': 'help-amqp-queue-declare', 'argv': ['amqp', 'queue.declare', '--help']},
 
-    # --- errori di uso ---------------------------------------------------------------------
+
     {'name': 'err-unknown-command', 'argv': ['nonexistent']},
     {'name': 'err-unknown-option', 'argv': ['--bogus', 'status']},
     {'name': 'err-app-missing', 'argv': ['-A', 'no_such_module_xyz', 'status']},
@@ -39,7 +34,7 @@ CASES = [
     {'name': 'err-result-no-id', 'argv': [*APP, 'result']},
     {'name': 'err-multi-unknown', 'argv': ['multi', 'bogus']},
 
-    # --- senza worker ----------------------------------------------------------------------
+
     {'name': 'status-no-workers', 'argv': [*APP, '-b', '{empty_broker}', 'status']},
     {'name': 'inspect-ping-no-workers', 'argv': [*APP, '-b', '{empty_broker}', 'inspect', 'ping']},
     {'name': 'inspect-ping-no-workers-json',
@@ -69,7 +64,7 @@ CASES = [
                                      '--queue', 'compat_cli_hold']},
     {'name': 'purge-queued', 'argv': [*APP, 'purge', '-f', '-Q', 'compat_cli_hold']},
 
-    # --- con il worker del riferimento -----------------------------------------------------
+
     {'name': 'status', 'argv': [*APP, 'status'], 'worker': True},
     {'name': 'status-json', 'argv': [*APP, 'status', '-j'], 'worker': True},
     {'name': 'call', 'argv': [*APP, 'call', 'compat.add', '-a', '[2, 3]'], 'worker': True},

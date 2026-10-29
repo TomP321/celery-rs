@@ -1,19 +1,7 @@
-"""Benchmark del result backend ``rpc://`` (o Redis) lato client.
+"""Compare RPC or Redis result clients against the same reference worker.
 
-Confronta il client del riferimento e quello di celery-rs usando lo stesso
-worker del riferimento:
-
-    python3 bench/bench_result.py --backend rpc
-    python3 bench/bench_result.py --backend rpc --venvs .venv-ref .venv-rs
-
-Misure per client:
-  * latenza ``apply_async().get()`` p50/p99 (ms);
-  * throughput di ``join_native`` su N risultati (risultati/s);
-  * RSS massimo del client (``ru_maxrss``, KB).
-
-Il worker gira sempre con ``.venv-ref``: in questa fase il worker celery-rs
-non esiste ancora, quindi la variabile misurata è il client.
-"""
+Measure apply_async/get p50/p99, join_native throughput and client peak RSS.
+Use --backend rpc|redis and --venvs .venv-ref .venv-rs."""
 from __future__ import annotations
 
 import argparse
@@ -53,7 +41,7 @@ def backend_settings(backend):
         return AMQP, 'rpc://'
     if backend == 'redis':
         return REDIS, REDIS_BACKEND
-    raise SystemExit(f'backend sconosciuto: {backend}')
+    raise SystemExit(f'unknown backend: {backend}')
 
 
 def worker_env(broker, result_backend, queue):
@@ -78,7 +66,7 @@ def wait_ready(env, nodename, timeout=90):
         if 'pong' in result.stdout:
             return
         time.sleep(0.5)
-    raise SystemExit('worker non pronto')
+    raise SystemExit('worker not ready')
 
 
 CLIENT = r'''
@@ -93,7 +81,7 @@ from bench_result_app import add, noop
 latency_n = int(sys.argv[1])
 join_n = int(sys.argv[2])
 
-add.delay(1, 1).get(timeout=60)  # warm-up connessioni e consumer
+add.delay(1, 1).get(timeout=60)  # Warm up connections and consumer.
 
 latencies = []
 for index in range(latency_n):
@@ -127,12 +115,12 @@ def run_client(venv, env, latency_n, join_n):
         cwd=HERE, env=env, capture_output=True, text=True)
     if out.returncode != 0:
         raise SystemExit(
-            f'client {venv} fallito:\n{out.stdout[-4000:]}\n{out.stderr[-8000:]}')
+            f'client {venv} failed:\n{out.stdout[-4000:]}\n{out.stderr[-8000:]}')
     return json.loads(out.stdout.strip().splitlines()[-1])
 
 
 def delete_rabbit_queue(queue):
-    """Rimuove la coda del worker dal broker condiviso (best effort)."""
+    """Remove the worker queue from the shared broker on a best-effort basis."""
     authenticator = 'Basic ' + base64.b64encode(b'guest:guest').decode()
     path = '/api/queues/%2F/' + urllib.parse.quote(queue, safe='')
     request = urllib.request.Request(
@@ -148,7 +136,7 @@ def delete_rabbit_queue(queue):
 def redis_clean():
     try:
         import redis
-    except ImportError:  # pragma: no cover - solo con backend redis
+    except ImportError:  # pragma: no cover - Redis backend only
         return
     client = redis.Redis.from_url(os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390') + '/1')
     client.flushdb()
@@ -224,9 +212,9 @@ def main():
 
     if len(results) == 2:
         reference, ours = results
-        print(f"latenza p50: {reference['latency_ms']['p50']:.3f} ms -> "
+        print(f"latency p50: {reference['latency_ms']['p50']:.3f} ms -> "
               f"{ours['latency_ms']['p50']:.3f} ms")
-        print(f"latenza p99: {reference['latency_ms']['p99']:.3f} ms -> "
+        print(f"latency p99: {reference['latency_ms']['p99']:.3f} ms -> "
               f"{ours['latency_ms']['p99']:.3f} ms")
         print(f"join_native: {reference['join_results_per_s']:.0f} -> "
               f"{ours['join_results_per_s']:.0f} risultati/s")

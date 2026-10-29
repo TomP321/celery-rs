@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Sonda c1, carico misto e riavvio del broker, durata massima 5 minuti.
+"""Probe c1 memory under mixed load and a broker restart for up to five minutes.
 
-Eseguire sotto tools/dev/with-brokers con .venv-rs/bin/python.
---trace richiede una build memory-probe per includere l'heap Rust.
---without-cleanup riproduce il comportamento precedente alla 09c.
-"""
+Run under tools/dev/with-brokers with .venv-rs/bin/python.
+--trace needs a memory-probe build for Rust heap statistics.
+--without-cleanup reproduces behaviour before 09c."""
 import argparse
 import json
 import os
@@ -20,7 +19,7 @@ from soak import ROOT, descendants, restart_broker
 
 def run(args):
     if os.environ.get('CELERY_RS_BROKER_LOCKED') != '1':
-        raise RuntimeError('eseguire sotto tools/dev/with-brokers')
+        raise RuntimeError('run under tools/dev/with-brokers')
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
     redis = os.environ['CELERY_RS_REDIS_URL']
@@ -57,7 +56,7 @@ def run(args):
             while True:
                 elapsed = time.monotonic() - start
                 if any(process.poll() is not None for process in processes):
-                    raise RuntimeError('worker o produttore terminato prematuramente')
+                    raise RuntimeError('worker or producer exited early')
                 stream.write(json.dumps(dict(seconds=elapsed,
                     processes=descendants(processes[0].pid))) + '\n')
                 stream.flush()
@@ -89,5 +88,5 @@ if __name__ == '__main__':
     parser.add_argument('--without-cleanup', action='store_true')
     args = parser.parse_args()
     if not 1 <= args.seconds <= 300 or (args.reclaim and not args.trace):
-        parser.error('durata 1–300 secondi; --reclaim richiede --trace')
+        parser.error('duration must be 1–300 seconds; --reclaim requires --trace')
     run(args)

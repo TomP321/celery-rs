@@ -1,19 +1,7 @@
-"""Benchmark di ``celery beat``: riferimento vs celery-rs.
+"""Compare beat PSS, tick CPU time, send rate and crontab latency.
 
-    tools/dev/with-brokers .venv-ref/bin/python bench/bench_beat.py --venv .venv-ref --label ref
-    tools/dev/with-brokers .venv-rs/bin/python  bench/bench_beat.py --venv .venv-rs  --label rs
-    .venv-rs/bin/python bench/bench_beat.py --compare ref rs
-
-Misure per broker (Redis e RabbitMQ):
-  * PSS del processo beat a riposo con 3 voci e con 1000 voci (500 a intervallo
-    1 s + 500 crontab misti), letta da /proc/<pid>/smaps_rollup;
-  * CPU per ``Scheduler.tick`` con 1000 voci non dovute (µs, ``process_time``);
-  * invii/s sostenuti con 1000 voci dovute (``Scheduler.tick`` in un ciclo);
-  * ``crontab.remaining_estimate``/``is_due`` (ns/chiamata), schedule semplice
-    e con tutti i campi.
-
-I numeri sono salvati in ``bench/results/beat-<label>.json``.
-"""
+Run under tools/dev/with-brokers with --venv and --label; use --compare ref rs
+to compare bench/results/beat-<label>.json files."""
 from __future__ import annotations
 
 import argparse
@@ -191,7 +179,7 @@ def child(venv, code, env, timeout=180):
         capture_output=True, text=True, timeout=timeout, check=False)
     if result.returncode != 0:
         raise RuntimeError(
-            f'comando fallito ({result.returncode}):\n{result.stdout[-2000:]}\n'
+            f'command failed ({result.returncode}):\n{result.stdout[-2000:]}\n'
             f'{result.stderr[-4000:]}')
     return json.loads(result.stdout.strip().splitlines()[-1])
 
@@ -208,7 +196,7 @@ def pss_kb(pid):
 
 
 def beat_pss(venv, broker_name, entries, directory, source=None):
-    """PSS del processo beat dopo l'avvio, con `entries` voci in schedule."""
+    """Measure beat PSS after startup with `entries` schedule entries."""
     app_path = Path(directory) / 'bench_beat_app.py'
     app_path.write_text(BEAT_APP)
     workdir = Path(directory) / f'pss-{broker_name}-{entries}'
@@ -232,7 +220,7 @@ def beat_pss(venv, broker_name, entries, directory, source=None):
         while 'beat: Starting...' not in log_path.read_text(errors='replace'):
             if time.monotonic() > deadline or process.poll() is not None:
                 raise RuntimeError(
-                    'beat non partito:\n' +
+                    'beat did not start:\n' +
                     log_path.read_text(errors='replace')[-3000:])
             time.sleep(0.05)
         time.sleep(2.0)
@@ -269,18 +257,18 @@ def measure(venv, brokers, workers=False, source=None):
 def print_report(label, data):
     print(f'\n== {label} ==')
     micro = data['micro']
-    print(f"remaining_estimate  semplice {micro['remaining_estimate_simple_ns']:8.0f} ns"
-          f"   misto {micro['remaining_estimate_mixed_ns']:8.0f} ns")
-    print(f"is_due              semplice {micro['is_due_simple_ns']:8.0f} ns"
-          f"   misto {micro['is_due_mixed_ns']:8.0f} ns")
+    print(f"remaining_estimate  simple {micro['remaining_estimate_simple_ns']:8.0f} ns"
+          f"   mixed {micro['remaining_estimate_mixed_ns']:8.0f} ns")
+    print(f"is_due              simple {micro['is_due_simple_ns']:8.0f} ns"
+          f"   mixed {micro['is_due_mixed_ns']:8.0f} ns")
     for name, result in data['brokers'].items():
         tick = result['tick']
         sends = result['sends']
-        print(f'{name:7} PSS 3 voci {result["pss_3_kb"] / 1024:6.1f} MB'
-              f'   1000 voci {result["pss_1000_kb"] / 1024:6.1f} MB'
+        print(f'{name:7} PSS 3 entries {result["pss_3_kb"] / 1024:6.1f} MB'
+              f'   1000 entries {result["pss_1000_kb"] / 1024:6.1f} MB'
               f'   tick {tick["tick_us"]:7.1f} µs'
-              f'   invii {sends["sends_s"]:8.0f}/s'
-              f'   CPU invii {sends["cpu_sends_s"] or 0:8.0f}/s')
+              f'   sends {sends["sends_s"]:8.0f}/s'
+              f'   CPU sends {sends["cpu_sends_s"] or 0:8.0f}/s')
 
 
 def compare(labels):
@@ -288,7 +276,7 @@ def compare(labels):
     for label in labels:
         path = RESULTS / f'beat-{label}.json'
         if not path.exists():
-            raise SystemExit(f'manca {path}: esegui prima il bench con --label {label}')
+            raise SystemExit(f'missing {path}: run the benchmark with --label {label} first')
         data[label] = json.loads(path.read_text())
     print('\n== ref vs rs ==')
     first, second = labels
@@ -300,29 +288,29 @@ def compare(labels):
     for broker in data[first]['brokers']:
         a = data[first]['brokers'][broker]
         b = data[second]['brokers'][broker]
-        print(f'{broker}: PSS 3 voci {pair(a["pss_3_kb"]/1024, b["pss_3_kb"]/1024, "{:.1f}")} MB')
-        print(f'{broker}: PSS 1000 voci {pair(a["pss_1000_kb"]/1024, b["pss_1000_kb"]/1024, "{:.1f}")} MB')
+        print(f'{broker}: PSS 3 entries {pair(a["pss_3_kb"]/1024, b["pss_3_kb"]/1024, "{:.1f}")} MB')
+        print(f'{broker}: PSS 1000 entries {pair(a["pss_1000_kb"]/1024, b["pss_1000_kb"]/1024, "{:.1f}")} MB')
         print(f'{broker}: tick {pair(a["tick"]["tick_us"], b["tick"]["tick_us"], "{:.1f}")} µs')
-        print(f'{broker}: invii/s {pair(a["sends"]["sends_s"], b["sends"]["sends_s"], "{:.0f}")}')
+        print(f'{broker}: sends/s {pair(a["sends"]["sends_s"], b["sends"]["sends_s"], "{:.0f}")}')
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--venv', default=None,
-                        help='virtualenv da misurare (es. .venv-ref)')
+                        help='virtualenv to measure (e.g. .venv-ref)')
     parser.add_argument('--label', default=None,
-                        help='nome del risultato (es. ref o rs)')
+                        help='result name (e.g. ref or rs)')
     parser.add_argument('--broker', nargs='+', default=['redis', 'amqp'],
                         choices=list(BROKERS))
     parser.add_argument('--compare', nargs=2, metavar=('A', 'B'))
     parser.add_argument('--source', type=Path,
-                        help='sorgente alternativo per confrontare la baseline')
+                        help='alternate source for baseline comparisons')
     args = parser.parse_args(argv)
     if args.compare:
         compare(args.compare)
         return 0
     if not (args.venv and args.label):
-        parser.error('servono --venv e --label (oppure --compare A B)')
+        parser.error('--venv and --label are required (or --compare A B)')
     data = measure(args.venv, args.broker,
                    source=str(args.source.resolve()) if args.source else None)
     data['label'] = args.label
@@ -330,7 +318,7 @@ def main(argv=None):
     path = RESULTS / f'beat-{args.label}.json'
     path.write_text(json.dumps(data, indent=1))
     print_report(args.label, data)
-    print(f'\nsalvato in {path}')
+    print(f'\nsaved to {path}')
     return 0
 
 
