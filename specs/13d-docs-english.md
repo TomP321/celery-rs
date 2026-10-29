@@ -2,7 +2,7 @@
 
 Read `specs/13-english-style.md` (mandatory rules).
 
-Scope: `README.md`, `docs/DIFFERENZE.md` (rename to `docs/DIFFERENCES.md` with `git mv` and fix
+Scope: `README.md`, `docs/DIFFERENCES.md` (rename to `docs/DIFFERENCES.md` with `git mv` and fix
 every reference in the repo), `PLAN.md`, `AGENTS.md`, `CLAUDE.md` if present, every file in
 `specs/`, the Markdown reports in `bench/results/`, `tools/selector/README.md`, and any other
 `*.md` outside `celery/` (the reference source is read-only).

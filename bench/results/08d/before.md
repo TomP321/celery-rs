@@ -1,6 +1,6 @@
-PSS in MiB; media e intervallo min–max di almeno due esecuzioni.
+PSS in MiB; average and min–max range of at least two runs.
 
-| Broker/task | impl (n) | idle | picco | dopo | task/s | p50/p99 ms |
+| Broker/task | impl (n) | idle | peak | after | task/s | p50/p99 ms |
 |---|---|---:|---:|---:|---:|---:|
 | amqp/bench | ref (2) | 307.1 (306.8–307.3) | 320.0 (319.6–320.5) | 320.0 (319.6–320.5) | 2888 (2815–2962) | 3.40/4.44 |
 | amqp/bench | rs (2) | 87.4 (87.0–87.8) | 233.1 (232.2–234.1) | 233.1 (232.2–234.1) | 3567 (3443–3692) | 2.80/7.08 |
@@ -11,16 +11,16 @@ PSS in MiB; media e intervallo min–max di almeno due esecuzioni.
 | redis/pure | ref (2) | 309.2 (309.0–309.3) | 311.2 (311.0–311.4) | 311.2 (311.0–311.4) | 918 (915–922) | 2.94/3.94 |
 | redis/pure | rs (2) | 87.5 (87.5–87.6) | 104.2 (104.0–104.4) | 104.2 (104.0–104.4) | 2535 (2448–2621) | 1.96/3.46 |
 
-| Broker/task | risparmio idle MiB (%) | picco MiB (%) | dopo MiB (%) |
+| Broker/task | idle savings MiB (%) | peak MiB (%) | after MiB (%) |
 |---|---:|---:|---:|
 | redis/bench | 226.0 (70.2%) | 79.1 (24.3%) | 79.1 (24.3%) |
 | redis/pure | 221.6 (71.7%) | 207.0 (66.5%) | 207.0 (66.5%) |
 | amqp/bench | 219.6 (71.5%) | 86.9 (27.2%) | 86.9 (27.2%) |
 | amqp/pure | 219.7 (71.6%) | 204.8 (66.0%) | 204.8 (66.0%) |
 
-PSS e Private_Dirty per processo, ogni esecuzione (idle → dopo, MiB).
+PSS and Private_Dirty per process, every execution (idle → after, MiB).
 
-| misura | ruolo/pid | PSS | Private_Dirty |
+| measure | role/pid | PSS | Private_Dirty |
 |---|---|---:|---:|
 | amqp/bench/ref/1 | master/1907975 | 26.1 → 28.0 | 11.3 → 14.4 |
 | amqp/bench/ref/1 | child/1908005 | 20.7 → 22.5 | 10.6 → 13.2 |

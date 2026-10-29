@@ -1,44 +1,45 @@
-09c — diagnosi e correzione dei cicli dei traceback (27 ottobre 2026)
+09c — diagnose and fix traceback loops (27 October 2026)
 
-Correzioni: `bench/soak.py` sceglie sempre `.venv-<impl>/bin/python`, anche senza `--compare` e con lock già acquisito. Nel figlio, dopo la serializzazione e l'invio di READY, si liberano i frame del traceback e i loro chiamanti già terminati. Nessuna modifica a soglie/abilitazione del GC, nessun nuovo preload o dipendenza. Diagnostica opzionale tramite `CELERY_RS_MEMORY_PROBE=<directory>`: RSS/PSS/USS/Shared/Private, snapshot tracemalloc aggiornato ogni 30 secondi e diff per traceback, contatori Rust se compilato con `memory-probe`, XML di `malloc_info`. Il percorso normale non importa la diagnostica.
+Corrections: `bench/soak.py` always chooses `.venv-<impl>/bin/python`, even without `--compare` and with a lock already acquired. In the child, after serialization and sending READY, the traceback frames and their already terminated callers are freed. No changes to GC thresholds/enablements, no new preloads or dependencies. Optional diagnostics via `CELERY_RS_MEMORY_PROBE=<directory>`: RSS/PSS/USS/Shared/Private, tracemalloc snapshot updated every 30 seconds and diff for traceback, Rust counters when compiled with `memory-probe`, XML of `malloc_info`. The normal path does not matter the diagnostics.
 
-Causa: `ExceptionInfo.exception → traceback → frame trace_task → f_back fast_trace_task → R → ExceptionInfo`. Celery tenta la pulizia mentre il tracer sta ancora eseguendo; inoltre `traceback.clear_frames()` percorre `tb_next`, non `f_back`. Le liste di posizioni del codice costruite da `billiard.einfo._Code` restano quindi in cicli fino al GC, con allocazioni e frammentazione. Una prima correzione limitata a `clear_frames()` lasciava ancora `ExceptionInfo` referenziati da `fast_trace_task`: verificato con `gc.get_referrers`. La correzione finale percorre anche `f_back`, fermandosi al primo frame ancora attivo.
+Cause: `ExceptionInfo.exception → traceback → frame trace_task → f_back fast_trace_task → R → ExceptionInfo`. Celery attempts cleanup while tracer is still running; also `traceback.clear_frames()` runs through `tb_next`, not `f_back`. The code location lists constructed by `billiard.einfo._Code` then remain in cycles until the GC, with allocations and fragmentation. An initial fix limited to `clear_frames()` still left `ExceptionInfo` referenced by `fast_trace_task`: verified with `gc.get_referrers`. The final correction also runs through `f_back`, stopping at the first frame still active.
 
-Il test sul vero `fast_trace_task`, con GC disabilitato, falliva prima di quest'ultima modifica e passa dopo: i weakref a `ExceptionInfo` si svuotano immediatamente per failure/retry/reject/ignore. Un altro test verifica identità dei byte pickle prima/dopo la pulizia. I test esistenti confrontano inoltre il pool Rust con billiard.
+The test on the real `fast_trace_task`, with GC disabled, failed before this last change and passes after: the weakrefs to `ExceptionInfo` are immediately emptied due to failure/retry/reject/ignore. Another test checks pickle byte identity before/after cleaning. Existing tests also compare Rust pool to billiard.
 
-Tabella causa → MiB/h: scomposizione dei baseline c10 forniti dall'orchestratore, campioni a 300 e 870 secondi; medie per figlio. Le componenti sono misure di pagine, non una stima indipendente del costo dei singoli siti di allocazione.
+Cause table → MiB/h: breakdown of c10 baselines provided by the orchestrator, samples at 300 and 870 seconds; averages per child. The components are measures of pages, not an independent estimate of the cost of individual allocation sites.
 
-| Componente osservata | Redis rs | AMQP rs |
+| Observed component | Redis rs | AMQP rs |
 |---|---:|---:|
-| Nuove pagine anonime/RSS (include cicli traceback, cache e frammentazione) | circa 10,0 | circa 16,4 |
-| Shared_Dirty perse, limite indicativo dell'erosione COW | circa 1,8 | circa 0,8 |
-| PSS complessiva del figlio | circa 11,4 | circa 17,0 |
+| New Anonymous Pages/RSS (includes traceback, caching and fragmentation loops) | about 10,0 | about 16,4 |
+| Shared_Dirty lost, indicative limit of COW erosion | about 1,8 | about 0,8 |
+| Child's overall PSS | about 11,4 | about 17,0 |
 
-Il problema dominante è quindi nuova memoria, non erosione COW. Nella prova diagnostica Redis da 2 minuti, l'heap Rust vivo oscilla fra circa 47 KiB e 2,09 MiB dopo l'avvio (buffer I/O), senza crescita progressiva; picco circa 8,1 MiB. Il diff Python indica soprattutto `billiard/einfo.py:28` (`list(code.co_positions())`). Nella prova AMQP con interventi diagnostici, il GC all'ultimo campione recupera circa 1,55 MiB Python e `malloc_trim` circa 7,37 MiB RSS; `malloc_info` registra circa 13,6 MiB liberi nelle arene. Questi dati includono l'overhead di tracemalloc/snapshot: NON sono pendenze naturali né motivano un nuovo trim o GC periodico in produzione.
+The dominant problem is therefore new memory, not COW erosion. In the 2 minute Redis diagnostic test, the live Rust heap fluctuates between approximately 47 KiB and 2,09 MiB after boot (I/O buffer), without progressive growth; peak approximately 8,1 MiB. The Python diff mostly indicates `billiard/einfo.py:28` (`list(code.co_positions())`). In the AMQP test with diagnostic interventions, the GC at the last sample recovers approximately 1,55 MiB Python and `malloc_trim` approximately 7,37 MiB RSS; `malloc_info` records approximately 13,6 MiB free in arenas. This data includes tracemalloc/snapshot overhead - it is NOT natural slopes nor does it motivate a new trim or periodic GC in production.
 
-Prove A/B finali: c1, stesso carico misto di `soak_app`/`soak.load`, senza beat, senza tracemalloc, 240 secondi, riavvio al secondo 120, lock esclusivo per broker. Prima = stessa build con sola pulizia disabilitata nel runner; dopo = correzione completa. Native compilato con `memory-probe` in entrambi i gruppi. I numeri sono MiB, campioni circa 30 → 240 secondi. Le quattro prove terminano con exit 0 (il runner verifica sopravvivenza dei processi, non certifica le soglie del soak).
+Final A/B tests: c1, same mixed load as `soak_app`/`soak.load`, no beat, no tracemalloc, 240 seconds, restart on second 120, broker-exclusive lock. Before = same build with cleanup only disabled in runner; after = complete correction. Native compiled with `memory-probe` in both groups. Numbers are MiB, samples approximately 30 → 240 seconds. The four tests end with exit 0 (the runner checks the survival of the processes, does not certify the soak thresholds).
 
-| Misura | Redis prima | Redis dopo | AMQP prima | AMQP dopo |
+| Measurement | Redis first | Redis after | AMQP first | AMQP after |
 |---|---:|---:|---:|---:|
-| PSS figlio | 27,05 → 30,24 | 23,79 → 24,95 | 27,59 → 30,43 | 24,16 → 24,39 |
-| RSS finale figlio | 53,16 | 48,47 | 53,72 | 48,18 |
-| USS finale figlio | 18,68 | 13,65 | 19,01 | 13,20 |
-| Crescita PSS worker + zygote + figlio | +5,45 | +1,13 | +5,87 | +0,97 |
-| Cicli completati | 66 | 66 | 56 | 56 |
-| Delta PSS totale circa 110 → 131/132 s, attorno al riavvio | −1,60 | −1,64 | +0,86 | +0,98 |
+| PSS son | 27,05 → 30,24 | 23,79 → 24,95 | 27,59 → 30,43 | 24,16 → 24,39 |
+| RSS final child | 53,16 | 48,47 | 53,72 | 48,18 |
+| USS Final Son | 18,68 | 13,65 | 19,01 | 13,20 |
+| Growth PSS worker + zygote + child | +5,45 | +1,13 | +5,87 | +0,97 |
+| Cycles Completed | 66 | 66 | 56 | 56 |
+| Delta PSS total around 110 → 131/132 s, around restart | −1,60 | −1,64 | +0,86 | +0,98 |
 
-La riduzione della crescita del figlio su questa finestra equivale a circa 35 MiB/h Redis e 45 MiB/h AMQP per c1; è un confronto breve che include warm-up e riconnessione, NON una previsione a un'ora. Dopo la correzione AMQP tende al plateau, Redis conserva crescita residua. Anche le prove precedenti da 120 secondi mostravano riduzione della PSS finale, ma la pulizia incompleta non risolveva il ciclo del chiamante.
+The child growth reduction on this window is equivalent to approximately 35 MiB/h Redis and 45 MiB/h AMQP for c1; It's a short comparison that includes warm-up and reconnection, NOT a one-hour forecast. After correction AMQP tends to plateau, Redis retains residual growth. Previous trials from 120 seconds also showed reduction in final PSS, but incomplete cleanup did not resolve the caller loop.
 
-Dati conservati in `bench/results/09c-memory-growth.json`: serie per ruolo/processo delle quattro prove da 240 s, cicli, tracce Python/Rust, statistiche malloc. Log e dettagli locali in `target/09c/`. Runner riproducibile:
+Data held in `bench/results/09c-memory-growth.json`: role/process sets of the four tests from 240 s, loops, Python/Rust traces, malloc statistics. Local logs and details in `target/09c/`. Playable runner:
 
 ```
 tools/dev/with-brokers .venv-rs/bin/python bench/memory_growth.py --broker redis --seconds 240 --output target/09c/new-redis
-# Aggiungere --without-cleanup per A/B, --trace per diagnosi.
-# --reclaim con --trace misura separatamente GC e malloc_trim; solo diagnosi.
+# Add --without-cleanup for A/B testing, --trace for diagnostics.
+# --reclaim with --trace measures GC and malloc_trim separately; diagnostics only.
+
 ```
 
-Verifiche eseguite: `cargo build --release` OK; `cargo clippy --all-targets -- -D warnings` OK; `tools/dev/with-brokers cargo test` OK, 240 test passati e 4 fuzz ignorati. Suite Python finale sotto lock (`test_worker_pool.py`, `test_redis_memory.py`, `test_memory_growth.py`, `bench/test_soak.py`): 39 passati, 52 warning di deprecazione fork da processo multithread. Le prove esplorative e A/B sono tutte bloccanti, al massimo 4 minuti ciascuna. Nessun gate o soak da 15/60 minuti eseguito.
+Checks performed: `cargo build --release` OK; `cargo clippy --all-targets -- -D warnings` OK; `tools/dev/with-brokers cargo test` OK, 240 tests passed and 4 fuzz skipped. Final Python suite under lock (`test_worker_pool.py`, `test_redis_memory.py`, `test_memory_growth.py`, `bench/test_soak.py`): 39 passed, 52 fork deprecation warning from multithreaded process. The exploratory and A/B tests are all blocking, at most 4 minutes each. No gate or soak for 15/60 minutes performed.
 
-Ripristinata e verificata la build normale con `tools/dev/build-package` (OK, `_allocator_stats` assente); i 10 test diagnostici/soak passano anche senza feature.
+Restored and verified normal build with `tools/dev/build-package` (OK, `_allocator_stats` absent); the 10 diagnostic/soak tests pass even without features.
 
-Da misurare dall'orchestratore: dopo `tools/dev/build-package`, soak `--compare --minutes 15` per PSS totale c10 e per figlio a 5 minuti/fine, pendenze relative al riferimento, delta attorno al riavvio e ripresa del carico; poi durata lunga se il confronto breve è soddisfacente. Verificare anche latenza e throughput rappresentativi: qui è verificata soltanto la parità dei cicli, oltre ai test del pool. La soglia della spec su 60 minuti e il salto totale c10 ≤3 MiB restano NON certificati.
+To be measured by orchestrator: after `tools/dev/build-package`, soak `--compare --minutes 15` for total PSS c10 and per child at 5 minutes/end, slopes relative to reference, delta around restart and load resumption; then long duration if the short comparison is satisfactory. Also check representative latency and throughput: only cycle parity is checked here, in addition to pool tests. The spec threshold on 60 minutes and the total jump c10 ≤3 MiB remain UNcertified.

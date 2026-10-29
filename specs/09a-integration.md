@@ -1,44 +1,23 @@
-# 09a — Hardening: suite di integrazione del Celery originale (`t/integration`) su celery-rs
+# 09a — Hardening: original Celery integration suite (`t/integration`) on celery-rs
 
-Fase 9 di `PLAN.md`. Gate di uscita della fase: **`t/integration` completa**, eseguita con
-celery-rs, con gli stessi esiti del riferimento. Priorità del progetto invariata: RAM di worker e
-beat, poi prestazioni; nessuna correzione può aumentare la PSS oltre il rumore (> 0,5 MB) senza
-motivarlo.
-Leggi `AGENTS.md` (anche "Fallimenti noti"), `PLAN.md`. Vincoli invariati: API, comportamento e
-traffico identici; oggetti kombu veri, nessun nome riscritto; `test_kombu_identity.py`,
-`celery/`, `celery/t/` intoccabili. Questa spec ti autorizza ad **aggiungere** a `tools/compat/`
-il sottocomando `integration` (senza modificare quelli esistenti).
+Phase 9 of `PLAN.md`. Phase output gate: **`t/integration` complete**, performed with celery-rs, with the same results as the reference. Project priority unchanged: worker and beat RAM, then performance; no correction can increase the PSS above the noise (> 0,5 MB) without motivating it. Read `AGENTS.md` (also "Known Failures"), `PLAN.md`. Constraints unchanged: Identical API, behavior and traffic; real kombu items, no rewritten names; `test_kombu_identity.py`, `celery/`, `celery/t/` untouchables. This spec authorizes you to **add** the `integration` subcommand to `tools/compat/` (without modifying the existing ones).
 
 ## 1. `./compat integration`
-Esegue `celery/t/integration` (copia in `tools/compat/out/integration-src` come fa `upstream`, mai
-modificando l'originale) con `.venv-ref` e con `.venv-rs`, sulle corsie di `tools/dev/with-brokers`,
-in due configurazioni:
+
+Runs `celery/t/integration` (copies into `tools/compat/out/integration-src` as `upstream` does, never modifying the original) with `.venv-ref` and with `.venv-rs`, on the lanes of `tools/dev/with-brokers`, in two configurations:
 - `TEST_BROKER=redis://…` `TEST_BACKEND=redis://…`
-- `TEST_BROKER=pyamqp://…` (AMQP della corsia) `TEST_BACKEND=redis://…`
+- `TEST_BROKER=pyamqp://…` (lane AMQP) `TEST_BACKEND=redis://…`
 
-Esito per test (passato/fallito/saltato/errore) per ref e rs; **regressione = fallisce in rs e
-passa in ref**; i test instabili si ripetono (come `upstream`) prima di essere contati. Report in
-`tools/compat/out/integration-report.md` (+ JSON) e riga di sintesi come gli altri gate.
-I test che richiedono servizi assenti (database, memcached, Django, security con certificati…)
-saltano o falliscono allo stesso modo in ref e rs: non sono regressioni; elencali.
-Aggiungi `integration` a `tools/dev/gates`.
+Test result (pass/fail/skip/error) for ref and rs; **regression = fails in rs and passes in ref**; unstable tests repeat (like `upstream`) before being counted. Report in `tools/compat/out/integration-report.md` (+ JSON) and summary line like the other gates. Tests that require absent services (database, memcached, Django, security with certificates...) skip or fail in the same way in ref and rs: they are not regressions; list them. Add `integration` to `tools/dev/gates`.
 
-## 2. Correzioni
-Porta le regressioni a **0**. Le aree attese sono il worker incorporato nei test
-(`celery.contrib.testing.worker.start_worker`, worker in thread con pool `solo`), canvas/chord,
-`test_connection_recovery.py` (broker che si riavvia: per riavviare il broker usa solo i container
-della **tua** corsia), `test_inspect.py`, `test_beat.py`, i test di leak
-(`test_mem_leak_in_exception_handling.py`, `test_events_state_memory_leak.py`,
-`test_backend_leak_in_fixture_teardown.py`). Per ogni correzione: test in `python/tests_rs/` che la
-copre, e verifica che la PSS del worker c10 e di beat non cresca (`bench/bench.py --pool prefork
+## 2. Corrections
+
+Bring regressions to **0**. Expected areas are the worker embedded in the tests (`celery.contrib.testing.worker.start_worker`, pooled threaded worker `solo`), canvas/chord, `test_connection_recovery.py` (broker restarting: to restart the broker only use containers in **your** lane), `test_inspect.py`, `test_beat.py`, leak tests (`test_mem_leak_in_exception_handling.py`, `test_events_state_memory_leak.py`, `test_backend_leak_in_fixture_teardown.py`). For each fix: test in `python/tests_rs/` which covers it, and verify that the PSS of the c10 and beat worker does not grow (`bench/bench.py --pool prefork
 --concurrency 10 --task pure`, `bench/bench_beat.py`).
 
 ## Gate
-`tools/dev/gates` (tutti verdi salvo i "Fallimenti noti"), compreso il nuovo `integration` con
-0 regressioni in entrambe le configurazioni.
 
-## Regole di lavoro (quota del modello limitata)
-Comandi lunghi **una volta e in modo bloccante**, niente controlli periodici dell'avanzamento.
-Non indagare i "Fallimenti noti". Rapporto finale breve: tabella esiti integration ref vs rs per
-configurazione (passati/falliti/saltati, regressioni prima/dopo), correzioni fatte e perché, PSS
-prima/dopo, gate con esito reale, cosa resta aperto. Committa nel branch (`09a: …`).
+`tools/dev/gates` (all green except for "Known Failures"), including the new `integration` with 0 regressions in both configurations.
+## Work Rules (model quota limited)
+
+Long commands **once and blocking**, no periodic progress checks. Don't investigate "Known Failures". Short final report: integration results table ref vs rs by configuration (passed/failed/skipped, regressions before/after), corrections made and why, PSS before/after, gate with real outcome, what remains open. Commit to the branch (`09a: …`).

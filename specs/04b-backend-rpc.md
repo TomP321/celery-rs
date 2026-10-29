@@ -1,83 +1,43 @@
-# 04b — Result backend `rpc://` sul trasporto Rust
+# 04b — Result backend `rpc://` on Rust transport
 
-Fase 4 di `PLAN.md`. Il backend `rpc://` pubblica i risultati con il producer dell'app (già Rust
-dalla fase 3b) e li consuma lato client con un `kombu.Consumer` su una connessione kombu
-separata. Questa spec porta sul core Rust **il lato client** (consumo delle risposte, `get_task_meta`
-via basic.get, dichiarazione della coda di risposta) lasciando invariata la logica di
-`python/celery/backends/rpc.py` e `asynchronous.py`. In parallelo un altro agente lavora sul backend
-Redis (spec 04a): non toccare `backends/redis.py` né `backends/base.py`.
+Phase 4 of `PLAN.md`. The `rpc://` backend publishes the results with the app producer (formerly Rust from the 3b phase) and consumes them client-side with a `kombu.Consumer` on a separate kombu connection. This spec brings **the client side** to the Rust core (response consumption, `get_task_meta` via basic.get, response queue declaration) leaving the logic of `python/celery/backends/rpc.py` and `asynchronous.py` unchanged. In parallel another agent works on the Redis backend (spec 04a): do not touch `backends/redis.py` nor `backends/base.py`.
 
-## Riferimenti
-- `python/celery/backends/rpc.py`: `ResultConsumer` (`start`, `drain_events`, `_reconnect`,
-  `reconnect_on_error`, `stop`, `on_after_fork`, `consume_from`, `cancel_for`, `on_state_change`),
-  `RPCBackend` (`on_task_call` — oggi `producer.channel` apre un canale **kombu** anche con
-  `RsProducer`: è da eliminare —, `destination_for`, `on_reply_declare`, `store_result`,
-  `on_out_of_band_result`, `get_task_meta`, `_slurp_from_queue`, `_set_cache_by_message`,
-  `binding`, `oid`, `_after_fork`).
-- `python/celery/backends/asynchronous.py`: `BaseResultConsumer`, `Drainer` (default/eventlet/gevent),
-  `AsyncBackendMixin` (`iter_native`, `wait_for_pending`, `_wait_for_pending`, `add_pending_result`).
-- kombu: `Consumer` (`add_queue`, `consume`, `cancel_by_queue`, `consuming_from`, `queues`, `accept`,
-  `no_ack`), `Message` (`payload`, `decode`, `properties`, `headers`, `delivery_info`,
-  `content_type`, `ack`, `reject`, `requeue`), `Connection.drain_events(timeout)` → `socket.timeout`.
-- `crates/celery-py/src/transport.rs` (`Connection.consume`/stream/`get`/`ack`, `declare_queue`),
-  `python/celery/app/_rs_producer.py` (`FastConnection`, `fast_connection`, `RsProducer.maybe_declare`,
-  fork, `stats()`).
+## References
 
-## Progetto
-1. **`RsResultConsumer`** (`python/celery/backends/_rs_rpc.py`), sottoclasse di
-   `rpc.ResultConsumer` con la stessa interfaccia: usa un `_celery_rs.Connection` dedicato
-   (non quello condiviso del producer: deve poter bloccare in `drain_events`), consumer su più
-   code di risposta con `no_ack`, `add_queue`/`cancel_by_queue` senza ricreare il consumer
-   (`ConsumerControl` del trasporto), `drain_events(timeout)` con la stessa eccezione di timeout
-   di kombu (`socket.timeout`/`TimeoutError`) e GIL rilasciato. Per ogni consegna costruisce un
-   oggetto messaggio compatibile con `kombu.Message` per gli attributi usati da Celery e dai
-   callback utente (`payload` decodificato con `_celery_rs.json_loads` se JSON, altrimenti kombu;
-   `accept` rispettato con la stessa `ContentDisallowed`; `properties['correlation_id']`,
-   `headers`, `delivery_info`, `ack()`/`reject()` sul delivery tag Rust).
-   `_reconnect` e `reconnect_on_error` mantengono la semantica (stessi log, ri-sottoscrizione delle
-   code), con gli errori di connessione Rust nella tupla `_connection_errors`.
-2. **`get_task_meta`/`_slurp_from_queue`**: basic.get sul trasporto Rust con lo stesso algoritmo
-   (backlog_limit, `BacklogLimitExceeded`, ack/requeue come oggi, cache `_out_of_band`).
-3. **`on_task_call`**: se il producer è un `RsProducer`, dichiara la coda di risposta con
-   `producer.maybe_declare(..., retry=True)` (niente canale kombu); altrimenti codice originale.
-   Verifica con un test che pubblicare un task con backend rpc **non apra** connessioni kombu
-   (RabbitMQ management API: una sola connessione `lapin` per il producer + una per il consumer
-   di risultati, nessuna `py-amqp`).
-4. **Attivazione**: `RPCBackend.ResultConsumer` diventa `RsResultConsumer` quando la connessione
-   dell'app è idonea al percorso veloce (`_rs_producer.fast_connection(app)` non `None`, solo
-   AMQP: `rpc://` con broker Redis resta kombu in questa spec) e `CELERY_RS_BACKEND` non è `0`.
-   I test upstream che sostituiscono `Consumer`/connessioni con mock devono restare sul ramo
-   originale: decidi l'attivazione in un punto che quei mock rispettano (per esempio in `start`
-   solo se `self.Consumer is kombu.Consumer` e `self.app.connection` non è stato sostituito).
-5. Fork safety come 03b (`register_at_fork`, `on_after_fork`). Niente modifiche a firme, nomi
-   o default pubblici; nessuna nuova impostazione in `app.conf`.
-6. Il trasporto AMQP Rust: se serve, aggiungi in `celery-transport` ciò che manca (consumer
-   `no_ack` multi-coda con add/cancel dinamici, basic.get) con test in `crates/celery-transport/tests/amqp.rs`.
+- `python/celery/backends/rpc.py`: `ResultConsumer` (`start`, `drain_events`, `_reconnect`, `reconnect_on_error`, `stop`, `on_after_fork`, `consume_from`, `cancel_for`, `on_state_change`), `RPCBackend` (`on_task_call` — today `producer.channel` opens a **kombu** channel also with `RsProducer`: it must be eliminated —, `destination_for`, `on_reply_declare`, `store_result`, `on_out_of_band_result`, `get_task_meta`, `_slurp_from_queue`, `_set_cache_by_message`, `binding`, `oid`, `_after_fork`).
+- `python/celery/backends/asynchronous.py`: `BaseResultConsumer`, `Drainer` (default/eventlet/gevent), `AsyncBackendMixin` (`iter_native`, `wait_for_pending`, `_wait_for_pending`, `add_pending_result`).
+- kombu: `Consumer` (`add_queue`, `consume`, `cancel_by_queue`, `consuming_from`, `queues`, `accept`, `no_ack`), `Message` (`payload`, `decode`, `properties`, `headers`, `delivery_info`, `content_type`, `ack`, `reject`, `requeue`), `Connection.drain_events(timeout)` → `socket.timeout`.
+- `crates/celery-py/src/transport.rs` (`Connection.consume`/stream/`get`/`ack`, `declare_queue`), `python/celery/app/_rs_producer.py` (`FastConnection`, `fast_connection`, `RsProducer.maybe_declare`, fork, `stats()`).
 
-## Gate (tutti obbligatori, esito reale nel messaggio finale)
+## Project
+
+1. **`RsResultConsumer`** (`python/celery/backends/_rs_rpc.py`), subclass of `rpc.ResultConsumer` with the same interface: use a dedicated `_celery_rs.Connection` (not the shared one of the producer: it must be able to block in `drain_events`), consumer on multiple response queues with `no_ack`, `add_queue`/`cancel_by_queue` without recreating the consumer (transport `ConsumerControl`), `drain_events(timeout)` with the same kombu timeout exception (`socket.timeout`/`TimeoutError`), and GIL released. For each delivery it constructs a message object compatible with `kombu.Message` for the attributes used by Celery and user callbacks (`payload` decoded with `_celery_rs.json_loads` if JSON, otherwise kombu; `accept` respected with the same `ContentDisallowed`; `properties['correlation_id']`, `headers`, `delivery_info`, `ack()`/`reject()` on the Rust delivery tag). `_reconnect` and `reconnect_on_error` retain semantics (same logs, re-subscribing queues), with Rust connection errors in the `_connection_errors` tuple.
+2. **`get_task_meta`/`_slurp_from_queue`**: basic.get on the Rust transport with the same algorithm (backlog_limit, `BacklogLimitExceeded`, ack/requeue as today, cache `_out_of_band`).
+3. **`on_task_call`**: if the producer is a `RsProducer`, declare the response queue with `producer.maybe_declare(..., retry=True)` (no kombu channel); otherwise original code. Verify with a test that publishing a task with rpc backend **does not open** kombu connections (RabbitMQ management API: only one connection `lapin` for the producer + one for the result consumer, none `py-amqp`).
+4. **Activation**: `RPCBackend.ResultConsumer` becomes `RsResultConsumer` when app connection is fast path eligible (`_rs_producer.fast_connection(app)` not `None`, AMQP only: `rpc://` with Redis broker remains kombu in this spec) and `CELERY_RS_BACKEND` it is not `0`. Upstream tests that replace `Consumer`/connections with mocks must remain on the original branch: decide the activation at a point that those mocks respect (for example in `start` only if `self.Consumer is kombu.Consumer` and `self.app.connection` has not been replaced).
+5. Fork safety like 03b (`register_at_fork`, `on_after_fork`). No changes to signatures, names or public defaults; no new settings in `app.conf`.
+6. The AMQP Rust transport: if needed, add what is missing in `celery-transport` (multi-queue `no_ack` consumer with dynamic add/cancel, basic.get) with tests in `crates/celery-transport/tests/amqp.rs`.
+
+## Gate (all mandatory, real outcome in final message)
+
 ```
 cargo build --release && cargo clippy --all-targets -- -D warnings && cargo test
 tools/dev/build-package
 tools/dev/build-native
 .venv-ref/bin/python -m pytest crates/celery-py/tests -q
 .venv-rs/bin/python -m pytest python/tests_rs -q
-./compat api                      # 0 differenze
-./compat wire                     # 0 scenari diversi (include chord/group su rpc)
-./compat upstream --venv .venv-rs # 0 regressioni
+./compat api                      # 0 differences
+./compat wire                     # 0 differing scenarios (includes chord/group on rpc)
+./compat upstream --venv .venv-rs # 0 regressions
 ```
-Inoltre `python/tests_rs/test_backend_rpc.py` (`.venv-rs`, RabbitMQ su 5673), con worker reale
-del riferimento (`.venv-ref/bin/celery worker -P solo`) e client rs:
-- il consumer usato è `RsResultConsumer` (contatore/flag) e nessuna connessione py-amqp è aperta;
-- `AsyncResult.get(timeout)`, `propagate`, risultati di più task in volo, `ResultSet.join_native`,
-  `iter_native`, group, stati intermedi (`update_state` PROGRESS → `on_message`), `forget`,
-  `get_task_meta` con backlog (più messaggi per lo stesso task) e `BacklogLimitExceeded`,
-  timeout → stessa `TimeoutError` di Celery;
-- connessione chiusa via management API durante `get()` → riconnessione e risultato ricevuto;
-- `os.fork()` e billiard: il figlio riceve i propri risultati;
-- `CELERY_RS_BACKEND=0` torna al consumer kombu.
-- Benchmark in `bench/bench_result.py` (se l'altro agente lo crea, aggiungi solo l'opzione
-  `--backend rpc`; altrimenti crealo): latenza `apply_async().get()` p50/p99 e throughput di
-  `join_native` su 1000 risultati, RSS client; `.venv-ref` vs `.venv-rs`.
+Also `python/tests_rs/test_backend_rpc.py` (`.venv-rs`, RabbitMQ on 5673), with real reference worker (`.venv-ref/bin/celery worker -P solo`) and rs client:
+- the consumer used is `RsResultConsumer` (counter/flag) and no py-amqp connection is open;
+- `AsyncResult.get(timeout)`, `propagate`, results of multiple tasks in flight, `ResultSet.join_native`, `iter_native`, group, intermediate states (`update_state` PROGRESS → `on_message`), `forget`, `get_task_meta` with backlog (multiple messages for the same task) and `BacklogLimitExceeded`, timeout → same `TimeoutError` as Celery;
+- connection closed via management API during `get()` → reconnection and result received;
+- `os.fork()` and billiards: the child receives his results;
+- `CELERY_RS_BACKEND=0` returns to consumer kombu.
+- Benchmark in `bench/bench_result.py` (if other agent creates it, just add `--backend rpc` option; otherwise create it): `apply_async().get()` p50/p99 latency and throughput of `join_native` on 1000 results, RSS client; `.venv-ref` vs. `.venv-rs`.
 
-## Fuori scope
-Backend Redis (04a), `rpc://` su broker Redis, eventi, control/broadcast, il worker.
+## Out of scope
+
+Redis backend (04a), `rpc://` on Redis broker, events, control/broadcast, the worker.

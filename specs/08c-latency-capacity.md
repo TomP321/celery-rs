@@ -1,51 +1,32 @@
-# 08c — Latenze e capacità reale del worker, senza aumentare la RAM
+# 08c — Latencies and real worker capacity, without increasing RAM
 
-Priorità del progetto: **RAM di worker e beat** prima di tutto; qui si migliorano latenze e
-throughput **solo con modifiche che non aumentano la PSS** (worker c10 idle/carico, beat, client):
-ogni modifica riporta la PSS prima/dopo; se cresce oltre il rumore (> 0,5 MB) va scartata o
-motivata con un guadagno di prestazioni grande.
-Leggi `AGENTS.md` (anche "Fallimenti noti"), `PLAN.md`, `specs/08d-worker-c10.md`.
-Vincoli invariati: API, comportamento e traffico sul broker identici al riferimento
-(`compat wire*`), oggetti kombu veri, nessun nome riscritto, `test_kombu_identity.py` intoccabile,
-`celery/`, `celery/t/`, `tools/compat/` non si modificano.
+Project priorities: **Worker RAM and beats** first; here latency and throughput are improved **only with changes that do not increase the PSS** (worker c10 idle/load, beat, client): each change reports the PSS before/after; if it grows beyond the noise (> 0,5 MB) it should be discarded or motivated with a large performance gain. Read `AGENTS.md` (also "Known Failures"), `PLAN.md`, `specs/08d-worker-c10.md`. Constraints unchanged: API, behavior and traffic on the broker identical to the reference (`compat wire*`), real kombu objects, no rewritten names, `test_kombu_identity.py` untouchable, `celery/`, `celery/t/`, `tools/compat/` do not change.
 
-## 1. Misure mancanti (prima di ottimizzare)
-- **Capacità reale del worker c10**: oggi `bench/bench.py` misura il throughput mentre un solo
-  client pubblica, e con celery-rs la coda si svuota alla stessa velocità della pubblicazione
-  (limite del client, non del worker). Aggiungi a `bench/bench.py` una modalità `--prefill`:
-  pubblica N task con il worker fermo, poi avvia il worker e misura il tempo di svuotamento
-  (task/s del worker) e la PSS di picco. Misura ref vs rs, c4 e c10, Redis e AMQP, `--task pure` e
-  `bench`.
-- **App realistica**: variante del task del bench con `import redis` **in cima al modulo** dei
-  task (come in un'app vera, quindi condiviso via zygote) invece che dentro la funzione:
-  `--task bench-toplevel`. Misura PSS c10 ref vs rs (dovrebbe stare vicino a `pure`).
+## 1. Missing measurements (before optimizing)
 
-## 2. Latenze da migliorare
-| misura | ref | rs oggi |
+- **Real c10 worker capacity**: Today `bench/bench.py` measures throughput while a single client publishes, and with celery-rs the queue empties at the same rate as publish (client limit, not worker limit). Add to `bench/bench.py` a mode `--prefill`: publish N tasks with the worker stopped, then start the worker and measure the emptying time (worker tasks/s) and the peak PSS. Measure ref vs rs, c4 and c10, Redis and AMQP, `--task pure` and `bench`.
+- **Realistic app**: variant of the bench task with `import redis` **at the top of the task module** (as in a real app, therefore shared via zygote) instead of inside the function: `--task bench-toplevel`. Measure PSS c10 ref vs rs (should be close to `pure`).
+
+## 2. Latencies to be improved
+
+| measure | ref | rs today |
 |---|---|---|
-| backend rpc, `delay().get()` p50 | 3,25 ms | 3,40 ms |
-| `inspect ping` in-process verso worker AMQP | — | +1,5 ms rispetto al ref (fase 07) |
+| rpc backend, `delay().get()` p50 | 3,25 ms | 3,40 ms |
+| `inspect ping` in-process to AMQP worker | — | +1,5 ms compared to ref (phase 07) |
 | `inspect ping` worker AMQP prefork, p50 | 9,72 ms | 10,66 ms |
 | `delay().get()` Redis c10 p50 | 3,01 ms | 1,94 ms |
 | `delay().get()` AMQP c10 p50 | 3,28 ms | 2,66 ms |
 
-Obiettivi: rpc e `inspect ping` AMQP **non peggiori del riferimento** (meglio se ≥ 20% più
-veloci); capacità c10 col `--prefill` la più alta possibile; p99 non peggiore del riferimento.
-Profila prima (dove va il tempo: client, broker, master, IPC, figlio, risposta) e riporta la
-scomposizione. Esempi da verificare con i numeri: attese/poll con timeout nel percorso di
-risposta, Nagle/flush sui socket AMQP, batch degli ack, wake-up del loop, serializzazioni
-ripetute, prefetch con c10.
+Objectives: rpc and `inspect ping` AMQP **not worse than reference** (better if ≥ 20% faster); c10 capacity with `--prefill` the highest possible; p99 no worse than the reference. Profile first (where the time goes: client, broker, master, IPC, child, response) and report the breakdown. Examples to check with numbers: waits/polls with timeouts in the response path, Nagle/flush on AMQP sockets, ack batching, loop wake-up, repeated serializations, prefetch with c10.
 
 ## Test
-Test in `python/tests_rs/` per ogni cambio di comportamento; nessun test esistente indebolito.
+
+Test in `python/tests_rs/` for any change in behavior; no existing tests weakened.
 
 ## Gate
-`tools/dev/gates` (tutti verdi salvo i "Fallimenti noti" di `AGENTS.md`). Verifiche intermedie con
-`tools/dev/gates --only <nome>` o singoli test sotto `tools/dev/with-brokers`.
 
-## Regole di lavoro (quota del modello limitata)
-Esegui i comandi lunghi **una volta e in modo bloccante**, non in background con controlli
-periodici: ogni controllo costa una chiamata al modello. Non indagare i "Fallimenti noti".
-Rapporto finale breve: tabelle prima/dopo (latenze, capacità `--prefill`, PSS c10 `pure`/`bench`/
-`bench-toplevel`, beat), cosa hai cambiato e perché, varianti scartate con i numeri, gate con esito
-reale, cosa resta aperto. Committa nel branch (`08c: …`).
+`tools/dev/gates` (all green except for the "Known Failures" of `AGENTS.md`). Intermediate checks with `tools/dev/gates --only <nome>` or individual tests under `tools/dev/with-brokers`.
+
+## Work Rules (model quota limited)
+
+Run long commands **once and blocking**, not in the background with periodic checks: each check costs one model call. Don't investigate "Known Failures". Short final report: before/after tables (latencies, capacities `--prefill`, PSS c10 `pure`/`bench`/ `bench-toplevel`, beats), what you changed and why, discarded variants with numbers, gates with real outcome, what remains open. Commit to the branch (`08c: …`).

@@ -1,66 +1,45 @@
-# 08f — RAM di `celery beat` (e `worker -B`) al minimo
+# 08f — `celery beat` (and `worker -B`) RAM at minimum
 
-Priorità del progetto: **la RAM di worker e beat rispetto al Celery originale**; le prestazioni
-vengono dopo. Questa spec è dedicata a beat. Leggi `AGENTS.md`, `PLAN.md`, `specs/06-beat.md`,
-`specs/08b-memory.md` (decisioni su import pigri onesti) e `specs/08b-review.md`.
-Vincoli invariati: API, comportamento, traffico sul broker e formato del file di schedule
-(`celerybeat-schedule`, shelve) identici al riferimento; **oggetti kombu/billiard veri, nessun
-`__module__`/`__qualname__`/`__name__` riscritto, nessuna classe sostitutiva**
-(`python/tests_rs/test_kombu_identity.py` non si modifica); `celery/`, `celery/t/`,
-`tools/compat/` non si modificano.
+Project priority: **worker and beat RAM compared to the original Celery**; performance comes later. This spec is dedicated to beat. Read `AGENTS.md`, `PLAN.md`, `specs/06-beat.md`, `specs/08b-memory.md` (honest lazy import decisions), and `specs/08b-review.md`. Constraints unchanged: API, behavior, broker traffic and schedule file format (`celerybeat-schedule`, shelf) identical to the reference; **real kombu/billiard objects, no rewritten `__module__`/`__qualname__`/`__name__`, no replacement classes** (`python/tests_rs/test_kombu_identity.py` does not change); `celery/`, `celery/t/`, `tools/compat/` are not changed.
 
-## Misura di partenza (main @ 8ca8eae, `bench/bench_beat.py`, PSS dopo l'avvio)
+## Starting measurement (main @ 8ca8eae, `bench/bench_beat.py`, PSS after startup)
+
 | | ref | rs |
 |---|---|---|
-| 3 voci, Redis | 50,8 MB | 31,7 MB |
-| 3 voci, AMQP | 43,0 MB | 31,6 MB |
-| 1000 voci, Redis | 58,1 MB | 42,6 MB |
-| 1000 voci, AMQP | 50,2 MB | 42,9 MB |
-| invii/s Redis / AMQP | 433 / 470 | 481 / 561 |
-| `Scheduler.tick` 1000 voci | 1130 µs | ~1167 µs |
+| 3 entries, Redis | 50,8 MB | 31,7 MB |
+| 3 entries, AMQP | 43,0 MB | 31,6 MB |
+| 1000 entries, Redis | 58,1 MB | 42,6 MB |
+| 1000 entries, AMQP | 50,2 MB | 42,9 MB |
+| send/s Redis / AMQP | 433 / 470 | 481 / 561 |
+| `Scheduler.tick` 1000 entries | 1130 µs | ~1167 µs |
 
-rs cresce di **~11 KB per voce** (31,7 → 42,6 MB). Il processo beat a 3 voci pesa ancora 31,7 MB.
+rs grows by **~11 KB per entry** (31,7 → 42,6 MB). The beat process at 3 entries still weighs 31,7 MB.
 
-## Obiettivi
-- beat 3 voci ≤ **24 MB** su Redis e AMQP;
-- crescita per voce ≤ **3 KB** (1000 voci ≤ base + 3 MB); misura anche 10 000 voci;
-- PSS stabile nel tempo: dopo 30 minuti di invii (o equivalente accelerato) nessuna crescita;
-- `worker -B` (beat embedded, oggi in thread): misura la PSS del worker con e senza `-B`
-  (`-P solo` e prefork c10) e riduci il costo aggiuntivo;
-- invii/s e tick non peggiorano.
+## Objectives
 
-## Dove guadagnare (misura prima, adotta solo ciò che il bench conferma)
-1. **Scomposizione** della PSS del processo beat: moduli Python caricati (elenco e costo,
-   `python -X importtime`, `tracemalloc`), heap Python, librerie mappate, heap Rust. Riporta la
-   tabella prima/dopo.
-2. **Import**: ciò che beat carica senza usarlo (CLI, worker, canvas, backend, pygments, click
-   oltre al necessario, ecc.) → import pigri onesti come in 08b.
-3. **Per voce**: `ScheduleEntry` e gli oggetti `schedule`/`crontab`/`solar` tengono molti attributi
-   Python; il core Rust ha già crontab (`crates/celery-beat`). Valuta di tenere lo stato di
-   pianificazione (prossima scadenza, campi crontab espansi) in strutture Rust compatte, con
-   `ScheduleEntry`/`crontab` Python che restano gli oggetti pubblici identici (stessi attributi,
-   `repr`, pickle, confronti) ma senza duplicare dati; `__slots__` solo dove il riferimento non
-   espone `__dict__` in modo osservabile. Verifica il costo per voce di: entry, schedule, shelve
-   (cache in memoria di `PersistentScheduler`), dizionari `options`/`kwargs`.
-4. **Persistenza**: `PersistentScheduler` sincronizza lo shelve; verifica che non tenga copie
-   doppie delle voci in memoria (cache del modulo `dbm`/`shelve` con `writeback`).
-5. **`-B`**: il beat embedded condivide il processo con il worker; ciò che beat carica pesa sul
-   master. Valuta l'avvio dallo zygote come processo separato solo se riduce la PSS totale.
+- beat 3 entries ≤ **24 MB** on Redis and AMQP;
+- growth per item ≤ **3 KB** (1000 items ≤ base + 3 MB); also fits 10 000 entries;
+- PSS stable over time: after 30 minutes of sending (or accelerated equivalent) no growth;
+- `worker -B` (embedded beat, now threaded): measure the PSS of the worker with and without `-B` (`-P solo` and prefork c10) and reduce the additional cost;
+- send/s and ticks don't get worse.
+
+## Where to earn (measure first, only adopt what the bench confirms)
+
+1. **Breakdown** of the beat process PSS: loaded Python modules (list and cost, `python -X importtime`, `tracemalloc`), Python heap, mapped libraries, Rust heap. Report the before/after table.
+2. **Import**: what beat loads without using it (CLI, workers, canvas, backend, pygments, clicks beyond necessary, etc.) → honest lazy imports as in 08b.
+3. **By entry**: `ScheduleEntry` and the `schedule`/`crontab`/`solar` objects hold many Python attributes; the Rust core already has crontab (`crates/celery-beat`). Consider keeping the schedule state (next deadline, expanded crontab fields) in compact Rust structures, with `ScheduleEntry`/`crontab` Python remaining identical public objects (same attributes, `repr`, pickles, comparisons) but without duplicating data; `__slots__` only where the reference does not observably expose `__dict__`. Check the cost per entry of: entry, schedule, shelf (`PersistentScheduler` in-memory cache), `options`/`kwargs` dictionaries.
+4. **Persistence**: `PersistentScheduler` synchronizes the shelf; check that it does not keep duplicate copies of entries in memory (module cache `dbm`/`shelve` with `writeback`).
+5. **`-B`**: the embedded beat shares the process with the worker; what beat loads weighs on the master. Consider starting from the zygote as a separate process only if it reduces the total PSS.
 
 ## Test
-- `python/tests_rs/test_beat.py` (esistente) resta verde; aggiungi test per ogni cambio:
-  attributi/`repr`/pickle/uguaglianza di `ScheduleEntry` e `crontab` identici al riferimento,
-  file di schedule leggibile da ref e da rs nei due sensi, nessuna crescita di PSS oltre una soglia.
-- `./compat wire-beat` 0 differenze.
+
+- `python/tests_rs/test_beat.py` (existing) remains green; add test for each change: attributes/`repr`/pickle/equality of `ScheduleEntry` and `crontab` identical to the reference, schedule file readable by ref and rs in both directions, no growth of PSS beyond a threshold.
+- `./compat wire-beat` 0 differences.
 
 ## Gate
-`tools/dev/gates` (tutti verdi; il comando esegue tutto in parallelo sulle corsie in ~10 minuti).
-Per le verifiche intermedie usa `tools/dev/gates --only <nome>` o singoli test sotto
-`tools/dev/with-brokers`.
 
-## Regole di lavoro (quota del modello limitata)
-Esegui i comandi lunghi **una volta e in modo bloccante** (un solo comando che aspetta la fine),
-non in background con controlli periodici: ogni controllo costa una chiamata al modello.
-Rapporto finale breve: tabella ref vs rs prima/dopo (3, 1000, 10 000 voci; Redis/AMQP; `-B`),
-scomposizione della PSS, cosa hai cambiato e perché, varianti scartate con i numeri, gate con esito
-reale, cosa resta aperto. Committa nel branch (`08f: …`).
+`tools/dev/gates` (all green; command runs everything in parallel across lanes in ~10 minutes). For intermediate tests use `tools/dev/gates --only <nome>` or individual tests under `tools/dev/with-brokers`.
+
+## Work Rules (model quota limited)
+
+Run long commands **once and in a blocking manner** (just one command waiting for the end), not in the background with periodic checks: each check costs one model call. Final short report: ref vs rs before/after table (3, 1000, 10 000 entries; Redis/AMQP; `-B`), PSS breakdown, what you changed and why, discarded variants with numbers, gates with real outcome, what remains open. Commit to the branch (`08f: …`).

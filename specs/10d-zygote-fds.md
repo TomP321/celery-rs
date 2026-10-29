@@ -1,37 +1,20 @@
-# 10d — Zygote: non chiudere i descrittori aperti dal codice utente
+# 10d — Zygote: Don't close descriptors opened by user code
 
-Revisione dell'orchestratore. `python/celery/concurrency/_rs_zygote.py::_main` importa i moduli
-dell'applicazione (`app.loader.import_default_modules()`, precarichi) e **poi** chiama
-`_close_inherited_fds`, che chiude tutti i descrittori tranne stdio, il controllo e gli stream dei
-logger. Così chiude anche file, socket e connessioni aperti dal codice utente a livello di modulo
-(es. `DATA = open('dati.txt')`, un client creato all'import). Nel riferimento i figli prefork
-(billiard, fork dal master) ereditano tutti i descrittori del master e possono usarli nei task:
-qui li trovano chiusi. È una differenza di comportamento da eliminare.
+Orchestrator review. `python/celery/concurrency/_rs_zygote.py::_main` imports the application modules (`app.loader.import_default_modules()`, preloads) and **then** calls `_close_inherited_fds`, which closes all descriptors except stdio, control, and logger streams. Thus it also closes files, sockets and connections opened by user code at the module level (e.g. `DATA = open('dati.txt')`, a client created on import). In the reference, the prefork children (billiard, fork from the master) inherit all the descriptors of the master and can use them in tasks: here they find them closed. It is a difference in behavior that must be eliminated.
 
-Leggi `AGENTS.md`, `specs/05b-worker-pool.md`, `specs/09a-integration.md` (fd di logging),
-`specs/10c-ram-budget.md`. Vincoli invariati.
+Read `AGENTS.md`, `specs/05b-worker-pool.md`, `specs/09a-integration.md` (logging fd), `specs/10c-ram-budget.md`. Constraints unchanged.
 
-## Lavoro
-1. Lo zygote (e i figli) devono chiudere **solo** i descrittori che appartengono al runtime Rust
-   del master (epoll, eventfd/waker, socket del broker e del backend Rust, pipe interne), non
-   quelli aperti dal codice Python dell'utente o dalle librerie. Strategie possibili, da scegliere
-   con i numeri e la sicurezza: il runtime Rust espone l'elenco dei propri fd (o li apre con
-   `O_CLOEXEC` e li marca), oppure si registra l'insieme dei fd prima dell'avvio del runtime Rust e
-   si chiudono solo quelli creati dopo dal runtime. Gli fd Rust ereditati non devono mai essere
-   usati né chiusi due volte dal figlio (fork safety già verificata in 09b).
-2. Test differenziale in `python/tests_rs` (worker rs e worker ref, `-P prefork -c 2`): un modulo
-   di task apre all'import un file e un socket di loopback; un task li legge/usa; l'esito deve
-   essere identico al riferimento.
-3. Test dell'invariante della 10c: dopo l'avvio, lo zygote non apre nuovi fd (conteggio di
-   `/proc/<zygote>/fd` uguale dopo N spawn e respawn di figli con `max_tasks_per_child`); se
-   l'invariante si rompesse, i figli erediterebbero fd che non chiudono più.
-4. Nessun aumento di RAM (`bench/bench.py --pool prefork --concurrency 10 --task pure --prefill`,
-   prima/dopo) e nessuna regressione negli fd di logging (test di 09a).
+## Work
 
-## Verifica
-Test mirati tuoi, bloccanti. **Non** eseguire `tools/dev/gates`, soak o `./compat integration`:
-li esegue l'orchestratore.
+1. The zygote (and children) should close **only** descriptors that belong to the master's Rust runtime (epoll, eventfd/waker, Rust broker and backend sockets, internal pipes), not those opened by the user's Python code or libraries. Possible strategies, to be chosen with numbers and security: the Rust runtime exposes the list of its fds (or opens them with `O_CLOEXEC` and marks them), or you register the set of fds before starting the Rust runtime and close only those created afterwards by the runtime. Inherited Rust fds must never be used or closed twice by the child (fork safety already verified in 09b).
+2. Differential test in `python/tests_rs` (worker rs and worker ref, `-P prefork -c 2`): a task module opens a file and a loopback socket to import; a task reads/uses them; the outcome must be identical to the reference.
+3. 10c invariant test: after booting, the zygote does not open new fd (`/proc/<zygote>/fd` count equal after N spawns and respawns of children with `max_tasks_per_child`); if the invariant were to break, the children would inherit fd that no longer close.
+4. No increase in RAM (`bench/bench.py --pool prefork --concurrency 10 --task pure --prefill`, before/after) and no regression in logging fd (09a test).
 
-## Regole di lavoro (quota del modello limitata)
-Comandi bloccanti, niente messaggi di attesa o comandi in background. Rapporto breve: strategia
-scelta e perché, file toccati, test eseguiti, RAM prima/dopo. Committa nel branch (`10d: …`).
+## Check
+
+Targeted tests yours, blockers. **Do not** run `tools/dev/gates`, soak, or `./compat integration` - the orchestrator does them.
+
+## Work Rules (model quota limited)
+
+Blocking commands, no waiting messages or background commands. Brief report: strategy chosen and why, files touched, tests performed, RAM before/after. Commit to the branch (`10d: …`).

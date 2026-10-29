@@ -1,65 +1,27 @@
-# Implementazione e interpretazione
+# Implementation and interpretation
 
-- `--prefill` separa la capacità del worker dalla pubblicazione: worker pronto,
-  gruppo sospeso, N pubblicazioni, verifica zero completamenti, ripresa e drain.
-  Rimossi i task di warm-up dal conteggio; 66 prove da 10.000 task hanno verificato
-  esattamente N completamenti e zero completamenti prima della ripresa.
-- `bench-toplevel` importa redis-py nel modulo dei task prima del fork e usa lo
-  stesso INCR della variante con import nel figlio.
-- AMQP riusa il canale delle dichiarazioni solo per il consumer temporaneo pidbox.
-  I consumer ordinari mantengono canali, QoS e tag indipendenti. Il controllo riusa
-  il descrittore del pool esistente, rispettando fallback, override e disabilitazione.
-- Eliminato il `queue.delete` esplicito dopo il ping AMQP: nel riferimento
-  `kombu.transport.base.StdChannel.after_reply_message_received` è vuoto.
-  Il broker esegue l'auto-delete; una reply queue durevole deve invece sopravvivere.
-  Quest'ultimo comportamento ha un test differenziale con il client di riferimento.
-- L'attesa dei risultati continua a cedere la CPU quando il risultato è pendente;
-  evita il `sleep(0)` successivo alla risposta finale.
+- `--prefill` separates worker capacity from publish: worker ready, group suspended, N publishes, check zero completions, resume and drain. Removed warm-up tasks from the count; 66 trials from 10.000 task verified exactly N completions and zero completions before resuming.
+- `bench-toplevel` import redis-py into the tasks module before fork and use the same INCR as the variant with import into the child.
+- AMQP reuses the declaration channel only for the pidbox temporary consumer. Ordinary consumers maintain independent channels, QoS and tags. The control reuses the existing pool descriptor, respecting fallback, overriding, and disabling.
+- Removed explicit `queue.delete` after AMQP ping: in reference `kombu.transport.base.StdChannel.after_reply_message_received` is empty. The broker performs auto-delete; a durable reply queue must survive. The latter behavior has a differential test with the reference client.
+- Waiting for results continues to waste CPU when the result is pending; avoids the `sleep(0)` following the final answer.
 
-## Profilazione e varianti
+## Profiling and variants
 
-La profilazione è separata dalle latenze. Nel master rs Redis c10, su 10.101 task,
-ack sincroni: 2,355 s (233 µs/task); pickle IPC: 0,180 s (18 µs/task);
-submit al pool: 0,064 s (6 µs/task). L'attesa epoll include avvio, idle e pausa del
-prefill, quindi non è interpretabile come costo CPU del task. I profili testuali
-sono conservati insieme ai JSON.
+Profiling is separate from latencies. In the rs Redis c10 master, on 10.101 tasks, synchronous acks: 2,355 s (233 µs/task); pickle IPC: 0,180 s (18 µs/task); submit to pool: 0,064 s (6 µs/task). The epoll wait includes startup, idle and prefill pause, so it cannot be interpreted as the CPU cost of the task. Textual profiles are stored together with JSON.
+Just reusing the channel (`after-latency-*.json`, intermediate variant) was not enough: ping p50 rs 9,68/9,26 ms against 8,79/8,82 of the ref, on worker ref/rs. Adding pool and removing final yield, but still keeping delete (`candidate-latency-*.json`), ping 8,89/9,07 ms; there remained a p99 of 12,48 ms against 11,23 of the reference on the worker rs. These partial solutions were not selected. The final version is documented by files `isolated-*`. TCP_NODELAY was already active in tcp-stream: no Nagle changes to adopt. No prefetches have been changed or acks grouped: the profile identifies the cost, but does not demonstrate a compatible and faster variant to adopt.
 
-Il solo riuso del canale (`after-latency-*.json`, variante intermedia) non bastava:
-ping p50 rs 9,68/9,26 ms contro 8,79/8,82 del ref, su worker ref/rs.
-Aggiungendo pool e rimozione del yield finale, ma conservando ancora il delete
-(`candidate-latency-*.json`), ping 8,89/9,07 ms; rimaneva un p99 di 12,48 ms
-contro 11,23 del riferimento sul worker rs. Queste soluzioni parziali non sono
-state selezionate. La versione finale è documentata dai file `isolated-*`.
-TCP_NODELAY era già attivo in tcp-stream: nessuna modifica Nagle da adottare.
-Non sono stati cambiati prefetch o raggruppati gli ack: il profilo identifica il
-costo, ma non dimostra una variante compatibile e più veloce da adottare.
+## RAM and compromise
 
-## RAM e compromesso
+Isolated probes show a maximum increase of 0,14 MiB for client/worker rs and no beat growth beyond 0,03 MiB. In the c10 benchmarks with 10.000 task the median peaks grow in some cases beyond 0,5 MiB: up to approximately 1,6 MiB (AMQP bench), however less than the 0,8% of the PSS. Redis bench-toplevel grows approximately 1,1 MiB; pure Redis about 0,5 MiB. They are values explicitly stored in the table, not considered zero. The same version shows a variation between repetitions of 2,4 MiB (AMQP bench) and 0,8 MiB (Redis bench-toplevel).
 
-Le sonde isolate mostrano un aumento massimo di 0,14 MiB per client/worker rs e
-nessuna crescita del beat oltre 0,03 MiB. Nei benchmark c10 con 10.000 task i
-picchi mediani crescono in alcuni casi oltre 0,5 MiB: fino a circa 1,6 MiB
-(AMQP bench), comunque meno dello 0,8% della PSS. Redis bench-toplevel cresce
-circa 1,1 MiB; pure Redis circa 0,5 MiB. Sono valori esplicitamente conservati
-nella tabella, non considerati zero. La stessa versione mostra una variazione
-fra ripetizioni di 2,4 MiB (AMQP bench) e 0,8 MiB (Redis bench-toplevel).
+The final choice conservatively accepts even these small increments for the measured improvement compared to the initial version: RPC p50 on worker ref 3,326 → 2,803 ms (−15,7%); ping on worker rs 9,916 → 8,487 ms (−14,4%). RPC is also 20,4% faster than client ref on worker ref. The isolated comparison does not indicate structural growth above the 0,5 MB threshold; task spikes with import/Redis connections remain sensitive to copy-on-write and GC.
 
-La scelta finale accetta conservativamente anche questi piccoli incrementi per
-il miglioramento misurato rispetto alla versione iniziale: RPC p50 sul worker ref
-3,326 → 2,803 ms (−15,7%); ping sul worker rs 9,916 → 8,487 ms (−14,4%).
-RPC è anche il 20,4% più veloce del client ref sul worker ref. Il confronto isolato
-non indica una crescita strutturale sopra la soglia di 0,5 MB; i picchi dei task
-con import/connessioni Redis restano sensibili al copy-on-write e al GC.
+## Limits remaining
 
-## Limiti rimasti
+- Probes distinguish publish client, go to child, task and response; broker, master receive and IPC are not timed separately.
+- `bench-toplevel` saves about 76–80 MiB of peak compared to importing into the child, but does not reach `pure`: Redis clients, connections and COW remain.
+- Redis c10 capacity remains limited mainly by synchronous acks; no protocol or broker traffic changes have been introduced to bypass them.
+- The publisher prefill must finish within the broker's heartbeat (see README).
 
-- Le sonde distinguono publish client, andata fino al figlio, task e risposta;
-  broker, ricezione master e IPC non sono cronometrati separatamente.
-- `bench-toplevel` risparmia circa 76–80 MiB di picco rispetto all'import nel
-  figlio, ma non raggiunge `pure`: rimangono client Redis, connessioni e COW.
-- La capacità Redis c10 resta limitata soprattutto dagli ack sincroni; nessuna
-  variazione di protocollo o traffico del broker è stata introdotta per aggirarli.
-- Il publisher prefill deve finire entro l'heartbeat del broker (vedi README).
-
-Nessuna dipendenza aggiunta; sorgenti di riferimento, test upstream e tool di
-conformità non modificati.
+No added dependencies; reference sources, upstream tests and unmodified compliance tools.

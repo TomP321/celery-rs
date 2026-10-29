@@ -1,46 +1,25 @@
-# 10b — RAM dei figli prefork sotto carico
+# 10b — Prefork children RAM under load
 
-Priorità del progetto: **occupare meno RAM possibile** (la velocità conta solo se non costa
-memoria). Con molti processi la RAM di un worker è quasi tutta nei figli: un figlio celery-rs pesa
-~6 MB a riposo ma sale a 11–15 MB dopo il carico (`bench/results/scale-*.json`,
-`final-c10-*.json`), contro ~28 MB del riferimento. Obiettivo: **figlio dopo il carico ≤ 9 MB**
-con `--task pure` e ≤ 12 MB con `--task bench-toplevel` (c10 e c50), senza aumentare master,
-zygote, beat o client.
+Project priority: **take up as little RAM as possible** (speed only matters if it doesn't cost memory). With many processes the RAM of a worker is almost all in the children: a celery-rs child weighs ~6 MB idle but rises to 11–15 MB after load (`bench/results/scale-*.json`, `final-c10-*.json`), versus ~28 MB of the reference. Objective: **child after load ≤ 9 MB** with `--task pure` and ≤ 12 MB with `--task bench-toplevel` (c10 and c50), without increasing master, zygote, beat or client.
 
-Leggi `AGENTS.md`, `PLAN.md`, `specs/08d-worker-c10.md`, `specs/09b-soak-fuzz.md`,
-`specs/09c-memory-growth.md`, `specs/10a-master-beat-restart.md`. Vincoli invariati: API,
-comportamento e traffico identici al riferimento; oggetti kombu/billiard veri, nessun nome
-riscritto; `test_kombu_identity.py`, `celery/`, `celery/t/`, `tools/compat/` intoccabili; nessuna
-modifica visibile al codice dei task (configurazione GC vista dal task, `sys.modules` utente,
-logging, segnali identici al riferimento).
+Read `AGENTS.md`, `PLAN.md`, `specs/08d-worker-c10.md`, `specs/09b-soak-fuzz.md`, `specs/09c-memory-growth.md`, `specs/10a-master-beat-restart.md`. Constraints unchanged: API, behavior and traffic identical to the reference; real kombu/billiard items, no rewritten names; `test_kombu_identity.py`, `celery/`, `celery/t/`, `tools/compat/` untouchables; no visible changes to the task code (GC configuration seen from the task, user `sys.modules`, logging, signals identical to the reference).
 
-## Diagnosi
-Per un figlio, dal fork ai primi N task (1, 10, 100, 1000) e poi a regime: `Private_Dirty`,
-`Shared_*` (smaps per mappatura: heap, arene pymalloc, librerie, stack, mmap anonime),
-`tracemalloc` (via `CELERY_RS_MEMORY_PROBE`), heap Rust (feature `memory-probe`). Separa:
-- **copy-on-write eroso**: pagine dello zygote scritte dal figlio (refcount e campi GC di oggetti
-  ereditati, dict/cache modificati, moduli che mutano al primo uso);
-- **inizializzazioni pigre al primo task** (percorsi di trace, serializzazione, backend, logging,
-  `re`/`functools` cache, `linecache`): spostale nello **zygote prima del fork** con un
-  riscaldamento interno che non esegue task utente né produce effetti esterni (nessun messaggio,
-  segnale, log o scrittura sul backend);
-- **allocazioni che restano** (arene pymalloc/glibc non restituite, buffer IPC/Rust
-  sovradimensionati, oggetti trattenuti tra un task e l'altro).
-Riporta una tabella "causa → MB per figlio".
+## Diagnosis
 
-## Correzioni
-Solo con evidenza dai numeri: riscaldamento nello zygote, `gc.freeze()` dopo il riscaldamento,
-buffer IPC/Rust ridimensionati o rilasciati, rilascio delle arene dopo picchi, meno oggetti vivi
-per figlio. Ogni correzione con un test in `python/tests_rs` (PSS/Private_Dirty del figlio oltre
-soglia dopo N task; nessun effetto visibile del riscaldamento).
+For a child, from the fork to the first N tasks (1, 10, 100, 1000) and then at full speed: `Private_Dirty`, `Shared_*` (smaps for mapping: heap, pymalloc arenas, libraries, stack, anonymous mmap), `tracemalloc` (via `CELERY_RS_MEMORY_PROBE`), Rust heap (feature `memory-probe`). Separate:
+- **copy-on-write eroded**: zygote pages written by the child (refcount and GC fields of inherited objects, modified dicts/caches, modules that mutate on first use);
+- **lazy initializations on first task** (trace paths, serialization, backend, logging, `re`/`functools` cache, `linecache`): move them to the **zygote before fork** with an internal warm-up that does not execute user tasks or produce external effects (no messages, signals, logs or writes to the backend);
+- **remaining allocations** (pymalloc/glibc arenas not returned, oversized IPC/Rust buffers, objects held between tasks). Reports a "cause → MB per child" table.
 
-## Verifica
-Misure brevi tue, bloccanti (≤ 5 minuti): `bench/bench.py --pool prefork --concurrency 10 e 50
---task pure|bench-toplevel --prefill`, `bench/fleet.py --budget-mb 2048`, prima/dopo. **Non**
-eseguire `tools/dev/gates`, soak o `./compat integration`: li esegue l'orchestratore.
+## Corrections
 
-## Regole di lavoro (quota del modello limitata)
-Comandi bloccanti, niente messaggi di attesa o controlli dell'avanzamento, niente comandi in
-background. Rapporto finale breve: tabella cause → MB, correzioni, misure prima/dopo (figlio,
-totale c10/c50, worker in 8 GB stimati), varianti scartate, test eseguiti. Committa nel branch
-(`10b: …`).
+Just by the numbers: warming in zygote, `gc.freeze()` after warming, IPC/Rust buffers scaled or released, releasing arenas after spikes, fewer live objects per child. Each fix with a test in `python/tests_rs` (child's PSS/Private_Dirty above threshold after N tasks; no visible warming effect).
+
+## Check
+
+Your short, blocking measures (≤ 5 minutes): `bench/bench.py --pool prefork --concurrency 10 e 50
+--task pure|bench-toplevel --prefill`, `bench/fleet.py --budget-mb 2048`, before/after. **Do not** run `tools/dev/gates`, soak, or `./compat integration` - the orchestrator does them.
+
+## Work Rules (model quota limited)
+
+Blocking commands, no waiting messages or progress checks, no background commands. Short final report: cause table → MB, fixes, before/after measurements (child, total c10/c50, workers in 8 GB estimated), variants discarded, tests performed. Commit to the branch (`10b: …`).

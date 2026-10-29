@@ -1,44 +1,23 @@
-# Capacità e latenze (08c)
+# Capacities and latencies (08c)
 
-Eseguire sempre sotto `tools/dev/with-brokers`, che assegna una corsia esclusiva.
+Always run under `tools/dev/with-brokers`, which assigns an exclusive lane.
 
 ```sh
 tools/dev/with-brokers .venv-ref/bin/python bench/run_08c.py --phase before --n 10000 --repeats 1
 tools/dev/with-brokers .venv-ref/bin/python bench/probe_08c.py --phase isolated-before
 tools/dev/with-brokers .venv-ref/bin/python bench/memory_08c.py --phase isolated-before
-# Dopo la modifica e tools/dev/build-package:
+# After the change and tools/dev/build-package:
+
 tools/dev/with-brokers .venv-ref/bin/python bench/run_08c.py --phase after --n 10000 --repeats 1
 tools/dev/with-brokers .venv-ref/bin/python bench/probe_08c.py --phase isolated-after
 tools/dev/with-brokers .venv-ref/bin/python bench/memory_08c.py --phase isolated-after
 .venv-ref/bin/python bench/report_08c.py
 ```
 
-`bench.py --prefill` attende che il worker sia pronto e sospende l'intero gruppo
-(master, zygote e figli) con `SIGSTOP`. Pubblica esattamente N task, verifica che
-nessuno sia stato completato e riprende il gruppo con `SIGCONT`. Il cronometro
-parte immediatamente prima della ripresa. In questo modo avvio, connessioni e
-pubblicazione non entrano nella capacità del worker. La risoluzione del conteggio
-è 20 ms: usare migliaia di task, non le piccole N dei test funzionali. Il publisher
-deve terminare entro il timeout heartbeat del broker, perché durante la pausa
-anche gli heartbeat del worker sono sospesi.
+`bench.py --prefill` waits for the worker to be ready and suspends the entire group (master, zygote and children) with `SIGSTOP`. Post exactly N tasks, verify that none have been completed, and resume the group with `SIGCONT`. The clock starts immediately before the restart. This way startup, connections and publishing do not enter the worker's capacity. The counting resolution is 20 ms: use thousands of tasks, not the small N of functional tests. The publisher must terminate within the broker's heartbeat timeout, because worker heartbeats are also suspended during the pause.
 
-La memoria è campionata ogni 50 ms sull'intero albero, includendo zygote e figli;
-il picco include anche la successiva sonda `delay().get()`. Sono conservati PSS e
-Private_Dirty di ciascun processo. `pure` conta i completamenti con append su file;
-`bench` usa INCR Redis e importa redis-py nel figlio; `bench-toplevel` esegue lo
-stesso INCR, con redis-py importato nel modulo dei task prima del fork. Il confronto
-di capacità fra `pure` e gli altri task include quindi anche il costo del contatore.
-Non vengono aggiunti task di warm-up al conteggio del throughput.
+Memory is sampled every 50 ms over the entire tree, including zygotes and children; the peak also includes the subsequent probe `delay().get()`. PSS and Private_Dirty of each process are preserved. `pure` counts completions with append to file; `bench` uses INCR Redis and imports redis-py into the child; `bench-toplevel` runs the same INCR, with redis-py imported into the tasks module before the fork. The capacity comparison between `pure` and the other tasks therefore also includes the cost of the counter. No warm-up tasks are added to the throughput count.
 
-`probe_08c.py` incrocia client ref/rs con worker ref/rs AMQP (prefork c10, oppure
-`--pool solo`). Le latenze di 1.000 chiamate sono raccolte senza profiler; un secondo
-giro di 100 chiamate produce i profili cProfile. Il task `timed` usa l'orologio
-monotono comune ai processi della stessa macchina: distingue andata fino all'ingresso
-nel figlio, esecuzione e ritorno della risposta. L'andata aggrega pubblicazione,
-broker, master e IPC; non permette di attribuire separatamente a ciascuno il tempo
-speso. `publish_ms` misura la durata della sola chiamata `delay()` sul client.
+`probe_08c.py` crosses ref/rs clients with AMQP ref/rs workers (c10 prefork, or `--pool solo`). The latencies of 1.000 calls are collected without a profiler; a second round of 100 calls produces the cProfile profiles. The `timed` task uses the monotonic clock common to processes of the same machine: it distinguishes going to the entry into the child, execution and return of the response. The first leg aggregates publication, broker, master and IPC; it does not allow the time spent to be attributed separately to each individual. `publish_ms` measures the duration of only the `delay()` call on the client.
 
-I JSON sono in `bench/results/08c/`; log e profili binari restano locali. Il report
-conserva gli esiti reali dei gate e le eventuali limitazioni della misura. Le PSS
-vanno confrontate a parità di altre sonde attive: processi Python aggiuntivi cambiano
-la ripartizione delle pagine condivise.
+The JSONs are in `bench/results/08c/`; logs and binary profiles remain local. The report preserves the real outcomes of the gates and any limitations of the measurement. PSSs must be compared like other active probes: additional Python processes change the distribution of shared pages.

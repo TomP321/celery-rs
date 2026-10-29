@@ -1,60 +1,40 @@
-# 10d — descrittori dello zygote
+# 10d — zygote descriptors
 
-Il master espone il registro dei descrittori posseduti da Rust. Waker e socket
-IPC usano registrazioni RAII rimosse alla distruzione; le entry non crescono
-oltre le risorse vive. Un registro nuovo per PID evita mutex ereditati nel
-figlio. Per tokio una sonda privata identifica esattamente gli epoll che la
-contengono, comprese le copie del driver: nessuna attribuzione basata soltanto
-sul momento di apertura. Socket broker/backend ed eventfd si ricavano dai loro
-`fdinfo`. La feature tokio `net` è ora esplicita; nessuna nuova dipendenza.
+The master exposes the registry of descriptors owned by Rust. Waker and IPC sockets use RAII recordings removed upon destruction; entries do not grow beyond living resources. A new register for PID avoids inherited mutexes in the child. For Tokyo, a private probe exactly identifies the epolls that contain it, including copies of the driver: no attribution based only on the moment of opening. Socket broker/backend and eventfd are derived from their `fdinfo`. The Tokyo feature `net` is now explicit; no new addictions.
 
-La foto prima del fork e la lettura del driver nel figlio coprono i cambiamenti
-delle connessioni durante il fork. Le identità device/inode proteggono i numeri
-riciclati. Lo zygote chiude le copie locali prima degli import, senza modificare
-le registrazioni epoll condivise col master. Gli oggetti Rust ereditati restano
-protetti dai distruttori `ForkSafe`. File, socket, epoll e log Python restano
-aperti. Nessuna scansione aggiuntiva nei figli.
+The photo before the fork and the driver reading in the child cover the changes in connections during the fork. Device/inode identities protect recycled numbers. Zygote closes local copies before imports, without modifying the epoll records shared with the master. Inherited Rust objects remain protected by `ForkSafe` destructors. Python files, sockets, epolls, and logs remain open. No additional scanning in children.
 
-Verifiche eseguite:
+Checks performed:
 
-- `cargo build --release`: passato.
-- `cargo clippy --all-targets -- -D warnings`: passato.
-- `tools/dev/with-brokers cargo test`: 244 passati, 4 ignorati, 0 falliti.
-- `tools/dev/build-package` e `tools/dev/build-native`: passati.
-- `tools/dev/with-brokers .venv-rs/bin/python -m pytest python/tests_rs/test_zygote_user_fds.py python/tests_rs/test_zygote_logging_fds.py python/tests_rs/test_ram_budget.py -q`: 11 passati.
-- `tools/dev/with-brokers .venv-rs/bin/python -m pytest python/tests_rs/test_worker_pool.py -q`: 27 passati; 52 avvisi Python sul fork multithread, anche nel pool billiard di riferimento.
+- `cargo build --release`: passed.
+- `cargo clippy --all-targets -- -D warnings`: passed.
+- `tools/dev/with-brokers cargo test`: 244 passed, 4 ignored, 0 failed.
+- `tools/dev/build-package` and `tools/dev/build-native`: passed.
+- `tools/dev/with-brokers .venv-rs/bin/python -m pytest python/tests_rs/test_zygote_user_fds.py python/tests_rs/test_zygote_logging_fds.py python/tests_rs/test_ram_budget.py -q`: 11 passed.
+- `tools/dev/with-brokers .venv-rs/bin/python -m pytest python/tests_rs/test_worker_pool.py -q`: 27 passed; 52 Python warnings about multithreaded fork, even in reference billiard pool.
 
-Il differenziale avvia worker ref e rs con `-P prefork -c 2` e
-`max_tasks_per_child=1`: 12 PID distinti per implementazione usano lo stesso
-file e socket TCP loopback aperti all'import, con risultati identici. Nello
-zygote l'insieme dei fd resta identico prima e dopo i ricambi. Gli altri test
-verificano la chiusura dei soli fd Rust con Redis e AMQP, il funzionamento
-successivo del master, i logger file/queue e un fd Python che il padre ricicla
-in un socket registrato nell'epoll condiviso. Il test 10c conserva la verifica
-della singola pulizia nello zygote e ora richiede che il fd Python sopravviva.
+Differential starts worker ref and rs with `-P prefork -c 2` and `max_tasks_per_child=1`: 12 Implementationally distinct PIDs use the same file and TCP loopback socket open on import, with identical results. In the zygote the set of fds remains identical before and after the replacements. The other tests verify the closure of only Rust fds with Redis and AMQP, subsequent operation of the master, file/queue loggers, and a Python fd that the parent recycles into a socket registered in the shared epoll. The 10c test retains single cleanup verification in the zygote and now requires the Python fd to survive.
 
-RAM, PSS totale master + zygote + 10 figli (MiB):
+RAM, PSS total master + zygote + 10 children (MiB):
 
-| Misura | Prima | Dopo |
+| Measurement | Before | After |
 |---|---:|---:|
-| Riposo | 87,41 | 83,23 |
-| Dopo carico / picco | 108,28 | 102,07 |
+| Rest | 87,41 | 83,23 |
+| After load / peak | 108,28 | 102,07 |
 
-Nessun aumento osservato. Comando eseguito per entrambe le misure:
+No increase observed. Command executed for both measurements:
 
 ```
 tools/dev/with-brokers .venv-rs/bin/python bench/bench.py --venv .venv-rs --pool prefork --concurrency 10 --task pure --prefill --n 10000 --latency-n 20 --label 10d-before
 tools/dev/with-brokers .venv-rs/bin/python bench/bench.py --venv .venv-rs --pool prefork --concurrency 10 --task pure --prefill --n 10000 --latency-n 20 --label 10d-after
 ```
 
-Dati aggregati e per processo in `10d-zygote-fds.json` (le mappature complete
-sono escluse). Gates completi, soak e `compat integration` non eseguiti, come
-richiesto dalla spec; restano all'orchestratore.
+Aggregate and per-process data in `10d-zygote-fds.json` (full mappings are excluded). Gates complete, soak and `compat integration` not performed, as required by spec; they remain with the orchestrator.
 
-File modificati:
+Files modified:
 
 - `crates/celery-py/Cargo.toml`, `src/lib.rs`, `src/transport.rs`.
 - `crates/celery-worker/src/fds.rs`, `lib.rs`, `wake.rs`, `pool/spawn.rs`, `pool/supervisor.rs`.
 - `python/celery/concurrency/_rs_zygote.py`.
 - `python/tests_rs/test_zygote_user_fds.py`, `test_zygote_logging_fds.py`, `test_ram_budget.py`.
-- `bench/results/10d-zygote-fds.json` e questo rapporto.
+- `bench/results/10d-zygote-fds.json` and this report.

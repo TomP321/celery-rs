@@ -1,102 +1,54 @@
 # 08d — worker prefork c10
 
-Misure su questo worktree, Python 3.13.9, 30.000 task, 500 sonde di latenza,
-Redis :6390 e RabbitMQ :5673. Memoria in MiB (1024 KiB), PSS sommata su tutto
-l'albero; `after` comprende anche le sonde `add.delay().get()`. I JSON contengono
-anche `throughput_processes`, prima delle sonde, quando disponibile.
+Measurements on this worktree, Python 3.13.9, 30.000 tasks, 500 latency probes, Redis :6390 and RabbitMQ :5673. Memory in MiB (1024 KiB), PSS summed across the entire tree; `after` also includes the `add.delay().get()` probes. JSONs also contain `throughput_processes`, before probes, when available.
 
-Ogni combinazione ref/rs × Redis/AMQP × bench/pure ha due esecuzioni prima e due
-dopo. La prima coppia Redis/bench della base ha memoria sensibilmente maggiore
-della seconda: il rapporto conserva entrambe e il loro intervallo, senza
-attribuire tutta la differenza prima/dopo alla modifica. Le prime compilazioni
-Rust si sono svolte durante parte della matrice iniziale; la matrice finale è
-stata eseguita dopo la fine della compilazione, sotto un unico lock dei broker.
+Each ref/rs × Redis/AMQP × bench/pure combination has two executions before and two after. The first Redis/bench pair of the base has significantly more memory than the second: the report preserves both and their interval, without attributing all the before/after difference to the modification. The first Rust builds took place during part of the initial matrix; the final matrix was executed after the end of the compilation, under a single broker lock.
 
-Riproduzione:
+Playback:
 
 ```sh
 tools/dev/with-brokers .venv-ref/bin/python bench/run_c10.py --phase after
 python3 bench/report_c10.py --phase after > bench/results/08d/after.md
 ```
 
-`before.md` e `after.md` riportano medie/intervalli, risparmio in MiB e %, PSS e
-Private_Dirty di master, zygote e di ciascun figlio per ogni esecuzione.
+`before.md` and `after.md` report averages/ranges, savings in MiB and %, PSS and Private_Dirty of master, zygote and each child for each run.
 
-## Modifiche
+## Changes
 
-- Lo zygote riscalda realmente il parser CFFI usato da billiard per `prctl`:
-  importare `cffi.cparser` lasciava ancora vuota la cache globale del parser.
-  Il riscaldamento avviene prima del congelamento GC e del fork dei figli.
-- Il reader IPC Rust trasferisce il buffer ricevuto a `Bytes`, senza copiarne
-  il payload. Il figlio Python passa la vista del buffer direttamente a pickle.
-  Non cambiano formato dei frame, traffico broker, callback o limiti del pool.
-- Nessuna modifica alle soglie o all'abilitazione GC. Una sonda isolata confronta
-  questi valori col riferimento, con impostazioni predefinite e personalizzate
-  (GC disabilitato), su dieci figli; dopo 2.000 job di warm-up misura altri
-  30.000 job, con meno di 2 MiB di crescita PSS ammessa per figlio.
-- Il benchmark registra PID, ruolo, PSS, Private_Dirty, broker e fase; usa code
-  e contatori unici, senza FLUSHALL. Runner e generatore del rapporto inclusi.
+- Zygote actually warms up the CFFI parser used by billiard for `prctl`: importing `cffi.cparser` still left the global parser cache empty. Warming occurs before GC freezing and child forking.
+- The Rust IPC reader transfers the received buffer to `Bytes`, without copying its payload. The Python child passes the view of the buffer directly to pickle. They do not change frame format, broker traffic, callbacks or pool limits.
+- No changes to thresholds or GC enablement. An isolated probe compares these values to the reference, with default and custom settings (GC disabled), on ten children; after 2.000 warm-up jobs measure other 30.000 jobs, with less than 2 MiB of PSS growth allowed per child.
+- The benchmark records PID, role, PSS, Private_Dirty, broker and phase; uses unique queues and counters, without FLUSHALL. Runner and report generator included.
 
-## Varianti
+## Variants
 
-Otto prove isolate (`variant-*.json`), due per variante/task, Redis c10:
+Eight isolated tests (`variant-*.json`), two per variant/task, Redis c10:
 
-| variante | task | idle MiB | picco/dopo MiB | task/s |
+| variant | tasks | idle MiB | peak/after MiB | task/s |
 |---|---|---:|---:|---:|
-| CFFI caldo | bench | 84,0–84,3 | 231,8–231,9 | 2610–2612 |
-| CFFI caldo | pure | 84,0–84,1 | 102,3–103,1 | 2601–2608 |
-| CFFI + redis-py precaricato | bench | 96,4–97,0 | 158,2–160,1 | 1541–2506 |
-| CFFI + redis-py precaricato | pure | 96,2–96,7 | 114,4–114,6 | 2368–2592 |
+| CFFI hot | bench | 84,0–84,3 | 231,8–231,9 | 2610–2612 |
+| CFFI hot | as well | 84,0–84,1 | 102,3–103,1 | 2601–2608 |
+| CFFI + redis-py preloaded | bench | 96,4–97,0 | 158,2–160,1 | 1541–2506 |
+| CFFI + redis-py preloaded | as well | 96,2–96,7 | 114,4–114,6 | 2368–2592 |
 
-Adottato il riscaldamento CFFI: circa 3 MiB idle in meno rispetto alle misure
-calde della base, senza rallentamento rilevato. Scartato il precarico automatico
-di redis-py: risparmia circa 73 MiB col task che lo importa, ma costa circa
-12 MiB al task `pure`, e introduce un import che l'applicazione potrebbe non
-usare. La prima prova di preload ha inoltre throughput molto più basso della
-seconda; non viene presentata come miglioramento prestazionale.
-Il benchmark supporta `--include redis` per misurare anche il precarico esplicito
-tramite l'opzione già esistente del worker, se l'applicazione usa redis-py.
+Adopted CFFI heating: approximately 3 MiB idle less than base warm measurements, with no slowdown detected. Rediscarded automatic preloading of redis-py: saves about 73 MiB with the task that imports it, but costs about 12 MiB for the `pure` task, and introduces an import that the application may not use. The first preload test also has much lower throughput than the second; it is not presented as a performance improvement. The benchmark supports `--include redis` to also measure explicit preload via the already existing worker option, if the application uses redis-py.
 
-`pickle-copy.json`: 100 decodifiche di un job con argomento da 8 MiB, con
-tracemalloc. Copia bytes: 16.002 MiB temporanei, 0,185 s; vista diretta:
-8,003 MiB, 0,082 s. La prova isola la copia evitata; non è una previsione del
-throughput del broker. Il test Rust aggiunge un payload da 1 MiB seguito da un
-secondo frame e verifica che i payload restino validi dopo le letture successive.
+`pickle-copy.json`: 100 decodes a job with argument from 8 MiB, with tracemalloc. Copy bytes: 16.002 Temporary MiB, 0,185 s; direct view: 8,003 MiB, 0,082 s. Proof isolates avoided copying; it is not a prediction of the broker's throughput. The Rust test adds a payload from 1 MiB followed by a second frame and verifies that the payloads remain valid after subsequent reads.
 
-Nessuna nuova dipendenza. Mimalloc/arene non riprovati: la revisione 08b-review2
-richiede di conservare la decisione già misurata (mimalloc solo 34→40 MiB,
-prefork 71→77 MiB; nessun guadagno dalle arene glibc).
+No new addictions. Mimalloc/arenas not retried: 08b-review2 requires keeping the already measured decision (mimalloc only 34→40 MiB, prefork 71→77 MiB; no gain from glibc arenas).
 
-## Risultati finali
+## Final results
 
-Medie di due esecuzioni. PSS in MiB, riferimento → celery-rs:
+Averages of two runs. PSS in MiB, reference → celery-rs:
 
-| broker/task | idle | picco = dopo | risparmio idle | risparmio picco/dopo | task/s ref → rs | p50/p99 ms ref → rs |
+| broker/task | idle | peak = after | idle saving | peak/after savings | task/s ref → rs | p50/p99 ms ref → rs |
 |---|---:|---:|---:|---:|---:|---|
 | Redis bench | 308,7 → 83,9 | 313,2 → 231,4 | 224,8 (72,8%) | 81,9 (26,1%) | 897 → 2674 | 3,11/4,08 → 1,91/4,28 |
-| Redis pure | 308,6 → 84,2 | 310,6 → 101,4 | 224,4 (72,7%) | 209,2 (67,3%) | 916 → 2553 | 3,13/4,34 → 1,91/3,97 |
+| Redis as well | 308,6 → 84,2 | 310,6 → 101,4 | 224,4 (72,7%) | 209,2 (67,3%) | 916 → 2553 | 3,13/4,34 → 1,91/3,97 |
 | AMQP bench | 307,0 → 83,9 | 319,6 → 233,1 | 223,2 (72,7%) | 86,5 (27,1%) | 2921 → 3642 | 3,26/3,99 → 2,63/4,35 |
-| AMQP pure | 306,7 → 83,5 | 310,3 → 103,1 | 223,2 (72,8%) | 207,2 (66,8%) | 2970 → 3706 | 3,33/4,39 → 2,51/4,34 |
+| AMQP as well | 306,7 → 83,5 | 310,3 → 103,1 | 223,2 (72,8%) | 207,2 (66,8%) | 2970 → 3706 | 3,33/4,39 → 2,51/4,34 |
 
-Rispetto alla base calda (seconda esecuzione Redis/bench), il picco del task
-`bench` resta sostanzialmente invariato (231,7 → 231,4 MiB), mentre idle passa
-87,4 → 83,9 MiB. `pure` Redis passa da 104,2 MiB medi a 101,4 MiB dopo il carico.
-Su AMQP `pure` la base ha throughput 3979–4122 task/s, il finale 3662–3750:
-le misure mostrano una variabilità/regressione da riportare, senza attribuirla
-come fatto al cambiamento delle copie IPC; il confronto isolato CFFI su Redis
-non evidenzia questo rallentamento. Le latenze p99 del finale AMQP restano
-circa 4,3 ms. Non si rivendica una scalabilità lineare con dieci figli.
+Compared to the hot base (second Redis/bench execution), the peak of the `bench` task remains essentially unchanged (231,7 → 231,4 MiB), while idle passes 87,4 → 83,9 MiB. `pure` Redis goes from average 104,2 MiB to 101,4 MiB after load. On AMQP `pure` the base has throughput 3979–4122 task/s, the final 3662–3750: the measurements show a variability/regression to be reported, without attributing it as fact to the change of the IPC copies; the isolated CFFI comparison on Redis does not highlight this slowdown. The AMQP final p99 latencies remain around 4,3 ms. There is no claim of linear scalability with ten children.
 
-Nei JSON finali rs il drain dopo l'ultimo publish è 0–5 ms e il rate del client
-è quasi uguale all'end-to-end (Redis circa 2.600/s, AMQP circa 3.700/s).
-Questo carico misura quindi soprattutto il limite di pubblicazione: aumentare
-i figli oltre quattro non può produrre scalabilità lineare mentre il client
-non alimenta una coda più velocemente. Questo è un limite del benchmark e
-non una dimostrazione di saturazione del pool c10.
-
-`bytes-micro.txt` confronta due milioni di buffer piccoli (oppure 1.000 da
-1 MiB) in release: copia del payload (`mode=0`), trasferimento con `slice`
-(`mode=1`), trasferimento con `advance` (`mode=2`). Sui buffer da 32 byte,
-47,7 / 44,0 / 28,2 ns; da 1 MiB, circa 1163 / 20,4 / 19,9 µs. Il percorso
-implementato è `slice`, che evita la seconda allocazione/copia del corpo;
-questa microprova non dimostra un guadagno end-to-end sul broker.
+In the final JSON rs the drain after the last publish is 0–5 ms and the client rate is almost the same as end-to-end (Redis about 2.600/s, AMQP about 3.700/s). This load therefore primarily measures the serving limit: growing children beyond four cannot produce linear scaling while the client does not feed a queue any faster. This is a limitation of the benchmark and not a demonstration of saturation of the c10 pool.
+`bytes-micro.txt` compares two million small buffers (or 1.000 from 1 MiB) in release: payload copy (`mode=0`), transfer with `slice` (`mode=1`), transfer with `advance` (`mode=2`). On buffers from 32 bytes, 47,7 / 44,0 / 28,2 ns; from 1 MiB, approximately 1163 / 20,4 / 19,9 µs. The implemented path is `slice`, which avoids the second body allocation/copy; this micro test does not demonstrate an end-to-end profit on the broker.

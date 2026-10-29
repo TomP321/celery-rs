@@ -1,60 +1,48 @@
-# 11a — GIF per il README: cosa è in Rust e cosa no
+# 11a — GIF for the README: What's in Rust and what's not
 
-Obiettivo: una GIF animata per il README di GitHub che mostri, a colpo d'occhio, quali componenti
-di Celery sono stati portati in Rust, quali restano in Python per scelta (API pubblica) e cosa non
-è coperto. Leggi `AGENTS.md`, `README.md`, `docs/DIFFERENZE.md`. **Non modificare codice di
-celery-rs** (`python/celery/`, `crates/`): solo documentazione e lo script della GIF.
+Goal: An animated GIF for the GitHub README that shows, at a glance, which Celery components have been ported to Rust, which ones remain in Python by choice (public API), and what is not covered. Read `AGENTS.md`, `README.md`, `docs/DIFFERENCES.md`. **Do not modify celery-rs code** (`python/celery/`, `crates/`): Documentation and GIF script only.
 
-## Contenuto (classificazione già verificata dall'orchestratore; controllala sul codice e
-segnala nel rapporto eventuali discrepanze, senza inventare)
+## Content (classification already verified by the orchestrator; check it on the code e
 
-**In Rust** (arancione):
-- Protocollo dei messaggi: task v1/v2, header, JSON, compressione — `celery-proto`
-- Trasporto Redis, trasporto RabbitMQ (AMQP 0-9-1), trasporto `memory://` — `celery-transport`
-- Producer: `delay()`/`apply_async()` (serializzazione e invio)
-- Backend dei risultati Redis e RPC — `celery-backend`
-- Consumer del worker: QoS/prefetch, ack, eventi, heartbeat, timer ETA, rate limit, revoche —
+report any discrepancies in the report, without inventing)
+
+**In Rust** (orange):
+- Message protocol: task v1/v2, header, JSON, compression — `celery-proto`
+- Redis transport, RabbitMQ transport (AMQP 0-9-1), `memory://` transport — `celery-transport`
+- Producer: `delay()`/`apply_async()` (serialization and sending)
+- Redis and RPC Results Backend — `celery-backend`
+- Worker consumer: QoS/prefetch, ack, events, heartbeat, ETA timer, rate limit, revocations —
   `celery-worker`
-- Controllo remoto: pidbox, mingle, gossip (trasporto in Rust; i comandi restano Python)
-- Pool prefork: supervisore, zygote, IPC con i figli
-- Beat: calcolo delle scadenze (crontab) e invio — `celery-beat`
-- Client di controllo della CLI (`inspect`, `control`)
+- Remote control: pidbox, mingle, gossip (transport in Rust; commands remain Python)
+- Prefork pool: supervisor, zygote, IPC with children
+- Beat: calculation of deadlines (crontab) and sending — `celery-beat`
+- CLI Control Client (`inspect`, `control`)
 
-**In Python per scelta** (blu: API pubblica identica a Celery, estendibile dall'utente):
-- App, configurazione, registry e classe `Task`
+**In Python by choice** (blue: public API identical to Celery, user extensible):
+- App, configuration, registry and class `Task`
 - Canvas (chain, group, chord), `AsyncResult`
-- Segnali, bootsteps, comandi di controllo (`Panel`)
-- Esecuzione dei task nei figli (trace) e codice utente
-- CLI (click), loader, fixup Django
-- Persistenza della schedule di beat (shelve)
+- Signals, bootsteps, control commands (`Panel`)
+- Execution of tasks in children (trace) and user code
+- CLI (click), loader, Django fixup
+- Persistence of the beat schedule (shelve)
 
-**Percorso di Celery originale, non convertito** (grigio):
-- Altri broker (SQS, …) tramite kombu
-- Altri backend dei risultati (database/SQLAlchemy, cache, S3, MongoDB, DynamoDB, …)
+**Original, unconverted Celery path** (gray):
+- Other brokers (SQS, …) via kombu
+- Other results backends (database/SQLAlchemy, cache, S3, MongoDB, DynamoDB, …)
 
-**Non supportato / non verificato** (rosso):
-- Pool `eventlet` e `gevent`
-- macOS e Windows (solo Linux)
+**Not supported / not tested** (red):
+- Pools `eventlet` and `gevent`
+- macOS and Windows (Linux only)
+**Numbers to show at the end** (summary): 23.300 Rust lines in 6 crate, Python shell 52.600 lines; worker `-c 10`: 300 → 73 MB (−76%); worker `-c 10` to 8 GB: 27 → 96–105; throughput `-c 10` Redis ×3; tested with the public API (137 modules), broker messages, 190 CLI commands, 31.691 unit tests, and Celery's `t/integration` suite.
 
-**Numeri da mostrare alla fine** (riepilogo): 23.300 righe di Rust in 6 crate, guscio Python
-52.600 righe; worker `-c 10`: 300 → 73 MB (−76%); worker `-c 10` in 8 GB: 27 → 96–105;
-throughput `-c 10` Redis ×3; verificato con l'API pubblica (137 moduli), messaggi sul broker,
-190 comandi CLI, 31.691 unit test e la suite `t/integration` di Celery.
+## Shape
 
-## Forma
-- Script riproducibile `tools/docs/make_readme_gif.py` (Pillow, eseguibile con
-  `uvx --with pillow python tools/docs/make_readme_gif.py`), output
-  `docs/assets/celery-rs-conversione.gif`.
-- Larghezza 960 px, testo leggibile su GitHub (font DejaVu Sans, già sul sistema), sfondo chiaro,
-  colori accessibili e una legenda. Animazione: i componenti compaiono/si colorano per gruppi
-  (Rust, poi Python, poi non convertito, poi non supportato), poi il riepilogo; pausa lunga
-  sull'ultimo fotogramma; ciclo infinito. Dimensione del file ≤ 1,5 MB, durata 10–20 s.
-- Etichette in italiano, come il resto del README.
-- Inserisci la GIF nel `README.md` subito dopo l'introduzione, con un testo alternativo.
-- Guarda tu il risultato (estrai 3–4 fotogrammi in PNG e leggili) prima di dichiarare finito:
-  niente testo tagliato o sovrapposto.
+- Reproducible script `tools/docs/make_readme_gif.py` (Pillow, executable with `uvx --with pillow python tools/docs/make_readme_gif.py`), output `docs/assets/celery-rs-conversione.gif`.
+- 960 px width, readable text on GitHub (DejaVu Sans font, already on the system), light background, accessible colors and a legend. Animation: components appear/color by groups (Rust, then Python, then unported, then unsupported), then the summary; long pause on last frame; infinite loop. File size ≤ 1,5 MB, duration 10–20 s.
+- Labels in Italian, like the rest of the README.
+- Insert the GIF in `README.md` immediately after the introduction, with alternative text.
+- Look at the result (extract 3–4 frames in PNG and read them) before declaring finished: no cut or overlapping text.
 
-## Regole
-Comandi bloccanti, niente messaggi di attesa. **Non fare push.** Committa nel branch (`11a: …`)
-e chiudi con un rapporto breve (file creati, dimensione e durata della GIF, eventuali discrepanze
-nella classificazione).
+## Rules
+
+Blocking commands, no waiting messages. **Don't push.** Commit to the branch (`11a: …`) and close with a short report (files created, GIF size and duration, any discrepancies in classification).

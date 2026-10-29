@@ -1,86 +1,52 @@
-# 08a — Worker: pidbox, mingle e gossip sul trasporto Rust (niente kombu nel master)
+# 08a — Worker: pidbox, mingle and Rust transport gossip (no kombu in master)
 
-Fase 8 di `PLAN.md` (ottimizzazione), prima parte. Dalla 05a il master del worker con consumer
-Rust (`python/celery/worker/_rs_consumer.py`) apre ancora una connessione **kombu** pigra solo per
-remote control (pidbox), mingle, gossip e la lettura degli eventi: per questo carica
-`kombu.pidbox`, `kombu.connection`, il trasporto kombu e redis-py/py-amqp, e tiene vivi i loro
-fd e timer sull'hub (vedi la manutenzione delle binding Redis corretta in 05c). Obiettivo: il master
-non usa più kombu per parlare col broker; tutto passa dal trasporto Rust, con traffico identico.
+Phase 8 of `PLAN.md` (optimization), first part. From 05a the master of the worker with Rust consumer (`python/celery/worker/_rs_consumer.py`) still opens a lazy **kombu** connection only for remote control (pidbox), mingle, gossip and event reading: for this it loads `kombu.pidbox`, `kombu.connection`, the kombu transport and redis-py/py-amqp, and keeps their fd and timers alive on the hub (see Redis binding maintenance fixed in 05c). Objective: the master no longer uses kombu to talk to the broker; everything goes through the Rust transport, with identical traffic.
 
-Misura di partenza (`-P solo`, backend Redis, PSS del master idle; Celery ref vs celery-rs):
+Starting measurement (`-P solo`, Redis backend, idle master PSS; Celery ref vs celery-rs):
 
-| broker | ref | rs oggi | moduli caricati dal master rs oggi |
+| brokers | ref | rs today | modules uploaded by rs master today |
 |---|---|---|---|
 | Redis | 54 MB | 50 MB | `redis`, `kombu.transport.redis`, `kombu.pidbox`, `kombu.connection` |
 | AMQP | 54 MB | 41 MB | `amqp`, `kombu.transport.pyamqp`, `kombu.pidbox`, `kombu.connection` |
 
-## Riferimenti
-- `celery/celery/worker/pidbox.py` (`Pidbox`, `gPidbox`: `Node`, `listen`, `on_message`,
-  `reset`, `shutdown`, `_close_channel`), `worker/consumer/control.py`, `worker/control.py`
-  (`Panel`, comandi e risposte), `worker/consumer/mingle.py` (`hello`, `sync_with_node`,
-  `on_clock_event`, `on_revoked_received`), `worker/consumer/gossip.py` (`Receiver`,
-  `get_consumers`, `on_message`, `election`, `on_elect`, `on_node_join/leave/lost`, `clock`),
-  `worker/consumer/events.py`, `worker/consumer/heart.py`, `worker/consumer/consumer.py`
-  (`connection_for_read/write`, `on_close`, riconnessione).
-- kombu: `pidbox.py` (`Node.listen`, `handle_message`, `dispatch`, `reply`, `_publish_reply`,
-  `reply_exchange`, nomi delle code `{hostname}.{mailbox}.pidbox`, `exclusive`, `auto_delete`,
-  `expires`/`message_ttl`, `oid`), `transport/redis.py` (fanout via PUBLISH/PSUBSCRIBE con
-  `fanout_prefix`/`fanout_patterns`, binding con TTL e manutenzione periodica), `messaging.py`.
-- Già in `main`: `crates/celery-transport/src/control.rs` e `python/celery/app/_rs_control.py`
-  (07: lato client del mailbox, stesso formato dei messaggi e delle code di risposta),
-  `crates/celery-worker/src/consumer.rs` (05a), `_rs_message.py`, `Waker` con fd (05c).
+## References
 
-## Progetto
-1. **Pidbox nel core Rust**: consumer della coda del nodo (`{hostname}.celery.pidbox` e binding
-   fanout come kombu, su Redis e AMQP) i cui messaggi arrivano al loop dal `Waker`; il codice del
-   riferimento (`Pidbox.on_message` → `Node.handle_message` → `Panel`) resta quello che decide e
-   risponde; la risposta parte dal producer Rust verso `reply.celery.pidbox` con `routing_key`/
-   `correlation_id`/`ticket` identici. `reset()`/`shutdown()`/riconnessione come nel riferimento.
-2. **Gossip** sul trasporto Rust: coda eventi `worker.#` (nomi, `auto_delete`, `expires`,
-   `message_ttl` come `Receiver`), stessi handler Python (`on_message`, election, clock,
-   join/leave/lost). Gli eventi in uscita già passano dal producer Rust.
-3. **Mingle** senza connessione kombu: `hello` broadcast e raccolta risposte via il client di
-   controllo Rust della 07 (oggi `mingle` passa `connection=` e quindi ricade su kombu), con le
-   stesse risposte e lo stesso effetto (revoche e clock sincronizzati).
-4. **Manutenzione Redis**: se le binding con TTL di pidbox/gossip passano al trasporto Rust, anche
-   il rinnovo periodico (`REFRESH_BINDING`/sweep, `_kombu.binding_deadlines`) va fatto da Rust con
-   lo stesso traffico (gate `wire-worker` su Redis).
-5. **Risultato**: con il consumer Rust attivo il master non importa `kombu.connection`,
-   `kombu.pidbox`, `kombu.transport.*`, `redis`, `amqp` (salvo che li carichi il backend dei
-   risultati o l'utente) e non registra fd kombu sull'hub. `CELERY_RS_WORKER=0` torna a tutto il
-   riferimento. `-P solo` e `-P prefork` (pool Rust) entrambi.
-6. Niente modifiche a nomi, firme, default o testi di log; nessuna nuova impostazione.
+- `celery/celery/worker/pidbox.py` (`Pidbox`, `gPidbox`: `Node`, `listen`, `on_message`, `reset`, `shutdown`, `_close_channel`), `worker/consumer/control.py`, `worker/control.py` (`Panel`, commands and responses), `worker/consumer/mingle.py` (`hello`, `sync_with_node`, `on_clock_event`, `on_revoked_received`), `worker/consumer/gossip.py` (`Receiver`, `get_consumers`, `on_message`, `election`, `on_elect`, `on_node_join/leave/lost`, `clock`), `worker/consumer/events.py`, `worker/consumer/heart.py`, `worker/consumer/consumer.py` (`connection_for_read/write`, `on_close`, reconnection).
+- kombu: `pidbox.py` (`Node.listen`, `handle_message`, `dispatch`, `reply`, `_publish_reply`, `reply_exchange`, queue names `{hostname}.{mailbox}.pidbox`, `exclusive`, `auto_delete`, `expires`/`message_ttl`, `oid`), `transport/redis.py` (fanout via PUBLISH/PSUBSCRIBE with `fanout_prefix`/`fanout_patterns`, TTL binding and periodic maintenance), `messaging.py`.
+- Already in `main`: `crates/celery-transport/src/control.rs` and `python/celery/app/_rs_control.py` (07: client side of the mailbox, same format of messages and reply queues), `crates/celery-worker/src/consumer.rs` (05a), `_rs_message.py`, `Waker` with fd (05c).
 
-## Test richiesti
-- `python/tests_rs/test_worker_control.py` (`.venv-rs`, worker rs come sottoprocesso, client e
-  secondo worker del riferimento dove serve, ogni esito confrontato col worker del riferimento):
-  tutti i comandi `inspect`/`control` (inclusi `revoke` con terminate, `rate_limit`,
-  `time_limit`, `add_consumer`/`cancel_consumer`, `pool_grow/shrink`, `autoscale`, `shutdown`,
-  `election`, `heartbeat`, `query_task`), destination/pattern, mingle con worker ref↔rs in
-  entrambe le direzioni (revoche e clock sincronizzati), gossip (`on_node_join/leave/lost` con un
-  worker ref che entra ed esce), riconnessione al broker (pidbox torna a rispondere), Redis e
-  AMQP, `-P solo` e `-P prefork`.
-- Moduli del master: un task `-P solo` (e un probe nel master per prefork, per esempio via
-  `CELERY_RS_WORKER_STATE`) verifica l'assenza dei moduli elencati al punto 5.
-- Test unitari Rust per il consumer pidbox/gossip (binding fanout, nomi code, TTL).
+## Project
 
-## Benchmark
-`bench/bench.py --pool solo` e `--pool prefork --concurrency 4`, Redis e AMQP: PSS idle e di
-picco del master/albero, throughput e latenza (non devono peggiorare), risvegli/s da idle; e
-latenza di `inspect ping` verso il worker (p50 di 200 chiamate con `limit=1`). Riporta ref vs rs
-prima/dopo. Obiettivo: PSS del master `-P solo` Redis ≤ 41 MB, nessun peggioramento altrove.
+1. **Pidbox in Rust core**: Node queue consumer (`{hostname}.celery.pidbox` and fanout bindings like kombu, on Redis and AMQP) whose messages arrive at the loop from `Waker`; the reference code (`Pidbox.on_message` → `Node.handle_message` → `Panel`) remains the one that decides and responds; the response starts from the Rust producer towards `reply.celery.pidbox` with identical `routing_key`/ `correlation_id`/`ticket`. `reset()`/`shutdown()`/reconnection as in the reference.
+2. Rust transport gossip: `worker.#` event queue (names, `auto_delete`, `expires`, `message_ttl` as `Receiver`), same Python handlers (`on_message`, election, clock, join/leave/lost). Outgoing events already pass through the Rust producer.
+3. **Mingle** without kombu connection: `hello` broadcast and response collection via the 07 Rust control client (today `mingle` passes `connection=` and therefore falls back to kombu), with the same responses and the same effect (synchronized revocations and clocks).
+4. **Redis maintenance**: if the pidbox/gossip TTL bindings pass to the Rust transport, the periodic renewal (`REFRESH_BINDING`/sweep, `_kombu.binding_deadlines`) must also be done from Rust with the same traffic (gate `wire-worker` on Redis).
+5. **Result**: With the Rust consumer active the master does not import `kombu.connection`, `kombu.pidbox`, `kombu.transport.*`, `redis`, `amqp` (unless the results backend or the user loads them) and does not register fd kombu on the hub. `CELERY_RS_WORKER=0` back to full reference. `-P solo` and `-P prefork` (Rust pool) both.
+6. No changes to names, signatures, defaults or log texts; no new settings.
 
-## Gate (tutti obbligatori, esito reale nel messaggio finale)
+## Tests required
+
+- `python/tests_rs/test_worker_control.py` (`.venv-rs`, worker rs as subprocess, client and second worker of the reference where needed, each outcome compared with the worker of the reference): all commands `inspect`/`control` (including `revoke` with terminate, `rate_limit`, `time_limit`, `add_consumer`/`cancel_consumer`, `pool_grow/shrink`, `autoscale`, `shutdown`, `election`, `heartbeat`, `query_task`), destination/pattern, mingle with worker ref↔rs in both directions (revocations and synchronized clocks), gossip (`on_node_join/leave/lost` with a worker ref entering and exiting), reconnection to the broker (pidbox responds again), Redis and AMQP, `-P solo` and `-P prefork`.
+- Master modules: a task `-P solo` (and a probe in the master for prefork, for example via `CELERY_RS_WORKER_STATE`) checks for the absence of the modules listed in point 5.
+- Rust unit tests for the pidbox/gossip consumer (fanout bindings, code names, TTL).
+
+## Benchmarks
+
+`bench/bench.py --pool solo` and `--pool prefork --concurrency 4`, Redis and AMQP: master/tree idle and peak PSS, throughput and latency (should not deteriorate), wake up/s from idle; and latency of `inspect ping` to the worker (p50 of 200 calls with `limit=1`). Report ref vs rs before/after. Target: Master PSS `-P solo` Redis ≤ 41 MB, no degradation elsewhere.
+
+## Gate (all mandatory, real outcome in final message)
+
 ```
 cargo build --release && cargo clippy --all-targets -- -D warnings
 tools/dev/with-brokers cargo test
 tools/dev/build-package && tools/dev/build-native
 tools/dev/with-brokers .venv-ref/bin/python -m pytest crates/celery-py/tests -q
 tools/dev/with-brokers .venv-rs/bin/python -m pytest python/tests_rs -q
-./compat api && ./compat wire && ./compat upstream --venv .venv-rs   # 0 / 0 / 0 regressioni
-./compat wire-worker --pool solo && ./compat wire-worker --pool prefork   # 0 / 0 (incluso two_workers)
+./compat api && ./compat wire && ./compat upstream --venv .venv-rs   # 0 / 0 / 0 regressions
+./compat wire-worker --pool solo && ./compat wire-worker --pool prefork   # 0 / 0 (including two_workers)
 ./compat wire-beat && ./compat cli                                      # 0 / 0
 ```
 
-## Fuori scope
-mimalloc e profiling generale della memoria (08b), latenze rpc/beat (08c), beat embedded.
+## Out of scope
+
+mimalloc and general memory profiling (08b), rpc/beat latencies (08c), embedded beats.
