@@ -45,7 +45,8 @@ You are working on celery-rs: Celery rewritten with a Rust core and an identical
 - No `unwrap()`/`expect()` in library code (tests only). Use `thiserror` for errors.
 - Use `unsafe` only when essential, with a `// SAFETY:` comment explaining why it is sound.
 - Dependencies: use `[workspace.dependencies]`; justify any new dependency in the final message.
-- Comments must be in Italian, brief, and explain only *why*. Names and APIs match the reference.
+- Comments and docs in English, minimal, explaining only *why* (style rules: `specs/13-english-style.md`).
+  Names and APIs match the reference.
 - Every Rust module has unit tests. Behavior that can be checked against the reference has a
   test comparing its output with `.venv-ref`.
 
