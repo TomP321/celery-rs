@@ -14,6 +14,7 @@ from PIL import Image, ImageDraw, ImageFont
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / 'docs/assets'
 WIDTH, HEIGHT, FPS = 960, 540, 10
+SCALE = 2  # le coordinate sono in 960×540; l'immagine è disegnata a 1920×1080
 BG, PANEL, BORDER = '#0b0c10', '#11141b', '#2c303b'
 WHITE, MUTED, DARK = '#f3f1ed', '#a0a7b7', '#303642'
 ORANGE, BLUE = '#e8946f', '#78b6ed'
@@ -31,7 +32,38 @@ TOTALS = [('Celery originale', 353.2, MUTED), ('celery-rs · Python 3.11', 78.4,
 @lru_cache(maxsize=None)
 def font(size, bold=False):
     name = 'DejaVuSans-Bold.ttf' if bold else 'DejaVuSans.ttf'
-    return ImageFont.truetype('/usr/share/fonts/truetype/dejavu/' + name, size)
+    return ImageFont.truetype('/usr/share/fonts/truetype/dejavu/' + name, size * SCALE)
+
+
+class ScaledDraw:
+    """ImageDraw con coordinate logiche 960×540 moltiplicate per SCALE."""
+
+    def __init__(self, image):
+        self._d = ImageDraw.Draw(image)
+
+    @staticmethod
+    def _xy(xy):
+        return [v * SCALE for v in xy] if isinstance(xy[0], (int, float)) else \
+               [(x * SCALE, y * SCALE) for x, y in xy]
+
+    def _kw(self, kw):
+        for key in ('width', 'radius'):
+            if key in kw:
+                kw[key] = kw[key] * SCALE
+        return kw
+
+    def text(self, xy, value, **kw):
+        self._d.text(self._xy(xy), value, **kw)
+
+    def textbbox(self, xy, value, **kw):
+        return [v / SCALE for v in self._d.textbbox(self._xy(xy), value, **kw)]
+
+    def textlength(self, value, **kw):
+        return self._d.textlength(value, **kw) / SCALE
+
+    def __getattr__(self, name):  # line, rectangle, rounded_rectangle, ellipse, arc, polygon
+        draw = getattr(self._d, name)
+        return lambda xy, *args, **kw: draw(self._xy(xy), *args, **self._kw(kw))
 
 
 def text(d, x, y, value, size=14, color=MUTED, bold=False, anchor='la'):
@@ -63,8 +95,8 @@ def mix(c1, c2, t):
 
 def canvas(title, subtitle, label=None, label_color=MUTED):
     """Titolo e sottotitolo; ``label`` colorata (es. «celery-rs») prima del sottotitolo."""
-    image = Image.new('RGB', (WIDTH, HEIGHT), BG)
-    d = ImageDraw.Draw(image)
+    image = Image.new('RGB', (WIDTH * SCALE, HEIGHT * SCALE), BG)
+    d = ScaledDraw(image)
     text(d, 28, 20, title, 24, WHITE, True)
     x = 28
     if label:
