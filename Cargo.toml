@@ -29,14 +29,14 @@ hashbrown = "0.17"
 lapin = "4.12"
 libc = "0.2"
 mimalloc = { version = "0.1", default-features = false }
-# `extension-module` è attivato solo dai pyproject di maturin (`pyo3/extension-module`):
-# tenerlo qui impedisce a `cargo test` di linkare libpython nei binari di test.
+# `extension-module` is enabled only by maturin (`pyo3/extension-module`): enabling it here
+# would stop `cargo test` from linking libpython into test binaries.
 pyo3 = { version = "0.30", features = ["abi3-py310"] }
 pyo3-build-config = "0.30"
 proptest = "1"
 redis = { version = "1.8", default-features = false, features = ["tokio-comp", "aio", "script", "streams", "tokio-rustls-comp"] }
-# Provider crittografico esplicito per `rediss://`: senza una feature di rustls
-# il client va in panico alla creazione della configurazione TLS.
+# Explicit crypto provider for `rediss://`: without a rustls feature the client panics when
+# building the TLS config.
 rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
 regex = "1"
 serde = { version = "1", features = ["derive"] }
@@ -47,7 +47,7 @@ tracing = "0.1"
 uuid = { version = "1", features = ["v4", "fast-rng"] }
 
 [profile.release]
-# Compatta il codice residente; la latenza viene verificata nei benchmark.
+# Smaller resident code; latency is checked by the benchmarks.
 opt-level = "s"
 lto = "fat"
 codegen-units = 1
@@ -55,10 +55,10 @@ panic = "abort"
 strip = "symbols"
 
 [profile.release.package.celery-beat]
-# Il calcolo delle scadenze resta caldo; il resto privilegia le pagine residenti.
+# Due-time computation stays hot; everything else favours fewer resident pages.
 opt-level = 3
 
-# Profilo per profiling/bench: come release ma con simboli e panic=unwind (serve a PyO3 nei test).
+# Release with symbols and panic=unwind (PyO3 tests need unwinding).
 [profile.profiling]
 inherits = "release"
 strip = "none"

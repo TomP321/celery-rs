@@ -1,6 +1,5 @@
-# Pacchetto Python drop-in: distribuzione `celery` (stesso nome e versione del riferimento,
-# con versione locale `+rs`, che soddisfa i vincoli `celery==5.7.0rc1`) contenente il guscio
-# Python `celery/` e il modulo nativo `_celery_rs`.
+# Drop-in `celery` distribution: same name and version as the reference, with a `+rs` local
+# version that satisfies `celery==5.7.0rc1`; ships the Python shell and the native `_celery_rs`.
 [build-system]
 requires = ["maturin>=1.14,<2"]
 build-backend = "maturin"
@@ -8,7 +7,7 @@ build-backend = "maturin"
 [project]
 name = "celery"
 version = "5.7.0rc1+rs.0.1.3"
-description = "Distributed Task Queue (celery-rs: core in Rust, API identica a Celery)"
+description = "Distributed Task Queue (celery-rs: core in Rust, same API as Celery)"
 readme = "README.md"
 license = { text = "BSD-3-Clause" }
 requires-python = ">=3.10"
@@ -26,8 +25,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Stesse librerie di `kombu[redis]`, ma senza il pin `packaging==26.3` di kombu 5.7.0rc1
-# (kombu usa packaging solo per confrontare versioni): evita conflitti con altre dipendenze.
+# Same as `kombu[redis]` without kombu 5.7.0rc1's `packaging==26.3` pin (kombu only uses it to
+# compare versions), which conflicts with other dependencies.
 redis = ["redis>=6.4.0,<9.0.0", "packaging"]
 msgpack = ["kombu[msgpack]"]
 yaml = ["kombu[yaml]"]
