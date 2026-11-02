@@ -11,12 +11,12 @@ import sys
 import urllib.request
 
 BASE_URL = 'https://github.com/TomP321/celery-rs/raw/wheels/'
-VERSION = '5.7.0rc1+rs.0.1.3'
+VERSION = '5.7.0rc1+rs.0.1.4'
 WHEELS = {
-    'x86_64': ('celery-5.7.0rc1+rs.0.1.3-cp310-abi3-manylinux_2_28_x86_64.whl',
-               'f6dfa1713d57a2e16dec5b1881e7f5066b9a4c25ac6446d27d4e3d25d036d5bf'),
-    'aarch64': ('celery-5.7.0rc1+rs.0.1.3-cp310-abi3-manylinux_2_28_aarch64.whl',
-                'b209cfae89882394d438a9b398a27f0ce7d6c274444693b65adc70b0fb911550'),
+    'x86_64': ('celery-5.7.0rc1+rs.0.1.4-cp310-abi3-manylinux_2_28_x86_64.whl',
+               'a0ea644e6c659b4993a0bfe1b6e7eff2c69e3c5402ef18a5a0a1c8d3139d95bb'),
+    'aarch64': ('celery-5.7.0rc1+rs.0.1.4-cp310-abi3-manylinux_2_28_aarch64.whl',
+                '21c03c1579488774ffcac77f5e40e6ba98f7fed4d92b48a99aa46bb7251788e6'),
 }
 ALIASES = {'amd64': 'x86_64', 'arm64': 'aarch64'}
 HERE = os.path.dirname(os.path.abspath(__file__))

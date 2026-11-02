@@ -59,7 +59,7 @@ Requirements: Linux, Python ≥ 3.10. The package is called `celery` (version `5
 ```toml
 # pyproject.toml: replace "celery==…" with one line; x86_64/aarch64 is selected automatically
 
-"celery[redis] @ https://github.com/TomP321/celery-rs/raw/wheels/celery-5.7.0rc1%2Brs.0.1.3.tar.gz",
+"celery[redis] @ https://github.com/TomP321/celery-rs/raw/wheels/celery-5.7.0rc1%2Brs.0.1.4.tar.gz",
 ```
 
 The source package contains only a selector (`tools/selector/`) that downloads and checks (SHA-256) the right precompiled wheel: works with pip and uv, without Rust.
