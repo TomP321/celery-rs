@@ -1335,14 +1335,21 @@ impl RedisTransport {
                 continue;
             }
             let queues = self.shared.lookup(exchange_name, &routing_key).await?;
-            for queue in queues {
-                if queue.is_empty() {
-                    continue;
-                }
+            let mut queues = queues
+                .into_iter()
+                .filter(|queue| !queue.is_empty())
+                .peekable();
+            let mut envelope = prepared.envelope;
+            while let Some(queue) = queues.next() {
+                let payload = if queues.peek().is_none() {
+                    std::mem::take(&mut envelope)
+                } else {
+                    envelope.clone()
+                };
                 let expire = self.shared.queue_expire(&queue);
                 actions.push(PublishAction::Lpush {
                     key: config.queue_key(&queue, prepared.priority),
-                    payload: prepared.envelope.clone(),
+                    payload,
                     queue,
                     expire,
                 });
@@ -1632,17 +1639,17 @@ impl Transport for RedisTransport {
                 .await?;
             self.publish(request.publish_request()).await?;
 
-            let Some(reply) = request.reply.clone() else {
+            let Some(reply) = &request.reply else {
                 return Ok(ControlOutcome::default());
             };
             // Consumer.declare redeclares the queue and binding.
-            self.declare_queue(&request.reply_queue_declaration(&reply))
+            self.declare_queue(&request.reply_queue_declaration(reply))
                 .await?;
-            self.bind(&request.reply_binding(&reply)).await?;
+            self.bind(&request.reply_binding(reply)).await?;
 
-            let ticket = request.ticket.clone().unwrap_or_default();
+            let ticket = request.ticket.as_deref().unwrap_or_default();
             let outcome = self
-                .control_collect(&reply, &ticket, request.timeout, request.limit)
+                .control_collect(reply, ticket, request.timeout, request.limit)
                 .await?;
             // Match kombu's after_reply_message_received cleanup.
             self.delete_queue(&reply.name).await?;
@@ -2094,12 +2101,12 @@ async fn wait_once(mut conn: Conn, shared: Arc<Shared>, id: u64) -> (Conn, Outco
                 keys.push(config.queue_key(queue, *step));
             }
         }
-        let mut brpop = conn.brpop.clone();
+        let brpop = &mut conn.brpop;
         let result: std::result::Result<Option<(String, Vec<u8>)>, ::redis::RedisError> =
             ::redis::cmd("BRPOP")
                 .arg(&keys)
                 .arg(BRPOP_TIMEOUT)
-                .query_async(&mut brpop)
+                .query_async(brpop)
                 .await;
         match result {
             Ok(Some((key, raw))) => {

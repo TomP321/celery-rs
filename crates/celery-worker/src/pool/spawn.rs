@@ -2,7 +2,7 @@
 //! before Rust threads start. The supervisor never forks; it passes socketpair descriptors via SCM_RIGHTS.
 
 use std::io::{self, Read, Write};
-use std::os::fd::{FromRawFd, OwnedFd, RawFd};
+use std::os::fd::{AsFd, AsRawFd, BorrowedFd, RawFd};
 use std::os::unix::net::UnixStream;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -51,19 +51,12 @@ pub struct ZygoteSpawner {
 impl ZygoteSpawner {
     /// Duplicates the descriptor, leaving the original owned by the caller.
     pub fn new(
-        fd: RawFd,
+        fd: BorrowedFd<'_>,
         zygote_pid: i32,
         maxtasks: Option<u32>,
         max_memory_kb: Option<u32>,
     ) -> io::Result<Self> {
-        // SAFETY: dup returns a new independent descriptor owned exclusively here;
-        // Python retains ownership of the original.
-        let dup = unsafe { libc::dup(fd) };
-        if dup < 0 {
-            return Err(io::Error::last_os_error());
-        }
-        // SAFETY: dup is a valid, exclusively owned descriptor.
-        let control = unsafe { UnixStream::from_raw_fd(dup) };
+        let control = UnixStream::from(fd.try_clone_to_owned()?);
         control.set_nonblocking(false)?;
         Ok(Self {
             control: Mutex::new(crate::fds::Tracked::new(control)),
@@ -74,7 +67,7 @@ impl ZygoteSpawner {
         })
     }
 
-    fn send_control(&self, kind: u8, fd: Option<RawFd>) -> io::Result<()> {
+    fn send_control(&self, kind: u8, fd: Option<BorrowedFd<'_>>) -> io::Result<()> {
         let mut payload = [0u8; CONTROL_FRAME_LEN];
         payload[0] = kind;
         payload[1..5].copy_from_slice(&self.maxtasks.to_be_bytes());
@@ -150,27 +143,11 @@ impl Spawner for ZygoteSpawner {
                 "pool zygote unavailable",
             ));
         }
-        let mut fds = [0 as RawFd; 2];
-        // SAFETY: fds is an array of two integers, both initialized by socketpair on success.
-        let rc = unsafe {
-            libc::socketpair(
-                libc::AF_UNIX,
-                libc::SOCK_STREAM | libc::SOCK_CLOEXEC,
-                0,
-                fds.as_mut_ptr(),
-            )
-        };
-        if rc != 0 {
-            return Err(io::Error::last_os_error());
-        }
-        // SAFETY: both descriptors were just created and are exclusively owned here.
-        let master = crate::fds::Tracked::new(unsafe { UnixStream::from_raw_fd(fds[0]) });
-        // SAFETY: this descriptor is newly created and owned here; it closes after transfer
-        // unless the zygote adopts it.
-        let child = crate::fds::Tracked::new(unsafe { OwnedFd::from_raw_fd(fds[1]) });
-        use std::os::fd::AsRawFd;
+        let (master, child) = UnixStream::pair()?;
+        let master = crate::fds::Tracked::new(master);
+        let child = crate::fds::Tracked::new(child);
 
-        if let Err(error) = self.send_control(CONTROL_SPAWN, Some(child.as_raw_fd())) {
+        if let Err(error) = self.send_control(CONTROL_SPAWN, Some(child.as_fd())) {
             self.lost.store(true, Ordering::Release);
             return Err(error);
         }
@@ -194,23 +171,16 @@ impl Spawner for ZygoteSpawner {
     }
 
     fn signal(&self, pid: i32, signal: i32) -> io::Result<()> {
-        // SAFETY: kill accesses no process memory; the PID comes from the spawn protocol or Python master.
-        let rc = unsafe { libc::kill(pid, signal) };
-        if rc != 0 {
-            let error = io::Error::last_os_error();
-            // ESRCH means the process already exited, which is harmless to the caller.
-            if error.raw_os_error() == Some(libc::ESRCH) {
-                return Ok(());
-            }
-            return Err(error);
+        match crate::process::signal(pid, signal) {
+            Err(error) if error.raw_os_error() == Some(libc::ESRCH) => Ok(()),
+            result => result,
         }
-        Ok(())
     }
 
     fn reap(&self, pid: i32) -> i32 {
         if pid == self.zygote_pid {
             // The master can reap the zygote because it is a direct child.
-            return waitpid(pid);
+            return crate::process::wait(pid).unwrap_or(-1);
         }
         // Only the zygote can waitpid its children; request their exit status through it.
         self.send_reap(pid).unwrap_or(-1)
@@ -227,9 +197,7 @@ impl Spawner for ZygoteSpawner {
         if self.lost.load(Ordering::Acquire) || self.zygote_pid <= 0 {
             return false;
         }
-        // SAFETY: kill(pid, 0) checks existence without sending a signal or accessing memory.
-        let rc = unsafe { libc::kill(self.zygote_pid, 0) };
-        rc == 0
+        crate::process::signal(self.zygote_pid, 0).is_ok()
     }
 
     fn zygote_pid(&self) -> i32 {
@@ -238,22 +206,25 @@ impl Spawner for ZygoteSpawner {
 }
 
 // Sends a payload and descriptor with SCM_RIGHTS in one sendmsg call.
-fn send_with_fd(stream: &UnixStream, payload: &[u8], fd: RawFd) -> io::Result<()> {
-    use std::os::fd::AsRawFd;
+fn send_with_fd(stream: &UnixStream, payload: &[u8], fd: BorrowedFd<'_>) -> io::Result<()> {
+    let fd = fd.as_raw_fd();
     let mut iov = libc::iovec {
         iov_base: payload.as_ptr().cast_mut().cast(),
         iov_len: payload.len(),
     };
     // SAFETY: CMSG_SPACE is a pure libc calculation; four bytes hold one descriptor integer.
     let space = unsafe { libc::CMSG_SPACE(std::mem::size_of::<RawFd>() as u32) } as usize;
-    let mut control = [0u8; 64];
-    debug_assert!(space <= control.len());
+    // cmsghdr alignment is required even though the payload is a byte sequence.
+    let mut control = [0usize; 8];
+    debug_assert!(space <= std::mem::size_of_val(&control));
+    // SAFETY: a zeroed msghdr has valid null pointers and zero lengths, filled before sendmsg.
     let mut msg: libc::msghdr = unsafe { std::mem::zeroed() };
     msg.msg_iov = &mut iov;
     msg.msg_iovlen = 1;
     msg.msg_control = control.as_mut_ptr().cast();
     msg.msg_controllen = space;
-    // SAFETY: the control buffer fits a cmsghdr and one descriptor.
+    // SAFETY: control is aligned for cmsghdr and has CMSG_SPACE bytes; cmsg
+    // and its descriptor payload remain in that buffer. fd is borrowed through sendmsg.
     unsafe {
         let cmsg = libc::CMSG_FIRSTHDR(&msg);
         if cmsg.is_null() {
@@ -288,38 +259,21 @@ fn send_with_fd(stream: &UnixStream, payload: &[u8], fd: RawFd) -> io::Result<()
     Ok(())
 }
 
-fn waitpid(pid: i32) -> i32 {
-    loop {
-        let mut status = 0;
-        // SAFETY: waitpid writes to the valid local status integer and waits for a direct child.
-        let rc = unsafe { libc::waitpid(pid, &mut status, 0) };
-        if rc < 0 {
-            let error = io::Error::last_os_error();
-            if error.kind() == io::ErrorKind::Interrupted {
-                continue;
-            }
-            return -1;
-        }
-        if libc::WIFEXITED(status) {
-            return libc::WEXITSTATUS(status);
-        }
-        if libc::WIFSIGNALED(status) {
-            return -libc::WTERMSIG(status);
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn duplicates_the_control_fd() {
-        let (a, _b) = UnixStream::pair().expect("pair");
-        use std::os::fd::AsRawFd;
-        let spawner = ZygoteSpawner::new(a.as_raw_fd(), 0, None, None).expect("spawner");
+        let (a, mut b) = UnixStream::pair().expect("pair");
+        use std::os::fd::AsFd;
+        let spawner = ZygoteSpawner::new(a.as_fd(), 0, None, None).expect("spawner");
 
         drop(a);
+        spawner.send_control(CONTROL_SHUTDOWN, None).expect("send");
+        let mut frame = [0; CONTROL_FRAME_LEN];
+        b.read_exact(&mut frame).expect("read");
+        assert_eq!(frame[0], CONTROL_SHUTDOWN);
         assert!(!spawner.zygote_alive());
     }
 }

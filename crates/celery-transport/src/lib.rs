@@ -1,5 +1,6 @@
 //! Broker transports for memory, Redis and AMQP URLs.
 
+#![forbid(unsafe_code)]
 pub mod amqp;
 pub mod control;
 pub mod memory;

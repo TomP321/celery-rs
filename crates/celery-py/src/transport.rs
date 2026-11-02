@@ -3,8 +3,7 @@
 
 use crate::fork::ForkSafe;
 use std::future::Future;
-use std::ptr;
-use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 use std::time::Duration;
@@ -27,15 +26,15 @@ use celery_transport::{
     PublishRequest, QueueBinding, QueueDecl, ReplyRoute, Transport, TransportOptions, Url,
 };
 
-/// Tracks the shared runtime's owning PID so children recreate it lazily after fork.
+// Registrations must be removed before an unpublished runtime closes its descriptors.
 struct RuntimeEntry {
-    pid: u32,
     _fds: Vec<celery_worker::fds::Registration>,
     runtime: tokio::runtime::Runtime,
 }
 
 /// Entries are never freed; fork resets only the pointer.
-static RUNTIME: AtomicPtr<RuntimeEntry> = AtomicPtr::new(ptr::null_mut());
+static RUNTIME: celery_worker::per_process::PerProcess<RuntimeEntry> =
+    celery_worker::per_process::PerProcess::new();
 
 // Identify the driver's epoll by membership, excluding unrelated epoll instances
 // opened concurrently by other threads. Never mark Python descriptors.
@@ -110,46 +109,22 @@ fn build_runtime() -> Result<tokio::runtime::Runtime, String> {
 
 /// Returns the current process's lazily created runtime.
 pub(crate) fn runtime() -> Result<&'static tokio::runtime::Runtime, String> {
-    let pid = std::process::id();
-    loop {
-        let current = RUNTIME.load(Ordering::Acquire);
-        if !current.is_null() {
-            // SAFETY: entries are never freed, including after fork.
-            let entry = unsafe { &*current };
-            if entry.pid == pid {
-                return Ok(&entry.runtime);
-            }
-        }
+    let entry = RUNTIME.get_or_try_init(|| {
         let runtime = build_runtime()?;
         let fds = runtime_fds(&runtime)?
             .into_iter()
             .map(celery_worker::fds::Registration::new)
             .collect();
-        let fresh = Box::into_raw(Box::new(RuntimeEntry {
-            pid,
-            runtime,
-            _fds: fds,
-        }));
-        match RUNTIME.compare_exchange(current, fresh, Ordering::AcqRel, Ordering::Acquire) {
-            Ok(_) => {
-                // SAFETY: fresh was just published and remains alive.
-                let entry: &'static RuntimeEntry = unsafe { &*fresh };
-                return Ok(&entry.runtime);
-            }
-            Err(_) => {
-                // Another thread installed its runtime first; this unused runtime can be destroyed.
-                // SAFETY: fresh is exclusively owned and was never shared.
-                drop(unsafe { Box::from_raw(fresh) });
-            }
-        }
-    }
+        Ok::<_, String>(RuntimeEntry { runtime, _fds: fds })
+    })?;
+    Ok(&entry.runtime)
 }
 
 /// Abandons the inherited runtime in a fork child and creates a new one on next use.
 /// The old runtime cannot be safely shut down in the child and is intentionally leaked.
 #[pyfunction]
 pub fn after_fork() {
-    let _ = RUNTIME.swap(ptr::null_mut(), Ordering::AcqRel);
+    RUNTIME.reset();
 }
 
 pub(crate) fn block<T: Send>(

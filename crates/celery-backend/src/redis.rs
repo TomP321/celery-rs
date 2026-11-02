@@ -385,6 +385,7 @@ pub fn release_idle_memory() {
 
 #[cfg(all(target_os = "linux", target_env = "gnu"))]
 fn trim_free_pages() {
+    // CPython shares the glibc heap; Rust allocator APIs cannot release its free pages.
     // SAFETY: malloc_trim is thread-safe, retains no pointers and touches only free allocator pages.
     unsafe {
         libc::malloc_trim(0);

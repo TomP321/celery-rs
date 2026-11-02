@@ -1,5 +1,6 @@
 //! Crontab field parsing and calendar scheduling. Python retains time zones, DST and remaining().
 
+#![forbid(unsafe_code)]
 pub mod calendar;
 pub mod error;
 pub mod parser;

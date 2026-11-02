@@ -7,7 +7,7 @@ use pyo3::ffi;
 use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{
-    PyBool, PyBytes, PyDict, PyFloat, PyIterator, PyList, PyMemoryView, PyString, PyTuple,
+    PyBool, PyBytes, PyDict, PyFloat, PyInt, PyIterator, PyList, PyMemoryView, PyString, PyTuple,
 };
 
 use celery_proto::json::read::{Event, JsonStr, Reader};
@@ -98,72 +98,69 @@ impl<'py> DumpEngine<'py> {
             return Ok(());
         }
         let ptr = obj.as_ptr();
-        // SAFETY: ptr references a live Python object; type checks read only its header.
-        unsafe {
-            if ffi::PyBool_Check(ptr) != 0 {
-                if obj.is_truthy()? {
-                    self.out.extend_from_slice(b"true");
-                } else {
-                    self.out.extend_from_slice(b"false");
-                }
-                return Ok(());
+        if obj.is_instance_of::<PyBool>() {
+            if obj.is_truthy()? {
+                self.out.extend_from_slice(b"true");
+            } else {
+                self.out.extend_from_slice(b"false");
             }
-            if ffi::PyLong_Check(ptr) != 0 {
-                write_py_int(self.py, obj, &mut self.out)?;
-                return Ok(());
+            return Ok(());
+        }
+        if obj.is_instance_of::<PyInt>() {
+            write_py_int(self.py, obj, &mut self.out)?;
+            return Ok(());
+        }
+        if obj.is_instance_of::<PyFloat>() {
+            let value: f64 = obj.extract()?;
+            write_float(&mut self.out, value);
+            return Ok(());
+        }
+        if obj.is_instance_of::<PyString>() {
+            write_py_string(obj, &mut self.out)?;
+            return Ok(());
+        }
+        if obj.is_instance_of::<PyList>() || obj.is_instance_of::<PyTuple>() {
+            let id = ptr as usize;
+            if !self.markers.insert(id) {
+                return Err(PyValueError::new_err("Circular reference detected"));
             }
-            if ffi::PyFloat_Check(ptr) != 0 {
-                let value: f64 = obj.extract()?;
-                write_float(&mut self.out, value);
-                return Ok(());
+            self.out.push(b'[');
+            let iter = obj.try_iter()?;
+            self.stack.push(Frame {
+                kind: FrameKind::Array { iter },
+                id,
+                depth: work.depth,
+                first: true,
+            });
+            return Ok(());
+        }
+        if obj.is_instance_of::<PyDict>() {
+            let id = ptr as usize;
+            if !self.markers.insert(id) {
+                return Err(PyValueError::new_err("Circular reference detected"));
             }
-            if ffi::PyUnicode_Check(ptr) != 0 {
-                write_py_string(obj, &mut self.out)?;
-                return Ok(());
-            }
-            if ffi::PyList_Check(ptr) != 0 || ffi::PyTuple_Check(ptr) != 0 {
-                let id = ptr as usize;
-                if !self.markers.insert(id) {
-                    return Err(PyValueError::new_err("Circular reference detected"));
-                }
-                self.out.push(b'[');
-                let iter = obj.try_iter()?;
+            self.out.push(b'{');
+            // CPython uses items() for dictionary subclasses.
+            if obj.is_exact_instance_of::<PyDict>() {
+                let dict = obj.cast::<PyDict>()?.clone();
                 self.stack.push(Frame {
-                    kind: FrameKind::Array { iter },
+                    kind: FrameKind::DictExact { dict, pos: 0 },
                     id,
                     depth: work.depth,
                     first: true,
                 });
-                return Ok(());
+            } else {
+                let items = obj.call_method0("items")?;
+                self.stack.push(Frame {
+                    kind: FrameKind::DictItems {
+                        iter: items.try_iter()?,
+                    },
+                    id,
+                    depth: work.depth,
+                    first: true,
+                });
             }
-            if ffi::PyDict_Check(ptr) != 0 {
-                let id = ptr as usize;
-                if !self.markers.insert(id) {
-                    return Err(PyValueError::new_err("Circular reference detected"));
-                }
-                self.out.push(b'{');
-                // CPython uses items() for dictionary subclasses.
-                if ffi::PyDict_CheckExact(ptr) != 0 {
-                    let dict = obj.cast::<PyDict>()?.clone();
-                    self.stack.push(Frame {
-                        kind: FrameKind::DictExact { dict, pos: 0 },
-                        id,
-                        depth: work.depth,
-                        first: true,
-                    });
-                } else {
-                    let items = obj.call_method0("items")?;
-                    self.stack.push(Frame {
-                        kind: FrameKind::DictItems {
-                            iter: items.try_iter()?,
-                        },
-                        id,
-                        depth: work.depth,
-                        first: true,
-                    });
-                }
-                return Ok(());
-            }
+            return Ok(());
         }
 
         let value = self.default.call1((obj,))?;
@@ -216,6 +213,8 @@ impl<'py> DumpEngine<'py> {
             FrameKind::DictExact { dict, pos } => {
                 let mut key: *mut ffi::PyObject = std::ptr::null_mut();
                 let mut value: *mut ffi::PyObject = std::ptr::null_mut();
+                // PyO3's dict iterator panics on mutation; CPython's JSON encoder permits
+                // size changes by default callbacks, so retain PyDict_Next here.
                 // SAFETY: dict is alive and pos holds the iteration state.
                 let has = unsafe { ffi::PyDict_Next(dict.as_ptr(), pos, &mut key, &mut value) };
                 (has, key, value)
@@ -284,6 +283,7 @@ pub fn json_dumps(
 }
 
 fn write_py_int(py: Python<'_>, obj: &Bound<'_, PyAny>, out: &mut Vec<u8>) -> PyResult<()> {
+    // Safe extraction creates OverflowError for large integers (25% slower in the JSON benchmark).
     let mut overflow: i32 = 0;
     // SAFETY: obj is a live PyLong or subclass and overflow points to a valid integer.
     let v = unsafe { ffi::PyLong_AsLongLongAndOverflow(obj.as_ptr(), &mut overflow) };
@@ -318,6 +318,7 @@ fn type_name(obj: &Bound<'_, PyAny>) -> PyResult<String> {
 /// Returns CPython's type name, including modules for static types except builtins.
 fn dict_key_type_name(obj: &Bound<'_, PyAny>) -> PyResult<String> {
     let ty = obj.get_type();
+    // __flags__ attribute lookup could invoke a user metaclass override.
     // SAFETY: ty is a live Python type; PyType_GetFlags does not modify it.
     let flags = unsafe { ffi::PyType_GetFlags(ty.as_ptr().cast()) };
     let name = ty.name()?.to_string_lossy().into_owned();
@@ -339,55 +340,52 @@ fn dict_key_type_name(obj: &Bound<'_, PyAny>) -> PyResult<String> {
 }
 
 fn write_dict_key(py: Python<'_>, key: &Bound<'_, PyAny>, out: &mut Vec<u8>) -> PyResult<()> {
-    let ptr = key.as_ptr();
-    // SAFETY: ptr references a live Python key; type checks do not modify it.
-    unsafe {
-        if ffi::PyUnicode_Check(ptr) != 0 {
-            out.push(b'"');
-            let s = key.cast::<PyString>()?;
-            match py_str_data(s)? {
-                PyStrData::Utf8(v) => {
-                    let mut escaped = Vec::with_capacity(v.len() + 2);
-                    write_str(&mut escaped, v);
-                    out.extend_from_slice(&escaped[1..escaped.len() - 1]);
-                }
-                PyStrData::Code(cps) => {
-                    let mut escaped = Vec::with_capacity(cps.len() * 2 + 2);
-                    write_str_code_points(&mut escaped, cps);
-                    out.extend_from_slice(&escaped[1..escaped.len() - 1]);
-                }
+    if key.is_instance_of::<PyString>() {
+        out.push(b'"');
+        let s = key.cast::<PyString>()?;
+        match py_str_data(s)? {
+            PyStrData::Utf8(v) => {
+                let mut escaped = Vec::with_capacity(v.len() + 2);
+                write_str(&mut escaped, v);
+                out.extend_from_slice(&escaped[1..escaped.len() - 1]);
             }
-            out.push(b'"');
-            return Ok(());
-        }
-        if ffi::PyBool_Check(ptr) != 0 {
-            out.push(b'"');
-            if key.is_truthy()? {
-                out.extend_from_slice(b"true");
-            } else {
-                out.extend_from_slice(b"false");
+            PyStrData::Code(cps) => {
+                let mut escaped = Vec::with_capacity(cps.len() * 2 + 2);
+                write_str_code_points(&mut escaped, cps);
+                out.extend_from_slice(&escaped[1..escaped.len() - 1]);
             }
-            out.push(b'"');
-            return Ok(());
         }
-        if ffi::PyLong_Check(ptr) != 0 {
-            let mut buf = Vec::new();
-            write_py_int(py, key, &mut buf)?;
-            out.push(b'"');
-            out.extend_from_slice(&buf);
-            out.push(b'"');
-            return Ok(());
-        }
-        if ffi::PyFloat_Check(ptr) != 0 {
-            let value: f64 = key.extract()?;
-            let mut buf = Vec::new();
-            write_float(&mut buf, value);
-            out.push(b'"');
-            out.extend_from_slice(&buf);
-            out.push(b'"');
-            return Ok(());
-        }
+        out.push(b'"');
+        return Ok(());
     }
+    if key.is_instance_of::<PyBool>() {
+        out.push(b'"');
+        if key.is_truthy()? {
+            out.extend_from_slice(b"true");
+        } else {
+            out.extend_from_slice(b"false");
+        }
+        out.push(b'"');
+        return Ok(());
+    }
+    if key.is_instance_of::<PyInt>() {
+        let mut buf = Vec::new();
+        write_py_int(py, key, &mut buf)?;
+        out.push(b'"');
+        out.extend_from_slice(&buf);
+        out.push(b'"');
+        return Ok(());
+    }
+    if key.is_instance_of::<PyFloat>() {
+        let value: f64 = key.extract()?;
+        let mut buf = Vec::new();
+        write_float(&mut buf, value);
+        out.push(b'"');
+        out.extend_from_slice(&buf);
+        out.push(b'"');
+        return Ok(());
+    }
+
     if key.is_none() {
         out.extend_from_slice(b"\"null\"");
         return Ok(());
@@ -593,6 +591,7 @@ fn int_from_text<'py>(py: Python<'py>, text: &str) -> PyResult<Bound<'py, PyAny>
     if let Ok(v) = text.parse::<i64>() {
         return Ok(v.into_pyobject(py)?.into_any());
     }
+    // Calling Python int(text, 10) measured 10% slower for large JSON integers.
     let mut buf = Vec::with_capacity(text.len() + 1);
     buf.extend_from_slice(text.as_bytes());
     buf.push(0);

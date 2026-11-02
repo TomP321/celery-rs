@@ -13,12 +13,7 @@ pub fn compress(
     name: &str,
 ) -> PyResult<(Py<PyBytes>, String)> {
     let data = body.as_bytes();
-    let addr = data.as_ptr() as usize;
-    let len = data.len();
-    // SAFETY: body stays alive and bytes are immutable; releasing the GIL cannot invalidate the buffer.
-    let out = py.detach(move || unsafe {
-        compression::compress(name, std::slice::from_raw_parts(addr as *const u8, len))
-    });
+    let out = py.detach(move || compression::compress(name, data));
     let (out, content_type) = out.map_err(map_error)?;
     Ok((PyBytes::new(py, &out).unbind(), content_type.to_string()))
 }
@@ -30,15 +25,7 @@ pub fn decompress(
     content_type: &str,
 ) -> PyResult<Py<PyBytes>> {
     let data = body.as_bytes();
-    let addr = data.as_ptr() as usize;
-    let len = data.len();
-    // SAFETY: body stays alive and its immutable bytes remain valid while the GIL is released.
-    let out = py.detach(move || unsafe {
-        compression::decompress(
-            content_type,
-            std::slice::from_raw_parts(addr as *const u8, len),
-        )
-    });
+    let out = py.detach(move || compression::decompress(content_type, data));
     let out = out.map_err(map_error)?;
     Ok(PyBytes::new(py, &out).unbind())
 }

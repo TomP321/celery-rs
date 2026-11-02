@@ -20,10 +20,7 @@ fn mapping_type(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
 }
 
 fn is_list_or_tuple(obj: &Bound<'_, PyAny>) -> bool {
-    // SAFETY: obj is alive; type checks do not modify it.
-    unsafe {
-        pyo3::ffi::PyList_Check(obj.as_ptr()) != 0 || pyo3::ffi::PyTuple_Check(obj.as_ptr()) != 0
-    }
+    obj.is_instance_of::<PyList>() || obj.is_instance_of::<PyTuple>()
 }
 
 fn empty_tuple(py: Python<'_>) -> Bound<'_, PyAny> {
@@ -218,15 +215,7 @@ pub fn encode_task_v2(
     {
         let (compressed, ct) = {
             let data = body_bytes.as_bytes();
-            let addr = data.as_ptr() as usize;
-            let len = data.len();
-            // SAFETY: body_bytes remains alive and immutable while the GIL is released.
-            let out = py.detach(move || unsafe {
-                compression::compress(
-                    name.as_str(),
-                    std::slice::from_raw_parts(addr as *const u8, len),
-                )
-            });
+            let out = py.detach(move || compression::compress(name.as_str(), data));
             out.map_err(compression_error)?
         };
         headers.set_item("compression", ct)?;

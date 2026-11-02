@@ -1,4 +1,5 @@
 //! Exposes the Rust core to Python through the _celery_rs extension.
+#![deny(unsafe_op_in_unsafe_fn)]
 use pyo3::prelude::*;
 
 mod backend_redis;

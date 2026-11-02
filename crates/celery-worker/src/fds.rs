@@ -4,41 +4,15 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::os::fd::RawFd;
 use std::sync::{Mutex, PoisonError};
 
-struct Registry {
-    pid: u32,
-    fds: Mutex<BTreeSet<RawFd>>,
-}
+static FDS: crate::per_process::PerProcess<Mutex<BTreeSet<RawFd>>> =
+    crate::per_process::PerProcess::new();
 
-// Children create their own registry without touching an inherited mutex.
-// Entries live only as long as their registered resources.
-static FDS: std::sync::atomic::AtomicPtr<Registry> =
-    std::sync::atomic::AtomicPtr::new(std::ptr::null_mut());
-
-fn registry() -> &'static Registry {
-    use std::sync::atomic::Ordering;
-    let pid = std::process::id();
-    loop {
-        let current = FDS.load(Ordering::Acquire);
-        if !current.is_null() {
-            // SAFETY: published registries are never freed.
-            let entry = unsafe { &*current };
-            if entry.pid == pid {
-                return entry;
-            }
-        }
-        let fresh = Box::into_raw(Box::new(Registry {
-            pid,
-            fds: Mutex::new(BTreeSet::new()),
-        }));
-        if FDS
-            .compare_exchange(current, fresh, Ordering::AcqRel, Ordering::Acquire)
-            .is_ok()
-        {
-            // SAFETY: the newly published registry remains alive in this process.
-            return unsafe { &*fresh };
-        }
-        // SAFETY: this registry was never published.
-        drop(unsafe { Box::from_raw(fresh) });
+fn registry() -> &'static Mutex<BTreeSet<RawFd>> {
+    let result =
+        FDS.get_or_try_init(|| Ok::<_, std::convert::Infallible>(Mutex::new(BTreeSet::new())));
+    match result {
+        Ok(registry) => registry,
+        Err(never) => match never {},
     }
 }
 
@@ -52,7 +26,6 @@ impl Registration {
     pub fn new(fd: RawFd) -> Self {
         let pid = std::process::id();
         registry()
-            .fds
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .insert(fd);
@@ -64,7 +37,6 @@ impl Drop for Registration {
     fn drop(&mut self) {
         if self.pid == std::process::id() {
             registry()
-                .fds
                 .lock()
                 .unwrap_or_else(PoisonError::into_inner)
                 .remove(&self.fd);
@@ -74,7 +46,7 @@ impl Drop for Registration {
 
 pub fn snapshot() -> BTreeMap<RawFd, (u64, u64)> {
     let registry = registry();
-    let fds = registry.fds.lock().unwrap_or_else(PoisonError::into_inner);
+    let fds = registry.lock().unwrap_or_else(PoisonError::into_inner);
     fds.iter()
         .filter_map(|&fd| {
             let mut stat = std::mem::MaybeUninit::<libc::stat>::uninit();

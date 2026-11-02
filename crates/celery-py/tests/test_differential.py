@@ -282,6 +282,26 @@ def test_json_dumps_subclasses_and_keys():
         assert rs.json_dumps(value, DEFAULT).decode() == kjson.dumps(value)
 
 
+@pytest.mark.parametrize("value", [2**100, -(2**200), IntSubclass(2**100)])
+def test_json_safe_integer_conversion(value):
+    assert rs.json_dumps(value, DEFAULT).decode() == kjson.dumps(value)
+    text = str(int(value))
+    assert rs.json_loads(text) == kjson.loads(text)
+
+
+def test_json_default_can_extend_dictionary():
+    def encode(dumps):
+        value = {"first": object()}
+
+        def default(obj):
+            value["second"] = 2
+            return 1
+
+        return dumps(value, default=default)
+
+    assert encode(rs.json_dumps).decode() == encode(kjson.dumps)
+
+
 CORPUS = [
     "",
     " ",
@@ -841,7 +861,7 @@ def test_micro_benchmark(capsys):
 
     with capsys.disabled():
         print(
-            "\nbenchmark (operazioni/s): "
+            "\nbenchmark (operations/s): "
             f"json_dumps ref={n / ref_dumps:,.0f} rs={n / rs_dumps:,.0f}; "
             f"as_task_v2 ref={n / ref_task:,.0f} rs={n / rs_task:,.0f}"
         )

@@ -26,9 +26,8 @@ use crate::transport::{
 pub(crate) fn _set_pdeathsig(signum: i32) -> PyResult<()> {
     #[cfg(target_os = "linux")]
     {
-        // SAFETY: prctl receives only integers, retains no pointers and changes only
-        // the caller's parent-death signal. Billiard also ignores errors for invalid signals.
-        unsafe { libc::prctl(libc::PR_SET_PDEATHSIG, signum, 0, 0, 0) };
+        // Billiard ignores invalid signal errors as well.
+        let _ = celery_worker::process::set_parent_death_signal(signum);
         Ok(())
     }
     #[cfg(not(target_os = "linux"))]
@@ -561,6 +560,7 @@ impl PyPool {
     #[pyo3(signature = (control_fd, zygote_pid, processes, maxtasksperchild=None,
                         max_memory_per_child=None, waker=None))]
     fn new(
+        py: Python<'_>,
         control_fd: i32,
         zygote_pid: i32,
         processes: usize,
@@ -568,8 +568,16 @@ impl PyPool {
         max_memory_per_child: Option<u32>,
         waker: Option<&PyWaker>,
     ) -> PyResult<Self> {
+        use std::os::fd::{AsFd, FromRawFd, OwnedFd};
+        // Validate and acquire ownership at the Python integer-descriptor boundary.
+        let duplicate = py
+            .import("os")?
+            .call_method1("dup", (control_fd,))?
+            .extract::<i32>()?;
+        // SAFETY: os.dup returned a fresh descriptor with no other owner.
+        let control = unsafe { OwnedFd::from_raw_fd(duplicate) };
         let spawner = pool_impl::ZygoteSpawner::new(
-            control_fd,
+            control.as_fd(),
             zygote_pid,
             maxtasksperchild,
             max_memory_per_child,
@@ -713,16 +721,22 @@ fn _assert_spawner(_: &dyn Spawner) {}
 
 #[cfg(all(test, target_os = "linux"))]
 mod tests {
-    use super::_set_pdeathsig;
+    use super::{_set_pdeathsig, PyPool};
+    use pyo3::Python;
+
+    #[test]
+    fn invalid_pool_descriptor_is_a_python_error() {
+        Python::initialize();
+        Python::attach(|py| {
+            assert!(PyPool::new(py, -1, 0, 1, None, None, None).is_err());
+        });
+    }
 
     #[test]
     fn pdeathsig_matches_billiard_return_value() {
         assert!(_set_pdeathsig(libc::SIGKILL).is_ok());
-        let mut signal: libc::c_int = 0;
-        // SAFETY: signal is writable and remains valid throughout the syscall.
-        let result = unsafe { libc::prctl(libc::PR_GET_PDEATHSIG, &mut signal, 0, 0, 0) };
+        let signal = celery_worker::process::parent_death_signal().expect("parent death signal");
         assert!(_set_pdeathsig(0).is_ok());
-        assert_eq!(result, 0);
         assert_eq!(signal, libc::SIGKILL);
         assert!(_set_pdeathsig(-1).is_ok());
     }

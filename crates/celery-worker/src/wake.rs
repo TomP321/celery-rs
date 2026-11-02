@@ -11,148 +11,88 @@ struct State {
 
 #[cfg(target_os = "linux")]
 mod fd {
-    //! Linux eventfd notifications using one descriptor and a 64-bit counter.
-
-    use std::io;
-    use std::os::fd::{AsRawFd, RawFd};
+    use std::fs::File;
+    use std::io::{self, Read, Write};
+    use std::os::fd::{AsRawFd, FromRawFd, RawFd};
 
     #[derive(Debug)]
     pub struct NotifyFd {
-        _registration: Option<crate::fds::Registration>,
-        fd: RawFd,
+        // Unregister before File closes the descriptor.
+        _registration: crate::fds::Registration,
+        file: File,
     }
 
     impl NotifyFd {
         pub fn new() -> io::Result<Self> {
-            // SAFETY: eventfd receives valid flags; NotifyFd owns and closes the returned descriptor.
-            let fd = unsafe { libc::eventfd(0, libc::EFD_CLOEXEC | libc::EFD_NONBLOCK) };
-            if fd < 0 {
-                Err(io::Error::last_os_error())
-            } else {
-                Ok(Self {
-                    _registration: Some(crate::fds::Registration::new(fd)),
-                    fd,
-                })
-            }
+            // SAFETY: eventfd receives valid flags. On success its fresh descriptor
+            // is transferred exactly once to File, which owns it until drop.
+            let file = unsafe {
+                let fd = libc::eventfd(0, libc::EFD_CLOEXEC | libc::EFD_NONBLOCK);
+                if fd < 0 {
+                    return Err(io::Error::last_os_error());
+                }
+                File::from_raw_fd(fd)
+            };
+            Ok(Self {
+                _registration: crate::fds::Registration::new(file.as_raw_fd()),
+                file,
+            })
         }
 
         pub fn signal(&self) {
-            let value: u64 = 1;
-            // SAFETY: the source is a valid eight-byte u64 and fd is an eventfd. Write errors
-            // need no recovery here and must not stop the caller.
-            unsafe {
-                libc::write(
-                    self.fd,
-                    (&value as *const u64).cast::<libc::c_void>(),
-                    std::mem::size_of::<u64>(),
-                );
-            }
+            let _ = (&self.file).write(&1u64.to_ne_bytes());
         }
 
         pub fn drain(&self) {
-            let mut value: u64 = 0;
-            loop {
-                // SAFETY: the destination is a valid eight-byte u64; the descriptor is nonblocking,
-                // so EAGAIN ends the drain loop.
-                let read = unsafe {
-                    libc::read(
-                        self.fd,
-                        (&mut value as *mut u64).cast::<libc::c_void>(),
-                        std::mem::size_of::<u64>(),
-                    )
-                };
-                if read <= 0 {
-                    break;
-                }
-            }
+            let mut value = [0; 8];
+            while matches!((&self.file).read(&mut value), Ok(n) if n > 0) {}
         }
 
         pub fn fileno(&self) -> RawFd {
-            self.fd.as_raw_fd()
-        }
-    }
-
-    impl Drop for NotifyFd {
-        fn drop(&mut self) {
-            self._registration.take();
-            // SAFETY: this object owns the descriptor and never uses it after closure.
-            unsafe {
-                libc::close(self.fd);
-            }
+            self.file.as_raw_fd()
         }
     }
 }
 
 #[cfg(not(target_os = "linux"))]
 mod fd {
-    //! Nonblocking pipe notifications on other Unix platforms.
-
-    use std::io;
-    use std::os::fd::RawFd;
+    use std::io::{self, PipeReader, PipeWriter, Read, Write};
+    use std::os::fd::{AsRawFd, RawFd};
+    use std::sync::atomic::{AtomicBool, Ordering};
 
     #[derive(Debug)]
     pub struct NotifyFd {
-        read: RawFd,
-        write: RawFd,
+        read: PipeReader,
+        write: PipeWriter,
+        signaled: AtomicBool,
     }
 
     impl NotifyFd {
         pub fn new() -> io::Result<Self> {
-            let mut fds = [0 as RawFd; 2];
-            // SAFETY: pipe initializes the two-element descriptor array on success.
-            if unsafe { libc::pipe(fds.as_mut_ptr()) } < 0 {
-                return Err(io::Error::last_os_error());
-            }
-            for fd in fds {
-                // SAFETY: the descriptor is newly created and valid; flags do not change its ownership.
-                unsafe {
-                    libc::fcntl(fd, libc::F_SETFL, libc::O_NONBLOCK);
-                    libc::fcntl(fd, libc::F_SETFD, libc::FD_CLOEXEC);
-                }
-            }
+            let (read, write) = io::pipe()?;
             Ok(Self {
-                read: fds[0],
-                write: fds[1],
+                read,
+                write,
+                signaled: AtomicBool::new(false),
             })
         }
 
         pub fn signal(&self) {
-            let byte = 1u8;
-            // SAFETY: the source byte is valid and fd is the pipe's write endpoint.
-            unsafe {
-                libc::write(self.write, (&byte as *const u8).cast::<libc::c_void>(), 1);
+            // The outer state lock serializes signal/drain. At most one byte is
+            // outstanding, so the blocking std pipe never fills or reads an empty pipe.
+            if !self.signaled.load(Ordering::Relaxed) && (&self.write).write_all(&[1]).is_ok() {
+                self.signaled.store(true, Ordering::Relaxed);
             }
         }
 
         pub fn drain(&self) {
-            let mut buffer = [0u8; 64];
-            loop {
-                // SAFETY: the destination buffer is owned here and the descriptor is nonblocking.
-                let read = unsafe {
-                    libc::read(
-                        self.read,
-                        buffer.as_mut_ptr().cast::<libc::c_void>(),
-                        buffer.len(),
-                    )
-                };
-                if read <= 0 {
-                    break;
-                }
+            if self.signaled.load(Ordering::Relaxed) && (&self.read).read_exact(&mut [0]).is_ok() {
+                self.signaled.store(false, Ordering::Relaxed);
             }
         }
 
         pub fn fileno(&self) -> RawFd {
-            self.read
-        }
-    }
-
-    impl Drop for NotifyFd {
-        fn drop(&mut self) {
-            // SAFETY: both descriptors are owned here and never used after closure.
-            unsafe {
-                libc::close(self.read);
-                libc::close(self.write);
-            }
+            self.read.as_raw_fd()
         }
     }
 }
