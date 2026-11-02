@@ -92,6 +92,12 @@ tools/dev/with-brokers .venv-rs/bin/python bench/memprobe/loadpeak.py "$PWD/.ven
 
 Peak PSS decreased 10%; throughput changed -1.3% and remains above the required
 reference floor of 834 task/s. These are individual runs, not confidence intervals.
+
+**Correction by the orchestrator.** The single runs above overstate the change: the "before" run was
+inflated. Same worktree, swapping only the native module, four alternating runs (`loadpeak.py`, 30,000 tasks):
+before idle 46.6 / peak 52.6 MiB, after idle 46.7 / peak 52.9 MiB. The difference is within noise (±1 MiB).
+This spec does not change RAM: its value is safer code, not memory.
+
 The final JSON medians were task 1,588 ns, dictionary 14,822 ns, small integers
 4,469 ns, large integers 1,050 ns, dictionary decoding 14,990 ns, and large integer
 decoding 1,027 ns.
