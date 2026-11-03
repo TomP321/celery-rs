@@ -39,6 +39,8 @@ The table above uses a minimal app. Real projects import more and touch more of 
 | Django, lightweight task | 401 / 418 MB | **114 / 157 MB** | **−62%** | ~700 → **~2.050** |
 | Django, task with an ORM query | 401 / 468 MB | **114 / 234 MB** | **−50%** | ~450 → **~540** |
 
+On Python 3.13 the peaks are 85, 116 and 165 MB (−72%, −73%, −66% against Celery on 3.13). With the ORM, about 92% of a child's first-task growth is inherited pages copied on first touch, which immortal objects largely avoid (analysis: `bench/results/16-django-orm-ram.md`).
+
 ### Performance
 
 | | Celery 5.7 | celery-rs |
