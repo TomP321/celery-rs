@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Build the Python 3.11 venvs for the real-project checks: target/e2e/venv-rs from a wheel of this tree
+# (as users install it), target/e2e/venv-ref with the reference. Python comes from E2E_PYTHON.
+set -euo pipefail
+ROOT="$(cd "$(dirname "$(readlink -f "$0")")/../.." && pwd)"
+OUT="$ROOT/target/e2e"; PY="${E2E_PYTHON:-3.11}"; REQ="$ROOT/tools/e2e/requirements.txt"
+mkdir -p "$OUT/wheels"; cd "$ROOT"
+for name in rs ref; do
+  [[ -x "$OUT/venv-$name/bin/python" ]] || uv venv -q --python "$PY" --seed "$OUT/venv-$name"
+done
+rm -f "$OUT"/wheels/*.whl
+env -u CONDA_PREFIX .venv-rs/bin/maturin build -q --release --compatibility off -o "$OUT/wheels"
+wheel="$(ls "$OUT"/wheels/*.whl)"
+uv pip install -q --python "$OUT/venv-rs/bin/python" --reinstall-package celery "celery[redis] @ file://$wheel" -r "$REQ"
+uv pip install -q --python "$OUT/venv-ref/bin/python" "celery[redis] @ file://$ROOT/celery" -r "$REQ"

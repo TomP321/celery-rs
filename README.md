@@ -31,7 +31,7 @@ The savings are also verified independently (`bench/ram_check.py`): the decrease
 
 ### RAM with real Django and FastAPI projects
 
-The table above uses a minimal app. Real projects import more and touch more of the heap, so the savings are smaller. Worker `-c 10`, Python 3.11, Redis, Postgres for the ORM, three alternating runs:
+The table above uses a minimal app. Real projects import more and touch more of the heap, so the savings are smaller. Worker `-c 10`, Python 3.11, Redis, Postgres for the ORM, three alternating runs (`tools/e2e/bench.sh`):
 
 | | Celery 5.7 idle / peak | celery-rs idle / peak | peak saved | task/s, Celery → celery-rs |
 |---|---:|---:|---:|---:|
@@ -101,7 +101,7 @@ celery -A proj beat --loglevel info
   on broker identical byte for byte (client, worker `solo`/`prefork`, beat), 190 CLI commands
   with identical output, Celery's 31.691 unit tests, and Celery's entire `t/integration` suite with
   the same results as the reference on Redis and RabbitMQ.
-- **Real projects** (checked by hand on Python 3.11 x86_64 against the reference, not yet part of the gates):
+- **Real projects** (`tools/e2e/run`, a gate, Python 3.11; `--ref` runs the reference for comparison):
   - **Django 5.2** with Postgres: ORM, transactions, `delay_on_commit`, `django-redis`,
     `django-celery-beat` (`DatabaseScheduler`), `django-celery-results`, gunicorn `--preload`,
     `--max-memory-per-child`.
@@ -130,6 +130,7 @@ celery -A proj beat --loglevel info
   - A `group` must be waited on in the thread that created it: `.get()` from another thread (for example
     `asyncio.to_thread` in FastAPI) times out. Build and wait in the same thread.
   - `celery call` with the `django-db` result backend fails with `AppRegistryNotReady`.
+  - Chords on the DynamoDB backend fail intermittently with `GroupResult … no longer exists`.
 - Behavioral differences documented in [docs/DIFFERENCES.md](docs/DIFFERENCES.md).
 
 ## RAM tips
@@ -150,7 +151,7 @@ celery -A proj beat --loglevel info
   memory), `celery-backend`, `celery-worker` (consumer, pool, zygote), `celery-beat`,
   `celery-py` (PyO3 module `_celery_rs`)
 - `tools/compat/` — compliance tools with Celery (`./compat api|wire|wire-worker|wire-beat|cli|upstream|integration`)
-- `tools/dev/` — broker lanes for testing and `gates`; `bench/` — benchmark (`fleet.py`,
+- `tools/dev/` — broker lanes for testing and `gates`; `tools/e2e/` — real Django and FastAPI projects; `bench/` — benchmark (`fleet.py`,
   `ram_check.py`, `bench.py`, `soak.py`, …); `specs/` and `PLAN.md` — development plan and specifications
 
 ## Development

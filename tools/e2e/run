@@ -1,0 +1,78 @@
+#!/usr/bin/env python3
+"""Run real Django and FastAPI projects and other pools, brokers and backends against celery-rs.
+
+Run under tools/dev/with-brokers. --ref runs the reference instead (for comparing failures).
+"""
+import argparse
+import json
+import os
+from pathlib import Path
+import random
+import subprocess
+import sys
+
+HERE = Path(__file__).resolve().parent
+ROOT = HERE.parents[1]
+OUT = ROOT / 'target/e2e'
+SCENARIOS = [('fastapi', 'redis', 'redis'), ('fastapi', 'amqp', 'redis'), ('django', 'redis', 'redis'),
+             ('django', 'amqp', 'redis'), ('django', 'redis', 'db'), ('other', '', '')]
+# Fails on the reference too.
+KNOWN = {'django-redis-db': {'celery call'}}
+
+
+def scenario_env(name, fw, broker, result, venv):
+    redis = os.environ.get('CELERY_RS_REDIS_URL', 'redis://127.0.0.1:6390').rstrip('/')
+    amqp = os.environ.get('CELERY_RS_AMQP_URL', 'amqp://guest:guest@127.0.0.1:5673//')
+    run = OUT / 'runs' / f'{venv.name}-{name}'
+    subprocess.run(['rm', '-rf', str(run)], check=True)
+    (run / 'logs').mkdir(parents=True)
+    return dict(
+        os.environ, PYTHONUNBUFFERED='1', PYTHONPATH=str(HERE), E2E_RUN=str(run), E2E_LOGS=str(run / 'logs'),
+        E2E_OUT=str(run), E2E_QUEUE=f'e2e_{random.randrange(1 << 30)}', E2E_PORT=str(18000 + random.randrange(2000)),
+        E2E_DB=f"e2e_{os.environ.get('CELERY_RS_LANE', '0')}_{venv.name.replace('-', '_')}",
+        E2E_CACHE=f'{redis}/5', E2E_BROKER=f'{redis}/4' if broker == 'redis' else amqp,
+        E2E_RESULT={'redis': f'{redis}/6', 'db': 'django-db'}.get(result, ''))
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--ref', action='store_true')
+    parser.add_argument('--only', help='comma-separated scenarios, e.g. django-redis-db,other')
+    parser.add_argument('--no-setup', action='store_true')
+    args = parser.parse_args()
+    subprocess.run(['docker', 'compose', '-f', str(HERE / 'docker-compose.yml'), 'up', '-d', '--quiet-pull', '--wait'],
+                   check=True, stdout=subprocess.DEVNULL)
+    if not args.no_setup:
+        subprocess.run([str(HERE / 'setup')], check=True)
+    venv = OUT / ('venv-ref' if args.ref else 'venv-rs')
+    python = venv / 'bin/python'
+    only = set(args.only.split(',')) if args.only else None
+    passed = 0
+    unexpected = []
+    for fw, broker, result in SCENARIOS:
+        name = '-'.join(filter(None, (fw, broker, result)))
+        if only and name not in only:
+            continue
+        env = scenario_env(name, fw, broker, result, venv)
+        for db in (4, 5, 6):
+            subprocess.run([str(python), '-c', "import redis, sys; redis.Redis.from_url(sys.argv[1]).flushdb()",
+                            env['E2E_CACHE'][:-1] + str(db)], env=env, check=True)
+        print(f'== {venv.name} {name}', flush=True)
+        code = subprocess.run(['timeout', '-k', '10', '1200', str(python), str(HERE / f'run_{fw}.py'), str(venv), name],
+                              env=env, cwd=env['E2E_RUN']).returncode
+        report = Path(env['E2E_RUN']) / f'{name}.json'
+        results = json.loads(report.read_text()) if report.exists() else []
+        if code or not results:
+            unexpected.append(f'{name}: exit {code}')
+        for row in results:
+            if row['ok']:
+                passed += 1
+            elif row['name'] not in KNOWN.get(name, ()):
+                unexpected.append(f"{name}: {row['name']}: {row['got'][:200]}")
+    print(f'e2e {venv.name}: {passed} passed, {len(unexpected)} failed')
+    print(*unexpected, sep='\n')
+    return 1 if unexpected else 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

@@ -56,7 +56,8 @@ def main():
             'upstream': ['./compat', 'upstream', '--venv', '.venv-rs'],
             'wire-worker-solo': ['./compat', 'wire-worker', '--pool', 'solo'],
             'wire-worker-prefork': ['./compat', 'wire-worker', '--pool', 'prefork'],
-            'wire-beat': ['./compat', 'wire-beat'], 'cli': ['./compat', 'cli']}
+            'wire-beat': ['./compat', 'wire-beat'], 'cli': ['./compat', 'cli'],
+            'e2e': ['tools/e2e/run']}
     selected = set(args.only.split(',')) if args.only else set(prep) | set(jobs)
     unknown = selected - set(prep) - set(jobs) - {'tests_rs'}
     if unknown:
@@ -114,8 +115,8 @@ def main():
             passed = sum(int(n) for line in results for n in re.findall(r'(\d+) passed', line))
             failed = sum(int(n) for line in results for n in re.findall(r'(\d+) failed', line))
             summary = f'{passed} passed; {failed} failed' if results else summary
-        elif name in ('api', 'wire', 'upstream', 'wire-worker-solo', 'wire-worker-prefork', 'wire-beat', 'cli'):
-            totals = [line for line in lines if re.match(r'(?:api:|wire:|upstream |wire-worker:|wire-beat:|cli:)', line)]
+        elif name in ('api', 'wire', 'upstream', 'wire-worker-solo', 'wire-worker-prefork', 'wire-beat', 'cli', 'e2e'):
+            totals = [line for line in lines if re.match(r'(?:api:|wire:|upstream |wire-worker:|wire-beat:|cli:|e2e )', line)]
             if totals:
                 summary = totals[-1]
 

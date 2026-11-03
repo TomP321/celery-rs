@@ -31,6 +31,9 @@ You are working on celery-rs: Celery rewritten with a Rust core and an identical
   `tools/dev/with-brokers cargo test`, `tools/dev/with-brokers .venv-…/bin/python -m pytest …`
   (`./compat wire` acquires it automatically; the lock is reentrant). This also applies to
   benchmarks and manual probes. Use unique queue/key names; FLUSHALL/FLUSHDB only under the lock.
+- Real projects: `tools/dev/with-brokers tools/e2e/run [--only django-redis-db,fastapi-redis-redis,other…] [--ref] [--no-setup]`
+  (Django, FastAPI, other pools, brokers and backends; uses Python 3.11 venvs in `target/e2e`). RAM and task/s on those projects:
+  `tools/dev/with-brokers tools/e2e/bench.sh`.
 - Rust: `cargo build --release`, `cargo test`, `cargo clippy --all-targets -- -D warnings`.
 - Python: `tools/dev/build-native` installs only `_celery_rs` in `.venv-ref` (differential tests);
   `tools/dev/build-package` installs the full celery-rs package in `.venv-rs`.
