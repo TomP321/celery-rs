@@ -1,0 +1,11 @@
+before-wheel
+lane 0: .venv-rs/bin/python bench/memprobe/loadpeak.py /home/ubuntu/HDD/celery-rs-wt/16-django-orm-child-ram/.venv-rs 10 /home/ubuntu/HDD/celery-rs-wt/16-django-orm-child-ram/bench/memprobe 10000
+.venv-rs idle tot=50.9 (10) | PEAK tot=56.6 master=12.6 zygote=4.0 children=39.9 (10) | after tot=56.6 master=12.6 zygote=4.0 children=39.9 | 2682 task/s
+
+after-editable
+lane 0: .venv-rs/bin/python bench/memprobe/loadpeak.py /home/ubuntu/HDD/celery-rs-wt/16-django-orm-child-ram/.venv-rs 10 /home/ubuntu/HDD/celery-rs-wt/16-django-orm-child-ram/bench/memprobe 10000
+.venv-rs idle tot=46.0 (10) | PEAK tot=52.2 master=11.2 zygote=3.7 children=37.3 (10) | after tot=52.2 master=11.2 zygote=3.7 children=37.3 | 2711 task/s
+
+after-wheel
+lane 0: .venv-rs/bin/python bench/memprobe/loadpeak.py /home/ubuntu/HDD/celery-rs-wt/16-django-orm-child-ram/.venv-rs 10 /home/ubuntu/HDD/celery-rs-wt/16-django-orm-child-ram/bench/memprobe 10000
+.venv-rs idle tot=49.2 (10) | PEAK tot=56.1 master=12.2 zygote=4.0 children=39.8 (10) | after tot=56.1 master=12.2 zygote=4.0 children=39.8 | 2529 task/s

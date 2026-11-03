@@ -1,0 +1,9 @@
+{"v": "venv-rs", "fw": "fastapi", "kind": "add", "task_s": 1892, "idle": 84.2, "peak": 120.3, "after": 120.3}
+{"v": "venv-rs", "fw": "django", "kind": "add", "task_s": 1972, "idle": 115.3, "peak": 158.8, "after": 158.8}
+{"v": "venv-rs", "fw": "django", "kind": "orm", "task_s": 536, "idle": 115.2, "peak": 229.7, "after": 229.7}
+{"v": "venv-rs", "fw": "fastapi", "kind": "add", "task_s": 2098, "idle": 83.8, "peak": 119.6, "after": 119.6}
+{"v": "venv-rs", "fw": "django", "kind": "add", "task_s": 2127, "idle": 114.8, "peak": 158.6, "after": 158.6}
+{"v": "venv-rs", "fw": "django", "kind": "orm", "task_s": 546, "idle": 115.0, "peak": 228.3, "after": 228.3}
+{"v": "venv-rs", "fw": "fastapi", "kind": "add", "task_s": 2237, "idle": 83.9, "peak": 120.4, "after": 120.4}
+{"v": "venv-rs", "fw": "django", "kind": "add", "task_s": 1872, "idle": 115.0, "peak": 158.2, "after": 158.2}
+{"v": "venv-rs", "fw": "django", "kind": "orm", "task_s": 563, "idle": 115.0, "peak": 227.9, "after": 227.8}
