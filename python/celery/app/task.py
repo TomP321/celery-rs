@@ -1,5 +1,6 @@
 """Task implementation: request context and the task base class."""
 import sys
+import traceback
 import types
 
 from kombu.exceptions import OperationalError
@@ -68,6 +69,17 @@ def _reprtask(task, fmt=None, flags=None):
         task, flags=_strflags(flags),
         app=appstr(task._app) if task._app else None,
     )
+
+
+def _format_retry(ret, tb):
+    """Format `ret` as the tracer will see it, before it has been raised there."""
+    frame = sys._getframe(2)
+    while frame is not None:
+        tb = types.TracebackType(tb, frame, frame.f_lasti, frame.f_lineno)
+        if frame.f_code.co_name == 'trace_task':
+            break
+        frame = frame.f_back
+    return ''.join(traceback.format_exception(Retry, ret, tb))
 
 
 class Context:
@@ -886,6 +898,32 @@ class Task:
             if throw:
                 raise ret
             return ret
+
+        # Commit RETRY before another worker can finish the next attempt.
+        from celery.app.trace import get_actual_ignore_result
+
+        if request.id and (not get_actual_ignore_result(self, request)
+                           or self.store_errors_even_if_ignored):
+            try:
+                raise ret
+            except Retry as raised:
+                retry_tb = raised.__traceback__
+            ret.__traceback__ = None
+            # The stored children include the retry, which add_trail records on publish.
+            if self.trail:
+                request.children.append(self.AsyncResult(request.id))
+            try:
+                self.backend.mark_as_retry(
+                    request.id, ret.exc, _format_retry(ret, retry_tb), request=request,
+                )
+            except Exception:
+                # A failing backend must not lose the retry: handle_retry reports it.
+                pass
+            else:
+                ret._retry_stored = True
+            finally:
+                if self.trail:
+                    request.children.pop()
 
         try:
             S.apply_async()

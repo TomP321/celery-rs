@@ -5,6 +5,7 @@
 - :class:`KeyValueStoreBackend` is a common base class
     using K/V semantics like _get and _put.
 """
+import inspect
 import sys
 import time
 import warnings
@@ -856,6 +857,8 @@ class Backend:
                             for key in ("task_id", "state"):
                                 if key in kwargs:
                                     exc_kwargs[key] = kwargs[key]
+                            if fallback_exc is BackendStoreError and len(args) >= 3:
+                                exc_kwargs.update(task_id=args[0], state=args[2])
                             raise_with_context(fallback_exc(fallback_msg, **exc_kwargs))
                         raise
                 else:
@@ -870,13 +873,10 @@ class Backend:
         """
         result = self.encode_result(result, state)
 
-        kwargs.update({'task_id': task_id, 'state': state})
-
         self._ensure_retryable(
-            self._store_result,
+            self._store_result, task_id, result, state,
             fallback_exc=BackendStoreError,
             fallback_msg="failed to store result on the backend",
-            result=result,
             traceback=traceback,
             request=request,
             **kwargs
@@ -998,11 +998,16 @@ class Backend:
 
     def save_group(self, group_id, result):
         """Store the result of an executed group."""
-        return self._ensure_retryable(
-            self._save_group,
-            group_id=group_id,
-            result=result
-        )
+        parameters = inspect.signature(self._save_group).parameters
+        if 'result' in parameters or any(
+                p.kind is p.VAR_KEYWORD for p in parameters.values()):
+            return self._ensure_retryable(
+                self._save_group,
+                group_id=group_id,
+                result=result
+            )
+        # django-celery-results names this parameter group_result.
+        return self._ensure_retryable(self._save_group, group_id, result)
 
     def delete_group(self, group_id):
         self._cache.pop(group_id, None)

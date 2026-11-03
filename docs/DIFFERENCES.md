@@ -1,6 +1,6 @@
 # Known differences compared to Celery 5.7.0rc1
 
-celery-rs keeps API, behavior and traffic on the broker identical to Celery: `./compat api|wire|wire-worker|wire-beat|cli|upstream|integration` verifies this. The intentional differences below concern introspection and internals; task results are unchanged.
+celery-rs keeps API, behavior and traffic on the broker identical to Celery: `./compat api|wire|wire-worker|wire-beat|cli|upstream|integration` verifies this. The intentional differences are listed below.
 
 ## Static introspection of some class attributes
 
@@ -44,3 +44,13 @@ These objects are no longer freed: weakrefs, `WeakValueDictionary`s and weak sig
 ## Child initializer prepared in the zygote
 
 With the Rust prefork pool, the parts of `process_initializer` that give the same state in each child (`app.log.setup`, `set_current`/`finalize`, the task tracers) are executed once in the zygote before the fork: children inherit the shared state instead of recreating it (approximately −1 private MB per child). The following still run in the child, in reference order: `set_pdeathsig`, signals, process title, `init_worker`/`init_worker_process` of the loader, `reset_state` and `worker_process_init`. The child rebuilds the tracers of the tasks added or with tracer replaced by the loader hook, and repeats `log.setup` if the logging parameters have changed or if the log file contains `%i` (one file per child). Only difference: an `on_worker_process_init` of the loader that replaces `task.run` of an already registered task is not seen by the prepared tracer.
+
+## Retry result ordering
+
+In worker calls, `Task.retry` stores `RETRY` before publishing the next attempt, so a fast retry cannot have its terminal result overwritten. `handle_retry` skips that write but still calls `on_retry`, sends `task_retry`, and logs with the usual exception information. Eager and direct calls are unchanged. The same result-storage conditions apply, including ignored results; `throw=False` also stores before publishing.
+
+The stored result, traceback and children match the reference. If publishing fails and raises `Reject`, the backend retains `RETRY`. If storing fails, the retry is still published and `handle_retry` stores and reports as usual. With `throw=False`, a subsequent return or exception from the current attempt can still replace its own `RETRY`, as usual.
+
+## Third-party result backend signatures
+
+`Backend.store_result` calls `_store_result` with positional arguments, and `save_group` passes the result positionally to a `_save_group` without a `result` parameter. This supports backends naming those parameters differently, including django-celery-results 2.6.0 (`status`, `group_result`), where the reference's keywords raise `TypeError`. Exhausted backend retries still report the task ID and state in `BackendStoreError`.

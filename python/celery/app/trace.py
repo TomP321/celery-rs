@@ -218,7 +218,7 @@ class TraceInfo:
         try:
             reason = self.retval
             einfo = ExceptionInfo((type_, reason, tb))
-            if store_errors:
+            if store_errors and not getattr(reason, '_retry_stored', False):
                 task.backend.mark_as_retry(
                     req.id, reason.exc, einfo.traceback, request=req,
                 )
