@@ -29,6 +29,16 @@ The savings are also verified independently (`bench/ram_check.py`): the decrease
 
 `-c 10` rows: `bench/memprobe/loadpeak.py`, 30.000 tasks, including 16 KB arguments (same values ±2 MB). On Python ≥ 3.12 the objects loaded before the fork become *immortal* (PEP 683), so the children do not rewrite their counters: this is the main difference between the two version families (see [docs/DIFFERENCES.md](docs/DIFFERENCES.md), `CELERY_RS_IMMORTALIZE=0` to disable it). The other rows were measured with version 0.1.1.
 
+### RAM with real Django and FastAPI projects
+
+The table above uses a minimal app. Real projects import more and touch more of the heap, so the savings are smaller. Worker `-c 10`, Python 3.11, Redis, Postgres for the ORM, three alternating runs:
+
+| | Celery 5.7 idle / peak | celery-rs idle / peak | peak saved | task/s, Celery → celery-rs |
+|---|---:|---:|---:|---:|
+| FastAPI, lightweight task | 272 / 289 MB | **85 / 120 MB** | **−58%** | ~650 → **~2.100** |
+| Django, lightweight task | 401 / 418 MB | **114 / 157 MB** | **−62%** | ~700 → **~2.050** |
+| Django, task with an ORM query | 401 / 468 MB | **114 / 234 MB** | **−50%** | ~450 → **~540** |
+
 ### Performance
 
 | | Celery 5.7 | celery-rs |
@@ -59,7 +69,7 @@ Requirements: Linux, Python ≥ 3.10. The package is called `celery` (version `5
 ```toml
 # pyproject.toml: replace "celery==…" with one line; x86_64/aarch64 is selected automatically
 
-"celery[redis] @ https://github.com/TomP321/celery-rs/raw/wheels/celery-5.7.0rc1%2Brs.0.1.4.tar.gz",
+"celery[redis] @ https://github.com/TomP321/celery-rs/raw/wheels/celery-5.7.0rc1%2Brs.0.1.5.tar.gz",
 ```
 
 The source package contains only a selector (`tools/selector/`) that downloads and checks (SHA-256) the right precompiled wheel: works with pip and uv, without Rust.
@@ -85,12 +95,21 @@ celery -A proj beat --loglevel info
 - **Brokers**: Redis and RabbitMQ (AMQP 0-9-1) use the Rust core; `memory://` is supported. Other
   transports (e.g. SQS) automatically use Celery's kombu path.
 - **Result backends**: Redis and RPC in Rust; the others are those of Celery.
-- **Pool**: `prefork` (Rust core + zygote), `solo`, `threads`; `eventlet`/`gevent` are not the
-  target of the project.
+- **Pool**: `prefork` (Rust core + zygote), `solo`, `threads`, and `gevent`/`eventlet` through
+  Celery's own pools.
 - **Checks** (`./compat …` and `tools/dev/gates`): Identical public API (137 modules), messages
   on broker identical byte for byte (client, worker `solo`/`prefork`, beat), 190 CLI commands
   with identical output, Celery's 31.691 unit tests, and Celery's entire `t/integration` suite with
   the same results as the reference on Redis and RabbitMQ.
+- **Real projects** (checked by hand on Python 3.11 x86_64 against the reference, not yet part of the gates):
+  - **Django 5.2** with Postgres: ORM, transactions, `delay_on_commit`, `django-redis`,
+    `django-celery-beat` (`DatabaseScheduler`), `django-celery-results`, gunicorn `--preload`,
+    `--max-memory-per-child`.
+  - **FastAPI**: async and sync endpoints, `BackgroundTasks`, chain/group/chord, uvicorn `--workers`,
+    gunicorn `--preload`.
+  - **Pools, brokers and backends outside the Rust core**: basic task flows on `threads`, `solo`, `gevent`,
+    `eventlet`; SQS, MongoDB, SQLAlchemy, filesystem brokers; Postgres, SQLite, memcached, MongoDB, S3,
+    DynamoDB, filesystem backends. SQS, S3 and DynamoDB ran on local emulators, not on AWS.
 - **Known differences**: [docs/DIFFERENCES.md](docs/DIFFERENCES.md).
 - **Environment variables** to return to Celery's path: `CELERY_RS_WORKER=0`,
   `CELERY_RS_PRODUCER=0`, `CELERY_RS_BACKEND=0`.
@@ -102,17 +121,22 @@ celery -A proj beat --loglevel info
 - **Platform**: **Linux** only (zygote, `/proc`, `prctl`); the release of memory
   (`malloc_trim`) works only with glibc. Wheel `manylinux_2_28` for x86_64 and aarch64.
 - **Outside Rust core**: Brokers other than Redis/RabbitMQ and backends other than Redis/RPC use the
-  Celery code (kombu) and are not verified by this project; pool `eventlet`/`gevent` not
-  verified.
+  Celery code (kombu); they had the basic checks above, not the full test suites.
 - Parts of the Celery suite that require services that are absent in the test environment (Django,
   database backend, security with certificates) fail or are skipped in the same way
-  in the reference: they are not verified.
+  in the reference: the checks above cover Django and database backends only in part, security with
+  certificates not at all.
+- Inherited from Celery 5.7.0rc1:
+  - A `group` must be waited on in the thread that created it: `.get()` from another thread (for example
+    `asyncio.to_thread` in FastAPI) times out. Build and wait in the same thread.
+  - `celery call` with the `django-db` result backend fails with `AppRegistryNotReady`.
 - Behavioral differences documented in [docs/DIFFERENCES.md](docs/DIFFERENCES.md).
 
 ## RAM tips
 
 - **A worker with high concurrency** consumes less than many workers with low concurrency: every
-  additional worker costs ~20 fixed MB (master + zygote), each child 5–8 MB.
+  additional worker costs ~20 fixed MB (master + zygote), each child 5–8 MB (~20 MB in a Django
+  project running ORM queries).
 - **Import heavy libraries at the top of the task module**: the zygote loads them once before
   forking, so they stay shared. Imports inside tasks give each child its own copy.
 - For I/O tasks (network, database, API) `--pool threads` uses only one process.
